@@ -15,6 +15,7 @@ Semua data berada dalam memori pelayar, dan disimpan/dibuka sebagai **fail ZIP**
 | Tetapkan slot boleh isi / blok bagi setiap kelas | tab **Slot Masa** → Kelas | |
 | Tetapkan slot guru tidak boleh mengajar | tab **Slot Masa** → Guru | |
 | Peraturan susunan jadual | tab **Slot Masa** → Peraturan Susunan | |
+| Susun jadual automatik, lihat jadual kelas / guru, kunci sesi | tab **Susun Jadual** | |
 
 - Di **Chrome / Edge**, "Simpan" menulis terus ke fail ZIP yang sama selepas kali pertama.
 - Di pelayar lain (Safari, Firefox), "Simpan" memuat turun fail ZIP ke folder Downloads.
@@ -23,6 +24,15 @@ Semua data berada dalam memori pelayar, dan disimpan/dibuka sebagai **fail ZIP**
   Tetapi **fail ZIP ialah salinan rasmi** — simpan selalu.
 - Kata laluan Mod Edit lalai: `admin123` (tukar di Tetapan). Kata laluan disimpan dalam fail ZIP.
   Ini hanya penghalang daripada tersalah edit, bukan keselamatan sebenar.
+
+## Susun jadual automatik
+
+- Setiap agihan dipecah mengikut **pecahan** (cth `2,2,2`). Agihan tanpa pecahan (pecahan = jumlah masa) dipecah
+  sama rata secara automatik jika pilihan *Pecah automatik* ditanda (cth 6 → 2,2,2; 15 → 3,3,3,3,3).
+- **Label serentak:** agihan dengan **huruf label yang sama** (cth C1/C2, G1/G2/G3), masa yang sama dan berkongsi
+  sekurang-kurangnya satu kelas dijadualkan pada slot yang sama.
+- Slot diblok kelas & guru, serta peraturan susunan, sentiasa dipatuhi. Sesi yang tidak muat disenaraikan bersama sebabnya.
+- Klik sesi untuk **kunci** — sesi berkunci kekal di tempatnya apabila jadual disusun semula.
 
 ## Isi fail ZIP
 

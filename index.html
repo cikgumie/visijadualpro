@@ -82,7 +82,7 @@
  *   tetapan   : { Kata_Laluan: 'admin123' }
  *   slot      : { hari, waktu, label, kelas: {ID: {"hari-waktu": Label}}, guru: {ID: {"hari-waktu": Label}} }
  *   peraturan : peraturan susunan jadual automatik (lihat PERATURAN_DEFAULT)
- *   jadual    : { dijana, sesi: [{ uuid, ke, hari, waktu, kunci }] } — kedudukan setiap sesi dalam jadual
+ *   jadual    : { dijana, sesi: [{ uuid, ke, hari, waktu, panjang, kunci }] } — kedudukan setiap sesi dalam jadual
  */
 (function () {
     const ZIP_FORMAT_VERSION = 1;
@@ -125,6 +125,7 @@
             ke: parseInt(x.ke) || 0,
             hari: parseInt(x.hari) || 0,
             waktu: parseInt(x.waktu) || 0,
+            panjang: Math.max(1, parseInt(x.panjang) || 1),
             kunci: !!x.kunci
         }));
         return out;
@@ -794,6 +795,7 @@
     window.VJStore = {
         getSlot, setSlotConfig, addSlotLabel, setKelasBlok, setGuruBlok, copyKelasBlok, slotSummary, guruSlotSummary, genWaktu,
         getPeraturan, setPeraturan, PERATURAN_DEFAULT, getJadual, setJadual,
+        getSolverInput() { return clone({ guru: db.guru, kelas: db.kelas, subjek: db.subjek, transaksi: db.transaksi, slot: db.slot, peraturan: db.peraturan, jadual: db.jadual }); },
         getStatus, onChange: fn => listeners.push(fn),
         buildZipBlob, markSaved, openZip, defaultZipName,
         loadDb, restoreAutosave, hasAutosave,
@@ -2243,6 +2245,9 @@ window.VJSampleData = function () {
             <button onclick="switchTab('slot')" id="nav-slot" class="nav-tab">
                 <i data-lucide="calendar-clock" class="w-4 h-4"></i> Slot Masa
             </button>
+            <button onclick="switchTab('jadual')" id="nav-jadual" class="nav-tab">
+                <i data-lucide="wand-sparkles" class="w-4 h-4"></i> Susun Jadual
+            </button>
         </div>
 
         <!-- Quick Action Buttons -->
@@ -2650,6 +2655,70 @@ window.VJSampleData = function () {
             </div>
             <div id="arkibSesiList" class="p-6 space-y-3">
                 <p class="text-center text-slate-400 italic text-xs py-8">Memuatkan data arkib...</p>
+            </div>
+        </div>
+
+        <!-- ============================================================== -->
+        <!-- VIEW 8: SUSUN JADUAL AUTOMATIK                                 -->
+        <!-- ============================================================== -->
+        <div id="view-jadual" class="view-section hidden bg-white border border-slate-200 rounded-2xl shadow-card overflow-hidden">
+            <div class="p-3.5 bg-slate-50/80 border-b border-slate-200 flex flex-wrap justify-between items-center gap-2 no-print">
+                <div class="flex flex-wrap items-center gap-2">
+                    <i data-lucide="wand-sparkles" class="w-4 h-4 text-brand-600"></i>
+                    <h3 class="text-sm font-heading font-bold text-slate-800">Susun Jadual</h3>
+                    <span id="jdlOverview" class="text-[11px] text-slate-500"></span>
+                </div>
+                <div class="flex flex-wrap items-center gap-1.5">
+                    <label class="flex items-center gap-1.5 text-[11px] font-semibold text-slate-600 mr-1" title="Agihan yang pecahannya sama dengan jumlah masa (cth 6) dipecah sama rata mengikut hari (cth 2,2,2)">
+                        <input id="jdlPecahAuto" type="checkbox" checked class="w-3.5 h-3.5 accent-brand-600"> Pecah automatik agihan tanpa pecahan
+                    </label>
+                    <select id="jdlMasaHad" class="border border-slate-200 bg-white rounded-lg px-2 py-1.5 text-xs font-bold text-slate-700" title="Had masa mencari susunan">
+                        <option value="10">10 saat</option>
+                        <option value="30" selected>30 saat</option>
+                        <option value="90">90 saat</option>
+                    </select>
+                    <button onclick="jdlKosongkan()" class="px-3 py-1.5 border border-rose-200 bg-rose-50 hover:bg-rose-100 rounded-lg text-xs font-bold text-rose-700 flex items-center gap-1.5">
+                        <i data-lucide="eraser" class="w-3.5 h-3.5"></i> Kosongkan
+                    </button>
+                    <button id="jdlBtnSusun" onclick="jdlSusun()" class="px-3.5 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-xs font-bold shadow flex items-center gap-1.5">
+                        <i data-lucide="wand-sparkles" class="w-3.5 h-3.5"></i> Susun Automatik
+                    </button>
+                </div>
+            </div>
+
+            <div id="jdlProgress" class="hidden px-4 py-2 border-b border-slate-200 bg-brand-50/60 text-xs text-brand-800 font-semibold"></div>
+
+            <div class="flex flex-col lg:flex-row min-h-[60vh]">
+                <div class="lg:w-64 shrink-0 border-b lg:border-b-0 lg:border-r border-slate-200 bg-slate-50/50">
+                    <div class="p-2 border-b border-slate-200">
+                        <div class="flex p-0.5 bg-slate-200/70 rounded-lg text-[11px] font-bold">
+                            <button onclick="jdlSetMode('kelas')" id="jdlModeKelas" class="flex-1 px-2.5 py-1 rounded-md transition">Kelas</button>
+                            <button onclick="jdlSetMode('guru')" id="jdlModeGuru" class="flex-1 px-2.5 py-1 rounded-md transition">Guru</button>
+                        </div>
+                    </div>
+                    <div id="jdlList" class="max-h-[30vh] lg:max-h-[70vh] overflow-y-auto p-2 space-y-1"></div>
+                </div>
+
+                <div class="flex-1 min-w-0 p-4 space-y-4">
+                    <div id="jdlEmpty" class="hidden text-center text-xs text-slate-400 py-16"></div>
+                    <div id="jdlEditor" class="hidden">
+                        <div class="flex flex-wrap items-baseline justify-between gap-2 mb-3">
+                            <h4 id="jdlTitle" class="font-heading font-bold text-lg text-slate-800"></h4>
+                            <p id="jdlStats" class="text-xs text-slate-500"></p>
+                        </div>
+                        <div class="overflow-x-auto border border-slate-200 rounded-xl">
+                            <table id="jdlGrid" class="w-full text-xs"></table>
+                        </div>
+                        <p class="text-[11px] text-slate-400 mt-2">Klik petak sesi untuk <strong>kunci</strong> / buka kunci. Sesi berkunci kekal di tempatnya apabila jadual disusun semula.</p>
+                    </div>
+
+                    <div id="jdlIsuBox" class="hidden border border-slate-200 rounded-xl overflow-hidden">
+                        <div class="px-3 py-2 bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                            <i data-lucide="triangle-alert" class="w-3.5 h-3.5 text-amber-600"></i> Isu & sesi belum dijadualkan
+                        </div>
+                        <ul id="jdlIsu" class="max-h-72 overflow-y-auto divide-y divide-slate-100 text-xs"></ul>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -6929,6 +6998,541 @@ window.VJSampleData = function () {
             processData = function (data) {
                 origProcessData(data);
                 renderSlotView();
+            };
+        })();
+    </script>
+    <script>
+/**
+ * VISIJADUAL PRO V2 — PENYUSUN JADUAL AUTOMATIK (solver.js)
+ *
+ * Setiap agihan dipecah kepada "unit" mengikut pecahan (cth 2,2,2 → 3 unit).
+ * Agihan berlabel dengan HURUF yang sama, masa yang sama dan berkongsi kelas
+ * dijadualkan SERENTAK (cth C1/C2, atau G1/G2/G3 bagi kumpulan RBT kelas gabungan).
+ * Carian: iterative forward search — letak unit paling sukar dahulu; jika tiada
+ * slot bebas, pilih slot dengan konflik paling sedikit dan keluarkan unit yang
+ * berkonflik untuk diletak semula.
+ */
+window.VJSolver = (function () {
+    function hurufLabel(l) {
+        const m = /^[A-Za-z]+/.exec(String(l || '').trim());
+        return m ? m[0].toUpperCase() : '';
+    }
+
+    function parsePecahan(str, masa) {
+        const parts = String(str || '').split(/[\+,\s\/]+/).map(x => parseInt(x)).filter(n => n > 0);
+        const sum = parts.reduce((a, b) => a + b, 0);
+        return { parts: (parts.length && sum === masa) ? parts : [masa], sah: parts.length > 0 && sum === masa };
+    }
+
+    // Pecah sama rata: bil. sesi = min(hari, masa/2) → 6 = 2,2,2 · 7 = 3,2,2 · 15 (5 hari) = 3,3,3,3,3
+    function pecahAuto(masa, bilHari) {
+        const c = Math.min(bilHari, Math.max(1, Math.floor(masa / 2)));
+        const base = Math.floor(masa / c), lebih = masa % c;
+        return Array.from({ length: c }, (_, i) => base + (i < lebih ? 1 : 0));
+    }
+
+    // Bina unit, kumpulan serentak & semakan awal daripada data
+    function bina(inp, opt) {
+        opt = opt || {};
+        const H = inp.slot.hari.length, W = inp.slot.waktu.length, N = H * W;
+        const isu = [];
+        const kelasIdx = {}, guruIdx = {};
+        const kelas = inp.kelas.map((k, i) => { kelasIdx[k[0]] = i; return { id: k[0], nama: k[1] }; });
+        const guru = inp.guru.map((g, i) => { guruIdx[g[0]] = i; return { id: g[0], nama: g[1], sing: g[2] || g[1] }; });
+        const subjekKod = {};
+        inp.subjek.forEach(r => { subjekKod[r[0]] = r[2] || r[1]; });
+
+        const rows = [];
+        let bilAuto = 0;
+        inp.transaksi.forEach(t => {
+            const masa = parseInt(t[7]) || 0;
+            const kIds = String(t[3]).split(',').map(x => x.trim()).filter(id => kelasIdx[id] !== undefined);
+            if (masa <= 0 || !kIds.length) return;
+            const pecahanTeks = String(t[10] || '').trim();
+            const pc = parsePecahan(pecahanTeks, masa);
+            if (!pc.sah && pecahanTeks) {
+                isu.push({ jenis: 'amaran', teks: `Pecahan "${pecahanTeks}" tidak berjumlah ${masa} waktu — ${t[6]} (${t[4]}, ${t[2]}). Dianggap satu blok.` });
+            }
+            let parts = pc.parts;
+            if (opt.pecahAuto && parts.length === 1 && masa >= 4) { parts = pecahAuto(masa, H); bilAuto++; }
+            const gId = String(t[1] || '');
+            if (gId && guruIdx[gId] === undefined) {
+                guruIdx[gId] = guru.length;
+                guru.push({ id: gId, nama: t[2] || gId, sing: t[2] || gId });
+            }
+            rows.push({
+                uuid: String(t[8]), guru: gId, kelas: kIds, subjek: String(t[5]), subjekNama: String(t[6] || ''),
+                kod: subjekKod[t[5]] || String(t[6] || ''), guruNama: String(t[2] || ''), kelasNama: String(t[4] || ''),
+                masa, label: String(t[9] || '').trim(), huruf: hurufLabel(t[9]), parts
+            });
+        });
+
+        // Kumpulan serentak (union-find): huruf label sama + masa sama + berkongsi sekurang-kurangnya satu kelas
+        const par = rows.map((_, i) => i);
+        const cari = i => { while (par[i] !== i) { par[i] = par[par[i]]; i = par[i]; } return i; };
+        for (let i = 0; i < rows.length; i++) {
+            if (!rows[i].huruf) continue;
+            for (let j = 0; j < i; j++) {
+                const a = rows[i], b = rows[j];
+                if (a.huruf === b.huruf && a.masa === b.masa && a.kelas.some(k => b.kelas.includes(k))) par[cari(i)] = cari(j);
+            }
+        }
+        const kumpulan = {};
+        rows.forEach((r, i) => { (kumpulan[cari(i)] = kumpulan[cari(i)] || []).push(r); });
+
+        const units = [];
+        Object.values(kumpulan).forEach(ahli => {
+            const parts = ahli[0].parts;
+            const kelasSet = [...new Set(ahli.flatMap(r => r.kelas))];
+            const namaKump = ahli.length > 1 ? `kumpulan serentak ${[...new Set(ahli.map(r => r.label))].join('/')} (${kelasSet.map(k => kelas[kelasIdx[k]].nama).join(', ')})` : '';
+            if (ahli.some(r => r.parts.join(',') !== parts.join(','))) {
+                isu.push({ jenis: 'amaran', teks: `Pecahan berbeza dalam ${namaKump}. Pecahan ${parts.join(',')} digunakan untuk semua.` });
+            }
+            const guruAll = ahli.map(r => r.guru).filter(Boolean);
+            const guruSet = [...new Set(guruAll)];
+            if (guruSet.length < guruAll.length) {
+                isu.push({ jenis: 'ralat', teks: `Guru yang sama mempunyai lebih daripada satu agihan dalam ${namaKump}. Semak label.` });
+            }
+            const pairs = [];
+            ahli.forEach(r => r.kelas.forEach(k => {
+                if (!pairs.some(p => p[0] === kelasIdx[k] && p[1] === r.subjek)) pairs.push([kelasIdx[k], r.subjek]);
+            }));
+            const desc = ahli.map(r => `${r.kod} · ${r.kelasNama} · ${r.guruNama || '-'}`).join('  |  ');
+            parts.forEach((len, ke) => {
+                units.push({
+                    id: units.length, len, ke,
+                    kelas: kelasSet.map(k => kelasIdx[k]),
+                    guru: guruSet.map(g => guruIdx[g]),
+                    pairs, ahli: ahli.map(r => r.uuid), desc
+                });
+            });
+        });
+
+        // Slot diblok
+        const blokK = kelas.map(k => {
+            const a = new Uint8Array(N);
+            Object.keys((inp.slot.kelas || {})[k.id] || {}).forEach(key => { const [d, p] = key.split('-').map(Number); if (d < H && p < W) a[d * W + p] = 1; });
+            return a;
+        });
+        const blokG = guru.map(g => {
+            const a = new Uint8Array(N);
+            Object.keys((inp.slot.guru || {})[g.id] || {}).forEach(key => { const [d, p] = key.split('-').map(Number); if (d < H && p < W) a[d * W + p] = 1; });
+            return a;
+        });
+
+        // Semakan beban berbanding slot boleh isi
+        const bebanK = new Array(kelas.length).fill(0), bebanG = new Array(guru.length).fill(0);
+        units.forEach(u => { u.kelas.forEach(k => { bebanK[k] += u.len; }); u.guru.forEach(g => { bebanG[g] += u.len; }); });
+        kelas.forEach((k, i) => {
+            const boleh = N - blokK[i].reduce((a, b) => a + b, 0);
+            if (bebanK[i] > boleh) isu.push({ jenis: 'ralat', teks: `Kelas ${k.nama}: ${bebanK[i]} waktu perlu dijadualkan tetapi hanya ${boleh} slot boleh isi. Semak label serentak atau slot diblok.` });
+        });
+        guru.forEach((g, i) => {
+            const boleh = N - blokG[i].reduce((a, b) => a + b, 0);
+            if (bebanG[i] > boleh) isu.push({ jenis: 'ralat', teks: `Guru ${g.nama}: ${bebanG[i]} waktu perlu dijadualkan tetapi hanya ${boleh} slot boleh mengajar.` });
+        });
+
+        return { H, W, N, kelas, guru, units, blokK, blokG, isu, bilAuto, rows };
+    }
+
+    function susun(inp, opt, onProgress) {
+        opt = opt || {};
+        const B = bina(inp, opt);
+        const { H, W, N, units, blokK, blokG } = B;
+        const P = Object.assign({ sesiSehariSubjek: 1, maxGuruSehari: 0, maxGuruBerturut: 0 }, inp.peraturan || {});
+        const hadMs = (opt.hadSaat || 30) * 1000;
+        const U = units.length;
+
+        const occK = B.kelas.map(() => new Int32Array(N).fill(-1));
+        const occG = B.guru.map(() => new Int32Array(N).fill(-1));
+        const pos = new Int32Array(U).fill(-1);
+        const kunci = new Uint8Array(U);
+        const daySub = {};                 // "kelas|subjek|hari" -> [unit]
+        const dayLoadK = B.kelas.map(() => new Int32Array(H));
+        const placedAt = new Int32Array(U).fill(-1000);
+        const sebabMati = {};
+
+        function letak(u, s) {
+            const T = units[u], d = Math.floor(s / W);
+            for (let i = 0; i < T.len; i++) {
+                T.kelas.forEach(k => { occK[k][s + i] = u; });
+                T.guru.forEach(g => { occG[g][s + i] = u; });
+            }
+            T.pairs.forEach(([k, sj]) => { const key = k + '|' + sj + '|' + d; (daySub[key] = daySub[key] || []).push(u); });
+            T.kelas.forEach(k => { dayLoadK[k][d] += T.len; });
+            pos[u] = s;
+        }
+
+        function angkat(u) {
+            const T = units[u], s = pos[u], d = Math.floor(s / W);
+            for (let i = 0; i < T.len; i++) {
+                T.kelas.forEach(k => { occK[k][s + i] = -1; });
+                T.guru.forEach(g => { occG[g][s + i] = -1; });
+            }
+            T.pairs.forEach(([k, sj]) => { const arr = daySub[k + '|' + sj + '|' + d]; arr.splice(arr.indexOf(u), 1); });
+            T.kelas.forEach(k => { dayLoadK[k][d] -= T.len; });
+            pos[u] = -1;
+        }
+
+        // Kedudukan yang dibenarkan oleh slot diblok sahaja (tidak berubah sepanjang carian)
+        const domain = units.map(T => {
+            const out = [];
+            for (let d = 0; d < H; d++) {
+                for (let p = 0; p + T.len <= W; p++) {
+                    const s = d * W + p;
+                    let ok = true;
+                    for (let i = 0; i < T.len && ok; i++) {
+                        if (T.kelas.some(k => blokK[k][s + i]) || T.guru.some(g => blokG[g][s + i])) ok = false;
+                    }
+                    if (ok) out.push(s);
+                }
+            }
+            return out;
+        });
+
+        // Unit yang berkonflik jika u diletak di s; null jika bertembung dengan unit berkunci
+        function konflik(u, s) {
+            const T = units[u], d = Math.floor(s / W), set = new Set();
+            for (let i = 0; i < T.len; i++) {
+                for (const k of T.kelas) { const o = occK[k][s + i]; if (o >= 0) set.add(o); }
+                for (const g of T.guru) { const o = occG[g][s + i]; if (o >= 0) set.add(o); }
+            }
+            if (P.sesiSehariSubjek > 0) {
+                for (const [k, sj] of T.pairs) {
+                    const arr = (daySub[k + '|' + sj + '|' + d] || []).filter(x => !set.has(x) && x !== u);
+                    if (arr.length >= P.sesiSehariSubjek) arr.forEach(x => set.add(x));
+                }
+            }
+            if (P.maxGuruSehari > 0 || P.maxGuruBerturut > 0) {
+                for (const g of T.guru) {
+                    const hari = [];
+                    for (let p = 0; p < W; p++) {
+                        const x = d * W + p, o = occG[g][x];
+                        hari.push((x >= s && x < s + T.len) ? u : (o >= 0 && !set.has(o) ? o : -1));
+                    }
+                    if (P.maxGuruSehari > 0 && hari.filter(o => o >= 0).length > P.maxGuruSehari) {
+                        hari.forEach(o => { if (o >= 0 && o !== u) set.add(o); });
+                    } else if (P.maxGuruBerturut > 0) {
+                        let a = s - d * W, b = a + T.len - 1;
+                        while (a > 0 && hari[a - 1] >= 0) a--;
+                        while (b < W - 1 && hari[b + 1] >= 0) b++;
+                        if (b - a + 1 > P.maxGuruBerturut) {
+                            for (let p = a; p <= b; p++) if (hari[p] >= 0 && hari[p] !== u) set.add(hari[p]);
+                        }
+                    }
+                }
+            }
+            for (const x of set) if (kunci[x]) return null;
+            return set;
+        }
+
+        function kosLembut(u, s) {
+            const T = units[u], d = Math.floor(s / W);
+            let c = 0;
+            T.pairs.forEach(([k, sj]) => { c += 10 * ((daySub[k + '|' + sj + '|' + d] || []).length); });
+            T.kelas.forEach(k => { c += 0.3 * dayLoadK[k][d]; });
+            return c + Math.random();
+        }
+
+        // Unit berkunci daripada jadual sedia ada
+        const lockMap = {};
+        ((inp.jadual && inp.jadual.sesi) || []).forEach(x => { if (x.kunci) lockMap[x.uuid + '#' + x.ke] = x.hari * W + x.waktu; });
+        units.forEach((T, u) => {
+            const key = T.ahli.map(id => id + '#' + T.ke).find(k => lockMap[k] !== undefined);
+            if (key === undefined) return;
+            const s = lockMap[key];
+            if (domain[u].includes(s) && konflik(u, s) && konflik(u, s).size === 0) { letak(u, s); kunci[u] = 1; }
+            else B.isu.push({ jenis: 'amaran', teks: `Sesi berkunci tidak dapat dikekalkan (bertembung/diblok): ${T.desc}` });
+        });
+
+        // Paling sukar diletak di hujung tatasusunan (pop dahulu)
+        const sukar = u => units[u].len * (units[u].kelas.length + units[u].guru.length) * 20 - domain[u].length;
+        const pending = units.map((_, u) => u).filter(u => !kunci[u]).sort((a, b) => sukar(a) - sukar(b));
+
+        let iter = 0, terbaik = -1, posTerbaik = null;
+        let diletak = units.filter((_, u) => pos[u] >= 0).length;
+        const mula = performance.now();
+        const maxIter = 50000000;
+
+        // MessageChannel tidak diperlahankan seperti setTimeout apabila tab berada di latar belakang
+        const saluran = new MessageChannel();
+        const seterusnya = fn => { saluran.port1.onmessage = fn; saluran.port2.postMessage(0); };
+
+        return new Promise(resolve => {
+            function langkah() {
+                const t0 = performance.now();
+                while (pending.length && performance.now() - t0 < 40) {
+                    iter++;
+                    const u = pending.pop();
+                    if (pos[u] >= 0 || sebabMati[u]) continue;
+                    if (!domain[u].length) { sebabMati[u] = 'Tiada slot berturut-turut yang cukup panjang (slot diblok / rehat).'; continue; }
+                    let best = -1, bestKos = Infinity, bestSet = null;
+                    for (const s of domain[u]) {
+                        const set = konflik(u, s);
+                        if (!set) continue;
+                        let kos;
+                        if (set.size === 0) kos = kosLembut(u, s);
+                        else {
+                            kos = 1000 + Math.random() * 300;
+                            for (const x of set) kos += 200 * units[x].len + (iter - placedAt[x] < 25 ? 2000 : 0);
+                        }
+                        if (kos < bestKos) { bestKos = kos; best = s; bestSet = set; }
+                    }
+                    if (best < 0) { sebabMati[u] = 'Semua kedudukan bertembung dengan sesi berkunci.'; continue; }
+                    // Unit yang diusir masuk ke hujung barisan supaya dua unit tidak saling mengusir tanpa henti
+                    for (const x of bestSet) { angkat(x); pending.unshift(x); diletak--; }
+                    letak(u, best);
+                    placedAt[u] = iter;
+                    diletak++;
+                    if (diletak > terbaik) { terbaik = diletak; posTerbaik = pos.slice(); }
+                }
+                const ms = performance.now() - mula;
+                if (onProgress) onProgress({ iter, diletak, terbaik: Math.max(terbaik, diletak), jumlah: U, ms });
+                if (pending.length && ms < hadMs && iter < maxIter) { seterusnya(langkah); return; }
+                if (diletak >= terbaik) posTerbaik = pos.slice();
+                resolve(hasil(posTerbaik || pos, ms));
+            }
+            seterusnya(langkah);
+        });
+
+        function hasil(akhir, ms) {
+            const sesi = [], tidakMuat = [];
+            units.forEach((T, u) => {
+                const s = akhir[u];
+                if (s < 0) { tidakMuat.push({ desc: T.desc, len: T.len, sebab: sebabMati[u] || 'Tiada ruang tanpa bertembung dengan sesi lain / peraturan.' }); return; }
+                T.ahli.forEach(id => sesi.push({ uuid: id, ke: T.ke, hari: Math.floor(s / W), waktu: s % W, panjang: T.len, kunci: !!kunci[u] }));
+            });
+            return { sesi, tidakMuat, isu: B.isu, stat: { unit: U, diletak: U - tidakMuat.length, iter, ms: Math.round(ms), bilAuto: B.bilAuto } };
+        }
+    }
+
+    return { bina, susun, parsePecahan, pecahAuto, hurufLabel };
+})();
+    </script>
+    <script>
+        // =========================================================================
+        // SUSUN JADUAL — paparan jadual kelas / guru & penyusun automatik
+        // =========================================================================
+        let jdlMode = 'kelas';
+        let jdlSel = null;
+        let jdlSedang = false;
+        let jdlTidakMuat = null;   // hasil susunan terakhir (sesi yang tidak muat)
+
+        const JDL_WARNA = ['bg-sky-100 text-sky-900', 'bg-emerald-100 text-emerald-900', 'bg-amber-100 text-amber-900', 'bg-violet-100 text-violet-900',
+            'bg-rose-100 text-rose-900', 'bg-teal-100 text-teal-900', 'bg-orange-100 text-orange-900', 'bg-lime-100 text-lime-900',
+            'bg-indigo-100 text-indigo-900', 'bg-pink-100 text-pink-900', 'bg-cyan-100 text-cyan-900', 'bg-fuchsia-100 text-fuchsia-900'];
+
+        function jdlWarna(subjekId) {
+            let h = 0;
+            String(subjekId).split('').forEach(c => { h = (h * 31 + c.charCodeAt(0)) >>> 0; });
+            return JDL_WARNA[h % JDL_WARNA.length];
+        }
+
+        function jdlSetMode(mode) {
+            jdlMode = mode;
+            jdlSel = null;
+            renderJadualView();
+        }
+
+        function jdlPilih(id) {
+            jdlSel = id;
+            renderJadualView();
+        }
+
+        function renderJadualView() {
+            const view = document.getElementById('view-jadual');
+            if (!view || view.classList.contains('hidden')) return;
+            const inp = VJStore.getSolverInput();
+            const cfg = inp.slot;
+            const H = cfg.hari.length, W = cfg.waktu.length;
+            const B = VJSolver.bina(inp, { pecahAuto: document.getElementById('jdlPecahAuto').checked });
+            const jadual = VJStore.getJadual();
+            const trx = {};
+            inp.transaksi.forEach(t => { trx[String(t[8])] = t; });
+            const kodSubjek = {}; inp.subjek.forEach(r => { kodSubjek[r[0]] = r[2] || r[1]; });
+            const singGuru = {}; inp.guru.forEach(g => { singGuru[g[0]] = g[2] || g[1]; });
+
+            ['kelas', 'guru'].forEach(m => {
+                document.getElementById(m === 'kelas' ? 'jdlModeKelas' : 'jdlModeGuru').className =
+                    'flex-1 px-2.5 py-1 rounded-md transition ' + (jdlMode === m ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-800');
+            });
+
+            // Waktu terjadual bagi setiap kelas / guru
+            const waktuK = {}, waktuG = {}, perluK = {}, perluG = {};
+            jadual.sesi.forEach(x => {
+                const t = trx[x.uuid]; if (!t) return;
+                String(t[3]).split(',').map(s => s.trim()).forEach(k => { waktuK[k] = (waktuK[k] || 0) + x.panjang; });
+                if (t[1]) waktuG[t[1]] = (waktuG[t[1]] || 0) + x.panjang;
+            });
+            inp.transaksi.forEach(t => {
+                const m = parseInt(t[7]) || 0;
+                String(t[3]).split(',').map(s => s.trim()).forEach(k => { perluK[k] = (perluK[k] || 0) + m; });
+                if (t[1]) perluG[t[1]] = (perluG[t[1]] || 0) + m;
+            });
+
+            const items = jdlMode === 'guru'
+                ? inp.guru.slice().sort((a, b) => String(a[1]).localeCompare(String(b[1]), 'ms'))
+                : inp.kelas.slice().sort((a, b) => (parseInt(a[2]) || 0) - (parseInt(b[2]) || 0) || String(a[1]).localeCompare(String(b[1]), 'ms', { numeric: true }));
+            if (!items.some(x => x[0] === jdlSel)) jdlSel = items.length ? items[0][0] : null;
+            const tw = jdlMode === 'guru' ? waktuG : waktuK, pl = jdlMode === 'guru' ? perluG : perluK;
+            document.getElementById('jdlList').innerHTML = items.map(x => {
+                const a = tw[x[0]] || 0, b = pl[x[0]] || 0;
+                const active = x[0] === jdlSel;
+                const cls = !b ? 'bg-slate-100 text-slate-500' : a >= b ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700';
+                return `<button onclick="jdlPilih('${escapeHtml(x[0])}')" class="w-full flex items-center justify-between gap-2 px-2.5 py-2 rounded-lg text-left transition ${active ? 'bg-brand-600 text-white shadow' : 'hover:bg-white text-slate-700'}">
+                    <span class="text-xs font-bold truncate" title="${escapeHtml(x[1])}">${escapeHtml(x[1])}</span>
+                    <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${cls}">${a}/${b}</span></button>`;
+            }).join('');
+
+            const totalSesi = new Set(jadual.sesi.map(x => x.uuid + '#' + x.ke)).size;
+            const dikunci = jadual.sesi.filter(x => x.kunci).length;
+            document.getElementById('jdlOverview').innerHTML = jadual.dijana
+                ? `· disusun ${escapeHtml(new Date(jadual.dijana).toLocaleString('ms-MY'))} · ${totalSesi} sesi${dikunci ? ` · ${dikunci} dikunci` : ''}`
+                : '· belum disusun';
+
+            const editor = document.getElementById('jdlEditor'), empty = document.getElementById('jdlEmpty');
+            empty.innerText = jdlMode === 'guru' ? 'Tiada guru.' : 'Tiada kelas. Tambah kelas di "Data Induk" dahulu.';
+            empty.classList.toggle('hidden', !!jdlSel);
+            editor.classList.toggle('hidden', !jdlSel);
+
+            if (jdlSel) {
+                const item = items.find(x => x[0] === jdlSel);
+                document.getElementById('jdlTitle').innerText = item[1];
+                document.getElementById('jdlStats').innerText = `${tw[jdlSel] || 0} daripada ${pl[jdlSel] || 0} waktu telah dijadualkan`;
+
+                // Isi petak
+                const sel = Array.from({ length: H * W }, () => []);
+                jadual.sesi.forEach(x => {
+                    const t = trx[x.uuid]; if (!t) return;
+                    const kIds = String(t[3]).split(',').map(s => s.trim());
+                    if (jdlMode === 'kelas' ? !kIds.includes(jdlSel) : String(t[1]) !== jdlSel) return;
+                    for (let i = 0; i < x.panjang && x.waktu + i < W; i++) sel[x.hari * W + x.waktu + i].push({ x, t, mula: i === 0 });
+                });
+                const blok = (cfg[jdlMode] || {})[jdlSel] || {};
+
+                let html = `<thead><tr class="bg-slate-50"><th class="px-2 py-2 text-left text-[11px] font-bold text-slate-500 w-20 border-b border-slate-200">Hari</th>`;
+                cfg.waktu.forEach((w, p) => {
+                    html += `<th class="px-1 py-1.5 border-b border-l border-slate-200 min-w-[64px]"><div class="text-xs font-bold text-slate-700">${p + 1}</div><div class="text-[9px] font-medium text-slate-400">${escapeHtml(w.mula)}${w.tamat ? '–' + escapeHtml(w.tamat) : ''}</div></th>`;
+                });
+                html += `</tr></thead><tbody>`;
+                cfg.hari.forEach((h, d) => {
+                    html += `<tr><th class="px-2 py-1 text-left text-xs font-bold text-slate-700 bg-slate-50 border-t border-slate-200">${escapeHtml(h)}</th>`;
+                    for (let p = 0; p < W; p++) {
+                        const list = sel[d * W + p];
+                        const lb = blok[`${d}-${p}`];
+                        let inner;
+                        if (list.length) {
+                            const kunci = list.some(e => e.x.kunci);
+                            const bentrok = list.length > 1 && jdlMode === 'guru';
+                            inner = list.slice(0, 3).map(e => {
+                                const sub = jdlMode === 'kelas' ? (singGuru[e.t[1]] || e.t[2] || '-') : e.t[4];
+                                return `<div class="rounded px-1 py-0.5 ${jdlWarna(e.t[5])} ${e.mula ? '' : 'opacity-70'}">
+                                    <div class="font-bold text-[10px] leading-tight truncate">${escapeHtml(kodSubjek[e.t[5]] || e.t[6])}${e.t[9] ? ` <span class="font-medium opacity-70">${escapeHtml(e.t[9])}</span>` : ''}</div>
+                                    <div class="text-[9px] leading-tight truncate opacity-80">${escapeHtml(sub)}</div></div>`;
+                            }).join('') + (list.length > 3 ? `<div class="text-[9px] text-slate-500 text-center">+${list.length - 3}</div>` : '');
+                            inner = `<div data-jdl="${d}-${p}" class="jdl-cell relative h-full min-h-[44px] space-y-0.5 cursor-pointer ${bentrok ? 'ring-2 ring-rose-500 rounded' : ''}" title="Klik untuk kunci / buka kunci">${inner}${kunci ? '<span class="absolute -top-1 -right-1 text-[10px]">🔒</span>' : ''}</div>`;
+                        } else if (lb) {
+                            inner = `<div class="h-full min-h-[44px] rounded-md border flex items-center justify-center text-center text-[10px] font-bold ${slotLabelClass(lb, cfg)}">${escapeHtml(lb)}</div>`;
+                        } else {
+                            inner = `<div class="min-h-[44px]"></div>`;
+                        }
+                        html += `<td class="border-t border-l border-slate-200 p-0.5 align-top">${inner}</td>`;
+                    }
+                    html += `</tr>`;
+                });
+                document.getElementById('jdlGrid').innerHTML = html + `</tbody>`;
+            }
+
+            // Isu & sesi belum dijadualkan
+            const ditempat = new Set(jadual.sesi.map(x => x.uuid + '#' + x.ke));
+            const belum = B.units.filter(u => !u.ahli.every(id => ditempat.has(id + '#' + u.ke)));
+            const sebab = {};
+            (jdlTidakMuat || []).forEach(t => { sebab[t.desc + '#' + t.len] = t.sebab; });
+            const isuHtml = B.isu.map(i => `<li class="px-3 py-2 flex gap-2"><span class="shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-full h-fit ${i.jenis === 'ralat' ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-700'}">${i.jenis === 'ralat' ? 'RALAT' : 'AMARAN'}</span><span class="text-slate-700">${escapeHtml(i.teks)}</span></li>`);
+            const belumHtml = (jadual.dijana ? belum : []).map(u => `<li class="px-3 py-2 flex gap-2"><span class="shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-full h-fit bg-slate-200 text-slate-700">${u.len} WAKTU</span><span class="text-slate-700">${escapeHtml(u.desc)}${sebab[u.desc + '#' + u.len] ? `<span class="block text-[10px] text-slate-400">${escapeHtml(sebab[u.desc + '#' + u.len])}</span>` : ''}</span></li>`);
+            const semua = isuHtml.concat(belumHtml);
+            document.getElementById('jdlIsuBox').classList.toggle('hidden', !semua.length);
+            document.getElementById('jdlIsu').innerHTML = (belumHtml.length ? `<li class="px-3 py-1.5 bg-slate-50 text-[11px] font-bold text-slate-500">${belumHtml.length} sesi belum dijadualkan (daripada ${B.units.length})</li>` : '') + semua.join('');
+            lucide.createIcons();
+        }
+
+        async function jdlSusun() {
+            if (jdlSedang) return;
+            if (!isEditMode) { ensureEditMode(() => jdlSusun()); return; }
+            const inp = VJStore.getSolverInput();
+            if (!inp.transaksi.length) { showToast('Tiada agihan untuk dijadualkan.', 'warning'); return; }
+            if (inp.jadual.sesi.some(x => !x.kunci) && !confirm('Susun semula jadual? Semua sesi yang tidak dikunci akan disusun semula.')) return;
+            jdlSedang = true;
+            const btn = document.getElementById('jdlBtnSusun'), prog = document.getElementById('jdlProgress');
+            btn.disabled = true; btn.classList.add('opacity-60');
+            prog.classList.remove('hidden');
+            try {
+                const res = await VJSolver.susun(inp, {
+                    pecahAuto: document.getElementById('jdlPecahAuto').checked,
+                    hadSaat: parseInt(document.getElementById('jdlMasaHad').value) || 30
+                }, st => {
+                    prog.innerText = `Menyusun… ${st.terbaik}/${st.jumlah} sesi diletak · ${(st.ms / 1000).toFixed(1)} s`;
+                });
+                VJStore.setJadual({ dijana: new Date().toISOString(), sesi: res.sesi });
+                jdlTidakMuat = res.tidakMuat;
+                const s = res.stat;
+                showToast(s.diletak === s.unit ? `Jadual lengkap: semua ${s.unit} sesi diletak (${(s.ms / 1000).toFixed(1)} s).`
+                    : `${s.diletak}/${s.unit} sesi diletak. ${s.unit - s.diletak} sesi belum muat — lihat senarai di bawah jadual.`, s.diletak === s.unit ? 'success' : 'warning', 6000);
+            } catch (e) {
+                console.error(e);
+                showToast('Ralat semasa menyusun: ' + e.message, 'error');
+            } finally {
+                jdlSedang = false;
+                btn.disabled = false; btn.classList.remove('opacity-60');
+                prog.classList.add('hidden');
+                renderJadualView();
+            }
+        }
+
+        function jdlKosongkan() {
+            if (!isEditMode) { ensureEditMode(() => jdlKosongkan()); return; }
+            const j = VJStore.getJadual();
+            const kekal = j.sesi.filter(x => x.kunci);
+            if (!j.sesi.length) return;
+            if (!confirm(`Kosongkan jadual?${kekal.length ? ` ${kekal.length} sesi berkunci akan dikekalkan.` : ''}`)) return;
+            VJStore.setJadual({ dijana: kekal.length ? j.dijana : null, sesi: kekal });
+            jdlTidakMuat = null;
+            renderJadualView();
+        }
+
+        // Klik petak: kunci / buka kunci sesi di petak itu
+        document.getElementById('jdlGrid').addEventListener('click', e => {
+            const cell = e.target.closest('.jdl-cell');
+            if (!cell) return;
+            if (!isEditMode) { ensureEditMode(() => renderJadualView()); return; }
+            const [d, p] = cell.dataset.jdl.split('-').map(Number);
+            const inp = VJStore.getSolverInput();
+            const trx = {}; inp.transaksi.forEach(t => { trx[String(t[8])] = t; });
+            const j = VJStore.getJadual();
+            const kena = j.sesi.filter(x => {
+                const t = trx[x.uuid]; if (!t || x.hari !== d || p < x.waktu || p >= x.waktu + x.panjang) return false;
+                return jdlMode === 'kelas' ? String(t[3]).split(',').map(s => s.trim()).includes(jdlSel) : String(t[1]) === jdlSel;
+            });
+            if (!kena.length) return;
+            // Penyusun mengunci seluruh kumpulan serentak jika salah satu ahlinya berkunci
+            const on = !kena.every(x => x.kunci);
+            kena.forEach(x => { x.kunci = on; });
+            VJStore.setJadual(j);
+            renderJadualView();
+        });
+
+        document.getElementById('jdlPecahAuto').addEventListener('change', () => renderJadualView());
+
+        (function () {
+            const origSwitchTab = switchTab;
+            switchTab = function (tabName) {
+                origSwitchTab(tabName);
+                if (tabName === 'jadual') renderJadualView();
+            };
+            const origProcessData = processData;
+            processData = function (data) {
+                origProcessData(data);
+                renderJadualView();
             };
         })();
     </script>

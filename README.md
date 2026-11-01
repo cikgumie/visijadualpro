@@ -12,7 +12,9 @@ Semua data berada dalam memori pelayar, dan disimpan/dibuka sebagai **fail ZIP**
 | Simpan sebagai fail baharu | ikon di sebelah Simpan | Ctrl+Shift+S |
 | Mula fail kosong | **Baru** | |
 | Urus senarai Guru / Kelas / Subjek | **Data Induk** | |
-| Tetapkan slot boleh isi / blok bagi setiap kelas | tab **Slot Masa** | |
+| Tetapkan slot boleh isi / blok bagi setiap kelas | tab **Slot Masa** → Kelas | |
+| Tetapkan slot guru tidak boleh mengajar | tab **Slot Masa** → Guru | |
+| Peraturan susunan jadual | tab **Slot Masa** → Peraturan Susunan | |
 
 - Di **Chrome / Edge**, "Simpan" menulis terus ke fail ZIP yang sama selepas kali pertama.
 - Di pelayar lain (Safari, Firefox), "Simpan" memuat turun fail ZIP ke folder Downloads.
@@ -32,7 +34,9 @@ data/subjek.json     [ID, Nama Subjek, Kod, Masa Per Minggu]
 data/transaksi.json  agihan jadual (sama lajur seperti DB_Transaksi lama)
 data/arkib.json      sesi arkib
 data/tetapan.json    kata laluan pentadbir
-data/slot.json       hari, waktu, label blok & slot diblok setiap kelas
+data/slot.json       hari, waktu, label blok & slot diblok setiap kelas dan setiap guru
+data/peraturan.json  peraturan susunan jadual (sesi subjek sehari, had waktu guru)
+data/jadual.json     kedudukan setiap sesi dalam jadual (hari, waktu, dikunci)
 ```
 
 ## Pindah data dari versi Google Sheet lama

@@ -80,6 +80,9 @@
  *   transaksi : [Timestamp, ID_Guru, Nama Guru, ID_Kelas, Nama Kelas, ID_Subjek, Nama Subjek, Masa, UUID, Label, Pecahan]
  *   arkib     : [Nama_Sesi, Tarikh_Arkib, ...11 lajur transaksi]
  *   tetapan   : { Kata_Laluan: 'admin123' }
+ *   slot      : { hari, waktu, label, kelas: {ID: {"hari-waktu": Label}}, guru: {ID: {"hari-waktu": Label}} }
+ *   peraturan : peraturan susunan jadual automatik (lihat PERATURAN_DEFAULT)
+ *   jadual    : { dijana, sesi: [{ uuid, ke, hari, waktu, kunci }] } — kedudukan setiap sesi dalam jadual
  */
 (function () {
     const ZIP_FORMAT_VERSION = 1;
@@ -90,7 +93,41 @@
     // PANGKALAN DATA DALAM MEMORI
     // =========================================================================
     function emptyDb() {
-        return { guru: [], kelas: [], subjek: [], transaksi: [], arkib: [], tetapan: { Kata_Laluan: DEFAULT_PASSWORD }, slot: defaultSlot() };
+        return { guru: [], kelas: [], subjek: [], transaksi: [], arkib: [], tetapan: { Kata_Laluan: DEFAULT_PASSWORD }, slot: defaultSlot(), peraturan: Object.assign({}, PERATURAN_DEFAULT), jadual: emptyJadual() };
+    }
+
+    // Peraturan susunan jadual. Nilai 0 = tiada had.
+    const PERATURAN_DEFAULT = {
+        sesiSehariSubjek: 1,   // bil. sesi maksimum subjek yang sama bagi satu kelas dalam sehari
+        maxGuruSehari: 0,      // waktu mengajar maksimum seorang guru dalam sehari
+        maxGuruBerturut: 0     // waktu mengajar berturut-turut maksimum seorang guru tanpa rehat
+    };
+
+    function normalizePeraturan(raw) {
+        const out = Object.assign({}, PERATURAN_DEFAULT);
+        if (raw && typeof raw === 'object') {
+            Object.keys(PERATURAN_DEFAULT).forEach(k => {
+                const n = parseInt(raw[k]);
+                if (!isNaN(n) && n >= 0) out[k] = n;
+            });
+        }
+        return out;
+    }
+
+    function emptyJadual() { return { dijana: null, sesi: [] }; }
+
+    function normalizeJadual(raw) {
+        const out = emptyJadual();
+        if (!raw || typeof raw !== 'object') return out;
+        out.dijana = raw.dijana ? String(raw.dijana) : null;
+        out.sesi = (Array.isArray(raw.sesi) ? raw.sesi : []).filter(x => x && x.uuid).map(x => ({
+            uuid: String(x.uuid),
+            ke: parseInt(x.ke) || 0,
+            hari: parseInt(x.hari) || 0,
+            waktu: parseInt(x.waktu) || 0,
+            kunci: !!x.kunci
+        }));
+        return out;
     }
 
     // Slot masa: hari x waktu. Setiap kelas menyimpan slot yang DIBLOK sahaja: { "hari-waktu": "Label" }
@@ -116,7 +153,8 @@
             hari: ['Isnin', 'Selasa', 'Rabu', 'Khamis', 'Jumaat'],
             waktu: genWaktu('07:30', 30, 11),
             label: SLOT_LABEL_DEFAULT.map(l => Object.assign({}, l)),
-            kelas: {}
+            kelas: {},
+            guru: {}
         };
     }
 
@@ -126,13 +164,14 @@
         if (Array.isArray(raw.hari) && raw.hari.length) out.hari = raw.hari.map(String);
         if (Array.isArray(raw.waktu) && raw.waktu.length) out.waktu = raw.waktu.map(w => ({ mula: String((w && w.mula) || ''), tamat: String((w && w.tamat) || '') }));
         if (Array.isArray(raw.label) && raw.label.length) out.label = raw.label.filter(l => l && l.nama).map(l => ({ nama: String(l.nama), warna: String(l.warna || 'slate') }));
-        if (raw.kelas && typeof raw.kelas === 'object') {
-            Object.keys(raw.kelas).forEach(id => {
+        ['kelas', 'guru'].forEach(jenis => {
+            if (!raw[jenis] || typeof raw[jenis] !== 'object') return;
+            Object.keys(raw[jenis]).forEach(id => {
                 const blok = {};
-                Object.entries(raw.kelas[id] || {}).forEach(([k, v]) => { if (/^\d+-\d+$/.test(k) && v) blok[k] = String(v); });
-                out.kelas[id] = blok;
+                Object.entries(raw[jenis][id] || {}).forEach(([k, v]) => { if (/^\d+-\d+$/.test(k) && v) blok[k] = String(v); });
+                out[jenis][id] = blok;
             });
-        }
+        });
         return out;
     }
 
@@ -200,6 +239,8 @@
         out.arkib = rows(raw.arkib, 13).map(r => { r[9] = parseInt(r[9]) || 0; return r; });
         if (raw.tetapan && typeof raw.tetapan === 'object') Object.assign(out.tetapan, raw.tetapan);
         out.slot = normalizeSlot(raw.slot);
+        out.peraturan = normalizePeraturan(raw.peraturan);
+        out.jadual = normalizeJadual(raw.jadual);
         if (!String(out.tetapan.Kata_Laluan || '').trim()) out.tetapan.Kata_Laluan = DEFAULT_PASSWORD;
         return out;
     }
@@ -449,7 +490,7 @@
     // =========================================================================
     // FAIL ZIP: BUKA & SIMPAN
     // =========================================================================
-    const ZIP_FILES = { guru: 'guru.json', kelas: 'kelas.json', subjek: 'subjek.json', transaksi: 'transaksi.json', arkib: 'arkib.json', tetapan: 'tetapan.json', slot: 'slot.json' };
+    const ZIP_FILES = { guru: 'guru.json', kelas: 'kelas.json', subjek: 'subjek.json', transaksi: 'transaksi.json', arkib: 'arkib.json', tetapan: 'tetapan.json', slot: 'slot.json', peraturan: 'peraturan.json', jadual: 'jadual.json' };
 
     async function buildZipBlob() {
         const zip = new JSZip();
@@ -663,8 +704,9 @@
         if (hari.length > 7 || waktu.length > 20) throw new Error('Maksimum 7 hari dan 20 waktu sehari.');
         db.slot.hari = hari;
         db.slot.waktu = waktu;
-        // Buang blok yang kini di luar julat
-        Object.values(db.slot.kelas).forEach(blok => Object.keys(blok).forEach(k => { if (!slotInRange(k)) delete blok[k]; }));
+        // Buang blok & sesi jadual yang kini di luar julat
+        [db.slot.kelas, db.slot.guru].forEach(map => Object.values(map).forEach(blok => Object.keys(blok).forEach(k => { if (!slotInRange(k)) delete blok[k]; })));
+        db.jadual.sesi = db.jadual.sesi.filter(x => slotInRange(`${x.hari}-${x.waktu}`));
         markDirty();
     }
 
@@ -680,6 +722,13 @@
         const clean = {};
         Object.entries(blok || {}).forEach(([k, v]) => { if (v && slotInRange(k)) clean[k] = String(v); });
         db.slot.kelas[String(kelasId)] = clean;
+        markDirty();
+    }
+
+    function setGuruBlok(guruId, blok) {
+        const clean = {};
+        Object.entries(blok || {}).forEach(([k, v]) => { if (v && slotInRange(k)) clean[k] = String(v); });
+        db.slot.guru[String(guruId)] = clean;
         markDirty();
     }
 
@@ -705,8 +754,46 @@
         return out;
     }
 
+    // Ringkasan setiap guru: slot boleh mengajar, slot diblok, waktu diagihkan, had maksimum
+    function guruSlotSummary() {
+        const total = db.slot.hari.length * db.slot.waktu.length;
+        const agihan = {};
+        db.transaksi.forEach(t => { agihan[t[1]] = (agihan[t[1]] || 0) + (parseInt(t[7]) || 0); });
+        const out = {};
+        db.guru.forEach(g => {
+            const blok = Object.keys(db.slot.guru[g[0]] || {}).filter(slotInRange).length;
+            out[g[0]] = { total, blok, boleh: total - blok, agihan: agihan[g[0]] || 0, maks: parseInt(g[3]) || 0 };
+        });
+        return out;
+    }
+
+    // =========================================================================
+    // PERATURAN & JADUAL
+    // =========================================================================
+    function getPeraturan() { return clone(db.peraturan); }
+
+    function setPeraturan(p) {
+        db.peraturan = normalizePeraturan(Object.assign({}, db.peraturan, p));
+        markDirty();
+    }
+
+    // Sesi jadual yang merujuk agihan yang sudah dipadam diabaikan
+    function getJadual() {
+        const ada = new Set(db.transaksi.map(t => String(t[8])));
+        const j = clone(db.jadual);
+        j.sesi = j.sesi.filter(x => ada.has(x.uuid));
+        return j;
+    }
+
+    function setJadual(j) {
+        db.jadual = normalizeJadual(j);
+        db.jadual.sesi = db.jadual.sesi.filter(x => slotInRange(`${x.hari}-${x.waktu}`));
+        markDirty();
+    }
+
     window.VJStore = {
-        getSlot, setSlotConfig, addSlotLabel, setKelasBlok, copyKelasBlok, slotSummary, genWaktu,
+        getSlot, setSlotConfig, addSlotLabel, setKelasBlok, setGuruBlok, copyKelasBlok, slotSummary, guruSlotSummary, genWaktu,
+        getPeraturan, setPeraturan, PERATURAN_DEFAULT, getJadual, setJadual,
         getStatus, onChange: fn => listeners.push(fn),
         buildZipBlob, markSaved, openZip, defaultZipName,
         loadDb, restoreAutosave, hasAutosave,
@@ -2573,12 +2660,47 @@ window.VJSampleData = function () {
             <div class="p-3.5 bg-slate-50/80 border-b border-slate-200 flex flex-wrap justify-between items-center gap-2 no-print">
                 <div class="flex items-center gap-2">
                     <i data-lucide="calendar-clock" class="w-4 h-4 text-brand-600"></i>
-                    <h3 class="text-sm font-heading font-bold text-slate-800">Slot Masa Kelas</h3>
+                    <h3 class="text-sm font-heading font-bold text-slate-800">Slot Masa</h3>
+                    <div class="flex p-0.5 bg-slate-200/70 rounded-lg text-[11px] font-bold">
+                        <button onclick="slotSetMode('kelas')" id="slotModeKelas" class="px-2.5 py-1 rounded-md transition">Kelas</button>
+                        <button onclick="slotSetMode('guru')" id="slotModeGuru" class="px-2.5 py-1 rounded-md transition">Guru</button>
+                    </div>
                     <span id="slotOverview" class="text-[11px] text-slate-500"></span>
                 </div>
-                <button onclick="slotToggleSettings()" class="px-3 py-1.5 border border-slate-200 bg-white hover:bg-slate-100 rounded-lg text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                    <i data-lucide="settings-2" class="w-3.5 h-3.5"></i> Tetapan Hari & Waktu
-                </button>
+                <div class="flex flex-wrap gap-1.5">
+                    <button onclick="slotTogglePeraturan()" class="px-3 py-1.5 border border-slate-200 bg-white hover:bg-slate-100 rounded-lg text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                        <i data-lucide="list-checks" class="w-3.5 h-3.5"></i> Peraturan Susunan
+                    </button>
+                    <button onclick="slotToggleSettings()" class="px-3 py-1.5 border border-slate-200 bg-white hover:bg-slate-100 rounded-lg text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                        <i data-lucide="settings-2" class="w-3.5 h-3.5"></i> Tetapan Hari & Waktu
+                    </button>
+                </div>
+            </div>
+
+            <!-- Peraturan susunan jadual -->
+            <div id="slotPeraturan" class="hidden p-4 border-b border-slate-200 bg-emerald-50/40">
+                <p class="text-xs text-slate-600 mb-3">Peraturan ini digunakan semasa jadual disusun secara automatik. Isi <strong>0</strong> untuk tiada had. Rehat dan slot lain yang diblok sentiasa memutuskan sesi berturut-turut.</p>
+                <div class="grid sm:grid-cols-3 gap-3">
+                    <label class="block bg-white border border-slate-200 rounded-xl p-3">
+                        <span class="block text-xs font-bold text-slate-700">Sesi subjek sama sehari</span>
+                        <span class="block text-[10px] text-slate-500 mb-1.5">Bil. sesi maksimum satu subjek bagi satu kelas dalam sehari</span>
+                        <input id="perSesiSehariSubjek" type="number" min="0" max="10" class="w-24 border border-slate-300 rounded-lg px-2 py-1.5 text-xs">
+                    </label>
+                    <label class="block bg-white border border-slate-200 rounded-xl p-3">
+                        <span class="block text-xs font-bold text-slate-700">Waktu guru sehari</span>
+                        <span class="block text-[10px] text-slate-500 mb-1.5">Waktu mengajar maksimum seorang guru dalam sehari</span>
+                        <input id="perMaxGuruSehari" type="number" min="0" max="20" class="w-24 border border-slate-300 rounded-lg px-2 py-1.5 text-xs">
+                    </label>
+                    <label class="block bg-white border border-slate-200 rounded-xl p-3">
+                        <span class="block text-xs font-bold text-slate-700">Waktu guru berturut-turut</span>
+                        <span class="block text-[10px] text-slate-500 mb-1.5">Waktu mengajar maksimum tanpa slot kosong di antaranya</span>
+                        <input id="perMaxGuruBerturut" type="number" min="0" max="20" class="w-24 border border-slate-300 rounded-lg px-2 py-1.5 text-xs">
+                    </label>
+                </div>
+                <div class="flex justify-end gap-2 mt-3">
+                    <button onclick="slotTogglePeraturan()" class="px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600">Batal</button>
+                    <button onclick="slotSavePeraturan()" class="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-bold shadow flex items-center gap-1.5"><i data-lucide="check" class="w-3.5 h-3.5"></i> Simpan Peraturan</button>
+                </div>
             </div>
 
             <!-- Tetapan hari & waktu -->
@@ -2617,13 +2739,13 @@ window.VJSampleData = function () {
             <div class="flex flex-col lg:flex-row min-h-[60vh]">
                 <!-- Senarai kelas -->
                 <div class="lg:w-64 shrink-0 border-b lg:border-b-0 lg:border-r border-slate-200 bg-slate-50/50">
-                    <div class="px-3 py-2 text-[10px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200">Kelas · agihan / slot boleh isi</div>
+                    <div id="slotListTitle" class="px-3 py-2 text-[10px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200">Kelas · agihan / slot boleh isi</div>
                     <div id="slotKelasList" class="max-h-[30vh] lg:max-h-[70vh] overflow-y-auto p-2 space-y-1"></div>
                 </div>
 
                 <!-- Grid slot kelas terpilih -->
                 <div class="flex-1 min-w-0 p-4">
-                    <div id="slotEmpty" class="text-center text-xs text-slate-400 py-16">Tiada kelas. Tambah kelas di "Data Induk" dahulu.</div>
+                    <div id="slotEmpty" class="text-center text-xs text-slate-400 py-16"></div>
                     <div id="slotEditor" class="hidden">
                         <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
                             <div>
@@ -2631,9 +2753,11 @@ window.VJSampleData = function () {
                                 <p id="slotKelasStats" class="text-xs text-slate-500"></p>
                             </div>
                             <div class="flex flex-wrap gap-1.5">
+                                <span id="slotKelasActions" class="contents">
                                 <button onclick="slotOpenCopyPanel()" class="px-2.5 py-1.5 border border-brand-200 bg-brand-50 hover:bg-brand-100 rounded-lg text-xs font-bold text-brand-700 flex items-center gap-1.5"><i data-lucide="list-checks" class="w-3.5 h-3.5"></i> Salin ke Kelas Pilihan</button>
                                 <button onclick="slotCopy('tingkatan')" class="px-2.5 py-1.5 border border-slate-200 bg-white hover:bg-slate-100 rounded-lg text-xs font-bold text-slate-700 flex items-center gap-1.5"><i data-lucide="copy" class="w-3.5 h-3.5"></i> Salin ke Tingkatan Sama</button>
                                 <button onclick="slotCopy('semua')" class="px-2.5 py-1.5 border border-slate-200 bg-white hover:bg-slate-100 rounded-lg text-xs font-bold text-slate-700 flex items-center gap-1.5"><i data-lucide="copy-check" class="w-3.5 h-3.5"></i> Salin ke Semua Kelas</button>
+                                </span>
                                 <button onclick="slotClear()" class="px-2.5 py-1.5 border border-rose-200 bg-rose-50 hover:bg-rose-100 rounded-lg text-xs font-bold text-rose-700 flex items-center gap-1.5"><i data-lucide="eraser" class="w-3.5 h-3.5"></i> Kosongkan</button>
                             </div>
                         </div>
@@ -2666,7 +2790,7 @@ window.VJSampleData = function () {
                         <div class="overflow-x-auto border border-slate-200 rounded-xl">
                             <table id="slotGrid" class="w-full text-xs select-none" style="touch-action: none;"></table>
                         </div>
-                        <p class="text-[11px] text-slate-400 mt-2">Pilih berus, kemudian klik atau seret pada petak. Klik nama hari / nombor waktu untuk isi satu baris / lajur. Klik semula petak berlabel sama untuk membuka semula slot.</p>
+                        <p id="slotHint" class="text-[11px] text-slate-400 mt-2">Pilih berus, kemudian klik atau seret pada petak. Klik nama hari / nombor waktu untuk isi satu baris / lajur. Klik semula petak berlabel sama untuk membuka semula slot.</p>
                     </div>
                 </div>
             </div>
@@ -6426,7 +6550,8 @@ window.VJSampleData = function () {
             pink: 'bg-pink-100 text-pink-800 border-pink-300',
             lime: 'bg-lime-100 text-lime-800 border-lime-300'
         };
-        let slotSelKelas = null;   // ID kelas terpilih
+        let slotMode = 'kelas';    // 'kelas' atau 'guru' — jenis slot yang sedang diedit
+        let slotSelKelas = null;   // ID kelas / guru terpilih
         let slotBrush = null;      // nama label (blok) atau '' untuk "Boleh Isi"
         let slotWork = {};         // salinan blok kelas terpilih semasa melukis
         let slotPaint = null;      // { value } semasa seretan aktif
@@ -6442,6 +6567,25 @@ window.VJSampleData = function () {
                 (parseInt(a[2]) || 0) - (parseInt(b[2]) || 0) || String(a[1]).localeCompare(String(b[1]), 'ms', { numeric: true }));
         }
 
+        function slotSortedGuru() {
+            return dbData.guru.slice().sort((a, b) => String(a[1]).localeCompare(String(b[1]), 'ms'));
+        }
+
+        function slotGuruStatus(s) {
+            if (s.agihan > s.boleh) return { cls: 'bg-rose-100 text-rose-700', txt: `Lebih ${s.agihan - s.boleh}` };
+            if (s.maks && s.agihan > s.maks) return { cls: 'bg-amber-100 text-amber-700', txt: 'Lebih had' };
+            return { cls: 'bg-emerald-100 text-emerald-700', txt: 'OK' };
+        }
+
+        function slotSetMode(mode) {
+            if (mode === slotMode) return;
+            slotMode = mode;
+            slotSelKelas = null;
+            slotPaint = null;
+            slotCloseCopyPanel();
+            renderSlotView();
+        }
+
         function slotStatus(s) {
             if (s.agihan > s.boleh) return { cls: 'bg-rose-100 text-rose-700', txt: `Lebih ${s.agihan - s.boleh}` };
             if (s.agihan === s.boleh) return { cls: 'bg-emerald-100 text-emerald-700', txt: 'Padan' };
@@ -6452,23 +6596,35 @@ window.VJSampleData = function () {
             const view = document.getElementById('view-slot');
             if (!view || view.classList.contains('hidden')) return;
             const cfg = VJStore.getSlot();
-            const sum = VJStore.slotSummary();
-            const kelas = slotSortedKelas();
+            const isGuru = slotMode === 'guru';
+            const sum = isGuru ? VJStore.guruSlotSummary() : VJStore.slotSummary();
+            const items = isGuru ? slotSortedGuru() : slotSortedKelas();
+            const statusOf = isGuru ? slotGuruStatus : slotStatus;
+
+            ['kelas', 'guru'].forEach(m => {
+                document.getElementById(m === 'kelas' ? 'slotModeKelas' : 'slotModeGuru').className =
+                    'px-2.5 py-1 rounded-md transition ' + (slotMode === m ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-800');
+            });
+            document.getElementById('slotListTitle').innerText = isGuru ? 'Guru · agihan / slot boleh mengajar' : 'Kelas · agihan / slot boleh isi';
+            document.getElementById('slotKelasActions').classList.toggle('hidden', isGuru);
+            document.getElementById('slotHint').innerText = isGuru
+                ? 'Blok slot yang guru TIDAK boleh mengajar (cth: separuh masa, mesyuarat, tugas khas). Pilih berus, kemudian klik atau seret pada petak.'
+                : 'Pilih berus, kemudian klik atau seret pada petak. Klik nama hari / nombor waktu untuk isi satu baris / lajur. Klik semula petak berlabel sama untuk membuka semula slot.';
 
             if (slotBrush === null) slotBrush = cfg.label.length ? cfg.label[0].nama : '';
-            if (!kelas.some(k => k[0] === slotSelKelas)) slotSelKelas = kelas.length ? kelas[0][0] : null;
+            if (!items.some(k => k[0] === slotSelKelas)) slotSelKelas = items.length ? items[0][0] : null;
 
-            const lebih = kelas.filter(k => sum[k[0]] && sum[k[0]].agihan > sum[k[0]].boleh).length;
+            const lebih = items.filter(k => sum[k[0]] && sum[k[0]].agihan > sum[k[0]].boleh).length;
             document.getElementById('slotOverview').innerHTML =
                 `· ${cfg.hari.length} hari × ${cfg.waktu.length} waktu = ${cfg.hari.length * cfg.waktu.length} slot seminggu` +
-                (lebih ? ` · <span class="text-rose-600 font-bold">${lebih} kelas melebihi slot</span>` : '');
+                (lebih ? ` · <span class="text-rose-600 font-bold">${lebih} ${isGuru ? 'guru' : 'kelas'} melebihi slot</span>` : '');
 
-            document.getElementById('slotKelasList').innerHTML = kelas.map(k => {
+            document.getElementById('slotKelasList').innerHTML = items.map(k => {
                 const s = sum[k[0]];
-                const st = slotStatus(s);
+                const st = statusOf(s);
                 const active = k[0] === slotSelKelas;
                 return `<button onclick="slotSelect('${escapeHtml(k[0])}')" class="w-full flex items-center justify-between gap-2 px-2.5 py-2 rounded-lg text-left transition ${active ? 'bg-brand-600 text-white shadow' : 'hover:bg-white text-slate-700'}">
-                    <span class="text-xs font-bold truncate">${escapeHtml(k[1])}</span>
+                    <span class="text-xs font-bold truncate" title="${escapeHtml(k[1])}">${escapeHtml(k[1])}</span>
                     <span class="flex items-center gap-1.5 shrink-0">
                         <span class="text-[11px] ${active ? 'text-white/80' : 'text-slate-500'}">${s.agihan}/${s.boleh}</span>
                         <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full ${st.cls}">${st.txt}</span>
@@ -6476,18 +6632,27 @@ window.VJSampleData = function () {
             }).join('');
 
             const editor = document.getElementById('slotEditor');
+            document.getElementById('slotEmpty').innerText = isGuru ? 'Tiada guru. Tambah guru di "Data Induk" dahulu.' : 'Tiada kelas. Tambah kelas di "Data Induk" dahulu.';
             document.getElementById('slotEmpty').classList.toggle('hidden', !!slotSelKelas);
             editor.classList.toggle('hidden', !slotSelKelas);
             if (!slotSelKelas) { lucide.createIcons(); return; }
 
-            const k = dbData.kelas.find(x => x[0] === slotSelKelas);
-            if (!slotPaint) slotWork = cfg.kelas[slotSelKelas] ? Object.assign({}, cfg.kelas[slotSelKelas]) : {};
+            const k = items.find(x => x[0] === slotSelKelas);
+            const blokMap = cfg[slotMode][slotSelKelas];
+            if (!slotPaint) slotWork = blokMap ? Object.assign({}, blokMap) : {};
             const s = sum[slotSelKelas];
-            const st = slotStatus(s);
-            document.getElementById('slotKelasTitle').innerHTML = `${escapeHtml(k[1])} <span class="text-xs font-medium text-slate-400">Tingkatan ${escapeHtml(k[2])}${k[3] ? ' · ' + escapeHtml(k[3]) : ''}</span>`;
-            document.getElementById('slotKelasStats').innerHTML =
-                `<strong class="text-slate-700">${s.boleh}</strong> slot boleh isi · <strong class="text-slate-700">${s.blok}</strong> diblok · ` +
-                `<strong class="text-slate-700">${s.agihan}</strong> waktu telah diagihkan <span class="ml-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full ${st.cls}">${st.txt}</span>`;
+            const st = statusOf(s);
+            if (isGuru) {
+                document.getElementById('slotKelasTitle').innerHTML = `${escapeHtml(k[1])} <span class="text-xs font-medium text-slate-400">${escapeHtml(k[2])}${s.maks ? ' · had ' + s.maks + ' waktu' : ''}</span>`;
+                document.getElementById('slotKelasStats').innerHTML =
+                    `<strong class="text-slate-700">${s.boleh}</strong> slot boleh mengajar · <strong class="text-slate-700">${s.blok}</strong> diblok · ` +
+                    `<strong class="text-slate-700">${s.agihan}</strong> waktu telah diagihkan <span class="ml-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full ${st.cls}">${st.txt}</span>`;
+            } else {
+                document.getElementById('slotKelasTitle').innerHTML = `${escapeHtml(k[1])} <span class="text-xs font-medium text-slate-400">Tingkatan ${escapeHtml(k[2])}${k[3] ? ' · ' + escapeHtml(k[3]) : ''}</span>`;
+                document.getElementById('slotKelasStats').innerHTML =
+                    `<strong class="text-slate-700">${s.boleh}</strong> slot boleh isi · <strong class="text-slate-700">${s.blok}</strong> diblok · ` +
+                    `<strong class="text-slate-700">${s.agihan}</strong> waktu telah diagihkan <span class="ml-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full ${st.cls}">${st.txt}</span>`;
+            }
 
             // Berus
             const brushBtn = (val, text, cls) => {
@@ -6536,7 +6701,7 @@ window.VJSampleData = function () {
         }
 
         function slotCommit() {
-            try { VJStore.setKelasBlok(slotSelKelas, slotWork); }
+            try { (slotMode === 'guru' ? VJStore.setGuruBlok : VJStore.setKelasBlok)(slotSelKelas, slotWork); }
             catch (e) { showToast(e.message, 'error'); }
             renderSlotView();
         }
@@ -6657,7 +6822,7 @@ window.VJSampleData = function () {
 
         function slotClear() {
             if (!isEditMode) { ensureEditMode(() => slotClear()); return; }
-            const k = dbData.kelas.find(x => x[0] === slotSelKelas);
+            const k = dbData[slotMode].find(x => x[0] === slotSelKelas);
             if (!confirm(`Buka semula SEMUA slot untuk ${k[1]}?`)) return;
             slotWork = {};
             slotCommit();
@@ -6674,6 +6839,27 @@ window.VJSampleData = function () {
                 slotBrush = nama.trim();
                 renderSlotView();
             } catch (e) { showToast(e.message, 'error'); }
+        }
+
+        // ---- Peraturan susunan ----
+        const PERATURAN_INPUT = { sesiSehariSubjek: 'perSesiSehariSubjek', maxGuruSehari: 'perMaxGuruSehari', maxGuruBerturut: 'perMaxGuruBerturut' };
+
+        function slotTogglePeraturan() {
+            const box = document.getElementById('slotPeraturan');
+            if (box.classList.contains('hidden')) {
+                if (!isEditMode) { ensureEditMode(() => slotTogglePeraturan()); return; }
+                const p = VJStore.getPeraturan();
+                Object.entries(PERATURAN_INPUT).forEach(([k, id]) => { document.getElementById(id).value = p[k]; });
+            }
+            box.classList.toggle('hidden');
+        }
+
+        function slotSavePeraturan() {
+            const p = {};
+            Object.entries(PERATURAN_INPUT).forEach(([k, id]) => { p[k] = Math.max(0, parseInt(document.getElementById(id).value) || 0); });
+            VJStore.setPeraturan(p);
+            document.getElementById('slotPeraturan').classList.add('hidden');
+            showToast('Peraturan susunan disimpan.', 'success');
         }
 
         // ---- Tetapan hari & waktu ----
@@ -6713,7 +6899,7 @@ window.VJSampleData = function () {
         function slotSaveSettings() {
             const hari = document.getElementById('slotCfgHari').value.split(',').map(s => s.trim()).filter(Boolean);
             const cfg = VJStore.getSlot();
-            const lost = Object.values(cfg.kelas).reduce((n, blok) => n + Object.keys(blok).filter(k => {
+            const lost = [...Object.values(cfg.kelas), ...Object.values(cfg.guru)].reduce((n, blok) => n + Object.keys(blok).filter(k => {
                 const [d, p] = k.split('-').map(Number);
                 return d >= hari.length || p >= slotCfgWaktuDraft.length;
             }).length, 0);

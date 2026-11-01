@@ -32,6 +32,9 @@ Semua data berada dalam memori pelayar, dan disimpan/dibuka sebagai **fail ZIP**
 - **Label serentak:** agihan dengan **huruf label yang sama** (cth C1/C2, G1/G2/G3), masa yang sama dan berkongsi
   sekurang-kurangnya satu kelas dijadualkan pada slot yang sama.
 - Slot diblok kelas & guru, serta peraturan susunan, sentiasa dipatuhi. Sesi yang tidak muat disenaraikan bersama sebabnya.
+- **Hubungan** (butang *Hubungan* dalam tab Susun Jadual) — pilih agihan melalui penapis subjek / guru / kelas, kemudian tetapkan:
+  mesti serentak · tidak boleh pada waktu yang sama (maks N serentak, cth makmal) · tidak boleh pada hari yang sama ·
+  maks waktu sehari · hanya pada slot terpilih · tidak boleh pada slot terpilih.
 - Klik sesi untuk **kunci** — sesi berkunci kekal di tempatnya apabila jadual disusun semula.
 
 ## Isi fail ZIP
@@ -47,6 +50,7 @@ data/tetapan.json    kata laluan pentadbir
 data/slot.json       hari, waktu, label blok & slot diblok setiap kelas dan setiap guru
 data/peraturan.json  peraturan susunan jadual (sesi subjek sehari, had waktu guru)
 data/jadual.json     kedudukan setiap sesi dalam jadual (hari, waktu, dikunci)
+data/hubungan.json   hubungan / kekangan antara sesi
 ```
 
 ## Pindah data dari versi Google Sheet lama

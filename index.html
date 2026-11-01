@@ -83,7 +83,8 @@
  *   slot      : { hari, waktu, label, kelas: {ID: {"hari-waktu": Label}}, guru: {ID: {"hari-waktu": Label}} }
  *   peraturan : peraturan susunan jadual automatik (lihat PERATURAN_DEFAULT)
  *   jadual    : { dijana, sesi: [{ uuid, ke, hari, waktu, panjang, kunci }] } — kedudukan setiap sesi dalam jadual
- *   hubungan  : [{ id, jenis, nama, pilih: { subjek, guru, kelas }, nilai, slot: ["hari-waktu"], aktif }] — kekangan antara sesi
+ *   hubungan  : [{ id, jenis, nama, pilih, pilihB, nilai, slot, slotB, aktif }] — kekangan antara sesi
+ *               pilih / pilihB = { subjek, guru, kelas } (Kumpulan A / B); slot / slotB = ["hari-waktu"]
  */
 (function () {
     const ZIP_FORMAT_VERSION = 1;
@@ -117,7 +118,11 @@
 
     function emptyJadual() { return { dijana: null, sesi: [] }; }
 
-    const JENIS_HUBUNGAN = ['serentak', 'maksSerentak', 'bezaHari', 'maksSehari', 'slotHanya', 'slotLarang'];
+    const JENIS_HUBUNGAN = ['serentak', 'bezaWaktu', 'maksSerentak',
+        'bezaHari', 'maksSehari', 'minSehari', 'minSehariAda', 'maksSesiSehari', 'maksHari', 'minHari', 'maksHariBerturut', 'maksHariLapang',
+        'maksBerturut', 'maksJulat', 'minJulat', 'maksLompong', 'maksLompongMinggu', 'maksLompongAwal', 'maksLompongAkhir',
+        'slotHanya', 'slotLarang', 'tidakMula', 'tidakTamat', 'hariBerikut',
+        'tidakIkut', 'tidakBersebelahan', 'aSebelumBHari', 'aSebelumBMinggu', 'hariASebelumB', 'aBersebelahanB'];
 
     function normalizeHubungan(raw) {
         const ids = v => (Array.isArray(v) ? v : []).map(String).filter(Boolean);
@@ -126,8 +131,10 @@
             jenis: h.jenis,
             nama: String(h.nama || '').trim(),
             pilih: { subjek: ids(h.pilih && h.pilih.subjek), guru: ids(h.pilih && h.pilih.guru), kelas: ids(h.pilih && h.pilih.kelas) },
+            pilihB: { subjek: ids(h.pilihB && h.pilihB.subjek), guru: ids(h.pilihB && h.pilihB.guru), kelas: ids(h.pilihB && h.pilihB.kelas) },
             nilai: Math.max(0, parseInt(h.nilai) || 0),
             slot: ids(h.slot).filter(k => /^\d+-\d+$/.test(k)),
+            slotB: ids(h.slotB).filter(k => /^\d+-\d+$/.test(k)),
             aktif: h.aktif !== false
         }));
     }
@@ -2724,25 +2731,47 @@ window.VJSampleData = function () {
                     <p class="text-xs font-bold text-slate-700">Tambah hubungan</p>
                     <div class="flex flex-wrap items-end gap-2">
                         <label class="block"><span class="block text-[10px] font-bold text-slate-500 mb-0.5">Jenis</span>
-                            <select id="hubJenis" onchange="hubFormUpdate()" class="border border-slate-300 rounded-lg px-2 py-1.5 text-xs bg-white"></select></label>
+                            <select id="hubJenis" onchange="hubFormUpdate()" class="border border-slate-300 rounded-lg px-2 py-1.5 text-xs bg-white max-w-[320px]"></select></label>
                         <label id="hubNilaiBox" class="block"><span id="hubNilaiLabel" class="block text-[10px] font-bold text-slate-500 mb-0.5"></span>
-                            <input id="hubNilai" type="number" min="1" max="20" value="1" class="w-20 border border-slate-300 rounded-lg px-2 py-1.5 text-xs"></label>
+                            <input id="hubNilai" type="number" min="0" max="50" value="1" class="w-20 border border-slate-300 rounded-lg px-2 py-1.5 text-xs"></label>
                         <label class="block flex-1 min-w-[160px]"><span class="block text-[10px] font-bold text-slate-500 mb-0.5">Nama (pilihan)</span>
                             <input id="hubNama" type="text" placeholder="Cth: Makmal Sains, BM pagi sahaja" class="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-xs"></label>
                     </div>
                     <p id="hubJenisHint" class="text-[11px] text-slate-500"></p>
-                    <div class="grid sm:grid-cols-3 gap-2">
-                        <label class="block"><span class="block text-[10px] font-bold text-slate-500 mb-0.5">Subjek</span>
-                            <select id="hubSubjek" multiple size="6" onchange="hubFormUpdate()" class="w-full border border-slate-300 rounded-lg px-1 py-1 text-xs bg-white"></select></label>
-                        <label class="block"><span class="block text-[10px] font-bold text-slate-500 mb-0.5">Guru</span>
-                            <select id="hubGuru" multiple size="6" onchange="hubFormUpdate()" class="w-full border border-slate-300 rounded-lg px-1 py-1 text-xs bg-white"></select></label>
-                        <label class="block"><span class="block text-[10px] font-bold text-slate-500 mb-0.5">Kelas</span>
-                            <select id="hubKelas" multiple size="6" onchange="hubFormUpdate()" class="w-full border border-slate-300 rounded-lg px-1 py-1 text-xs bg-white"></select></label>
+                    <div>
+                        <p id="hubTajukA" class="text-[11px] font-bold text-slate-700 mb-1"></p>
+                        <div class="grid sm:grid-cols-3 gap-2">
+                            <label class="block"><span class="block text-[10px] font-bold text-slate-500 mb-0.5">Subjek</span>
+                                <select id="hubSubjek" multiple size="5" onchange="hubFormUpdate()" class="w-full border border-slate-300 rounded-lg px-1 py-1 text-xs bg-white"></select></label>
+                            <label class="block"><span class="block text-[10px] font-bold text-slate-500 mb-0.5">Guru</span>
+                                <select id="hubGuru" multiple size="5" onchange="hubFormUpdate()" class="w-full border border-slate-300 rounded-lg px-1 py-1 text-xs bg-white"></select></label>
+                            <label class="block"><span class="block text-[10px] font-bold text-slate-500 mb-0.5">Kelas</span>
+                                <select id="hubKelas" multiple size="5" onchange="hubFormUpdate()" class="w-full border border-slate-300 rounded-lg px-1 py-1 text-xs bg-white"></select></label>
+                        </div>
+                        <p id="hubPadanA" class="text-[11px] text-slate-600 mt-1"></p>
+                    </div>
+                    <div id="hubBoxB" class="hidden">
+                        <p id="hubTajukB" class="text-[11px] font-bold text-slate-700 mb-1"></p>
+                        <div class="grid sm:grid-cols-3 gap-2">
+                            <label class="block"><span class="block text-[10px] font-bold text-slate-500 mb-0.5">Subjek</span>
+                                <select id="hubSubjekB" multiple size="5" onchange="hubFormUpdate()" class="w-full border border-slate-300 rounded-lg px-1 py-1 text-xs bg-white"></select></label>
+                            <label class="block"><span class="block text-[10px] font-bold text-slate-500 mb-0.5">Guru</span>
+                                <select id="hubGuruB" multiple size="5" onchange="hubFormUpdate()" class="w-full border border-slate-300 rounded-lg px-1 py-1 text-xs bg-white"></select></label>
+                            <label class="block"><span class="block text-[10px] font-bold text-slate-500 mb-0.5">Kelas</span>
+                                <select id="hubKelasB" multiple size="5" onchange="hubFormUpdate()" class="w-full border border-slate-300 rounded-lg px-1 py-1 text-xs bg-white"></select></label>
+                        </div>
+                        <p id="hubPadanB" class="text-[11px] text-slate-600 mt-1"></p>
                     </div>
                     <p class="text-[10px] text-slate-400">Ctrl/Shift + klik untuk pilih berbilang. Agihan dipilih jika sepadan dengan SEMUA penapis yang diisi; penapis kosong bermaksud semua.</p>
-                    <div id="hubSlotBox" class="hidden">
-                        <p class="text-[10px] font-bold text-slate-500 mb-1">Slot terpilih <span class="font-normal">(klik petak / nama hari / nombor waktu)</span></p>
-                        <div class="overflow-x-auto"><table id="hubSlotGrid" class="text-[10px] select-none"></table></div>
+                    <div class="flex flex-wrap gap-4">
+                        <div id="hubSlotBox" class="hidden">
+                            <p id="hubSlotLabel" class="text-[10px] font-bold text-slate-500 mb-1"></p>
+                            <div class="overflow-x-auto"><table id="hubSlotGrid" data-draf="A" class="text-[10px] select-none"></table></div>
+                        </div>
+                        <div id="hubSlotBoxB" class="hidden">
+                            <p id="hubSlotLabelB" class="text-[10px] font-bold text-slate-500 mb-1"></p>
+                            <div class="overflow-x-auto"><table id="hubSlotGridB" data-draf="B" class="text-[10px] select-none"></table></div>
+                        </div>
                     </div>
                     <div class="flex flex-wrap items-center justify-between gap-2">
                         <p id="hubPadan" class="text-[11px] text-slate-600"></p>
@@ -7078,23 +7107,89 @@ window.VJSampleData = function () {
  * berkonflik untuk diletak semula.
  */
 window.VJSolver = (function () {
+    // Jenis hubungan. ab: 'wajib' / 'pilihan' = perlu / boleh ada Kumpulan B.
+    // lembut: diusahakan semasa menyusun & dilaporkan jika dilanggar (tidak dijamin).
     const JENIS_HUB = {
-        serentak: 'Mesti serentak (waktu sama)',
-        maksSerentak: 'Tidak boleh pada waktu yang sama',
-        bezaHari: 'Tidak boleh pada hari yang sama',
-        maksSehari: 'Maks waktu sehari',
-        slotHanya: 'Hanya pada slot terpilih',
-        slotLarang: 'Tidak boleh pada slot terpilih'
-    };
+        serentak: { kat: 'Waktu & serentak', nama: 'Mesti serentak (waktu sama)', hint: 'Semua agihan yang dipilih diletak pada waktu yang sama. Masa & pecahan mesti sama. Cth: dua kumpulan elektif.' },
+        bezaWaktu: { kat: 'Waktu & serentak', nama: 'Tidak boleh pada waktu yang sama', ab: 'pilihan', hint: 'Sesi yang dipilih tidak boleh berlangsung serentak. Jika Kumpulan B diisi, hanya A dengan B yang dihalang.' },
+        maksSerentak: { kat: 'Waktu & serentak', nama: 'Maks sesi pada satu waktu', nilai: 'Maks serentak', hint: 'Bilangan sesi yang berlangsung serentak tidak melebihi nilai ini. Cth: 1 makmal → maks 1 kelas Sains pada satu masa.' },
 
-    function namaHub(h) { return h.nama || JENIS_HUB[h.jenis] || h.jenis; }
+        bezaHari: { kat: 'Hari', nama: 'Tidak boleh pada hari yang sama', ab: 'pilihan', hint: 'Agihan berbeza yang dipilih tidak jatuh pada hari yang sama. Cth: Matematik & Matematik Tambahan bagi satu kelas.' },
+        maksSehari: { kat: 'Hari', nama: 'Maks waktu sehari', nilai: 'Maks waktu', hint: 'Jumlah waktu bagi sesi yang dipilih dalam sehari tidak melebihi nilai ini.' },
+        minSehari: { kat: 'Hari', nama: 'Min waktu sehari', nilai: 'Min waktu', lembut: true, hint: 'Setiap hari sekurang-kurangnya sekian waktu. Cth: guru mengajar sekurang-kurangnya 2 waktu setiap hari.' },
+        minSehariAda: { kat: 'Hari', nama: 'Min waktu sehari (hari kosong dibenarkan)', nilai: 'Min waktu', lembut: true, hint: 'Jika ada sesi pada sesuatu hari, jumlahnya sekurang-kurangnya sekian waktu.' },
+        maksSesiSehari: { kat: 'Hari', nama: 'Maks sesi sehari', nilai: 'Maks sesi', hint: 'Bilangan sesi (bukan waktu) yang dipilih dalam sehari tidak melebihi nilai ini.' },
+        maksHari: { kat: 'Hari', nama: 'Maks hari seminggu', nilai: 'Maks hari', hint: 'Sesi yang dipilih hanya pada sekian hari seminggu. Cth: guru separuh masa 3 hari sahaja.' },
+        minHari: { kat: 'Hari', nama: 'Min hari seminggu', nilai: 'Min hari', lembut: true, hint: 'Sesi yang dipilih tersebar sekurang-kurangnya pada sekian hari.' },
+        maksHariBerturut: { kat: 'Hari', nama: 'Maks hari berturut-turut', nilai: 'Maks hari', lembut: true, hint: 'Sesi yang dipilih tidak berlaku lebih daripada sekian hari berturut-turut.' },
+        maksHariLapang: { kat: 'Hari', nama: 'Maks hari lapang di antara sesi', nilai: 'Maks hari lapang', lembut: true, hint: 'Jarak hari tanpa sesi di antara dua hari bersesi tidak melebihi nilai ini. Cth: BM tidak lebih 1 hari tanpa kelas.' },
+
+        maksBerturut: { kat: 'Berturut & lompong', nama: 'Maks waktu berturut-turut', nilai: 'Maks waktu', ab: 'pilihan', hint: 'Sesi yang dipilih (A dan B jika diisi) tidak berturut-turut melebihi sekian waktu.' },
+        maksJulat: { kat: 'Berturut & lompong', nama: 'Maks waktu + lompong sehari', nilai: 'Maks julat', hint: 'Dari sesi pertama hingga terakhir dalam sehari tidak melebihi sekian waktu.' },
+        minJulat: { kat: 'Berturut & lompong', nama: 'Min waktu + lompong sehari (hari kosong dibenarkan)', nilai: 'Min julat', lembut: true, hint: 'Jika ada sesi pada sesuatu hari, julat dari sesi pertama hingga terakhir sekurang-kurangnya sekian waktu.' },
+        maksLompong: { kat: 'Berturut & lompong', nama: 'Maks lompong sehari', nilai: 'Maks lompong', lembut: true, hint: 'Waktu kosong di antara sesi dalam sehari tidak melebihi nilai ini. Cth: guru tiada lebih 2 waktu terbiar.' },
+        maksLompongMinggu: { kat: 'Berturut & lompong', nama: 'Maks lompong seminggu', nilai: 'Maks lompong', lembut: true, hint: 'Jumlah waktu kosong di antara sesi sepanjang minggu tidak melebihi nilai ini.' },
+        maksLompongAwal: { kat: 'Berturut & lompong', nama: 'Maks lompong sehari (waktu kosong di awal dikira)', nilai: 'Maks lompong', lembut: true, hint: 'Seperti maks lompong sehari, tetapi waktu kosong sebelum sesi pertama turut dikira.' },
+        maksLompongAkhir: { kat: 'Berturut & lompong', nama: 'Maks lompong sehari (waktu kosong di akhir dikira)', nilai: 'Maks lompong', lembut: true, hint: 'Seperti maks lompong sehari, tetapi waktu kosong selepas sesi terakhir turut dikira.' },
+
+        slotHanya: { kat: 'Slot', nama: 'Hanya pada slot terpilih', slot: 'Slot dibenarkan', hint: 'Sesi yang dipilih hanya boleh diletak dalam slot yang ditanda. Cth: PJ waktu pagi sahaja.' },
+        slotLarang: { kat: 'Slot', nama: 'Tidak boleh pada slot terpilih', slot: 'Slot dilarang', hint: 'Sesi yang dipilih tidak boleh menyentuh slot yang ditanda.' },
+        tidakMula: { kat: 'Slot', nama: 'Tidak boleh bermula pada slot terpilih', slot: 'Slot dilarang bermula', hint: 'Sesi tidak boleh bermula pada slot yang ditanda. Cth: sesi 2 waktu tidak bermula sebelum rehat.' },
+        tidakTamat: { kat: 'Slot', nama: 'Tidak boleh berakhir pada slot terpilih', slot: 'Slot dilarang berakhir', hint: 'Sesi tidak boleh berakhir pada slot yang ditanda.' },
+        hariBerikut: { kat: 'Slot', nama: 'Tiada sesi di slot A hari ini DAN slot B hari esok', slot: 'Slot A (hari ini)', slotB: 'Slot B (hari esok)', hint: 'Cth: guru yang mengajar waktu terakhir tidak mengajar waktu pertama keesokan harinya.' },
+
+        tidakIkut: { kat: 'Susunan A & B', nama: 'A tidak boleh diikuti terus oleh B', ab: 'wajib', hint: 'Sesi B tidak boleh bermula sejurus selepas sesi A tamat (hari yang sama). Cth: PJ tidak diikuti terus oleh Sains.' },
+        tidakBersebelahan: { kat: 'Susunan A & B', nama: 'Tidak boleh bersebelahan', ab: 'pilihan', hint: 'Sesi yang dipilih tidak boleh bersambung (sebelum atau selepas). Jika Kumpulan B diisi, hanya A dengan B.' },
+        aSebelumBHari: { kat: 'Susunan A & B', nama: 'A mesti sebelum B dalam sehari', ab: 'wajib', hint: 'Jika A dan B pada hari yang sama, semua sesi A mesti lebih awal daripada sesi B.' },
+        aSebelumBMinggu: { kat: 'Susunan A & B', nama: 'A mesti sebelum B dalam seminggu', ab: 'wajib', hint: 'Semua sesi A berlaku lebih awal dalam minggu berbanding semua sesi B.' },
+        hariASebelumB: { kat: 'Susunan A & B', nama: 'Hari A mesti sebelum hari B', ab: 'wajib', hint: 'Hari bagi sesi A mesti lebih awal daripada hari bagi sesi B (tidak boleh hari yang sama).' },
+        aBersebelahanB: { kat: 'Susunan A & B', nama: 'A mesti bersebelahan B (jika sehari)', ab: 'wajib', hint: 'Jika A dan B pada hari yang sama, sesi A mesti bersambung terus dengan sesi B.' }
+    };
+    const JENIS_DOMAIN = new Set(['slotHanya', 'slotLarang', 'tidakMula', 'tidakTamat']);
+
+    function namaHub(h) { return h.nama || (JENIS_HUB[h.jenis] && JENIS_HUB[h.jenis].nama) || h.jenis; }
+
+    function pilihKosong(p) { return !p || (!(p.subjek || []).length && !(p.guru || []).length && !(p.kelas || []).length); }
 
     // Agihan sepadan jika memenuhi SEMUA penapis yang diisi (penapis kosong = semua)
-    function padanHub(h, r) {
-        const p = h.pilih || {};
+    function padanPilih(p, r) {
+        p = p || {};
         return (!(p.subjek || []).length || p.subjek.includes(r.subjek)) &&
             (!(p.guru || []).length || p.guru.includes(r.guru)) &&
             (!(p.kelas || []).length || r.kelas.some(k => p.kelas.includes(k)));
+    }
+
+    function padanHub(h, r, sisi) { return padanPilih(sisi === 'B' ? h.pilihB : h.pilih, r); }
+
+    // Ukuran pelanggaran kekangan lembut daripada grid H×W (1 = ada sesi)
+    function ukurLembut(jenis, n, grid, H, W) {
+        let jumlah = 0, lompongMinggu = 0, hariGuna = [];
+        for (let d = 0; d < H; d++) {
+            let bil = 0, awal = -1, akhir = -1;
+            for (let p = 0; p < W; p++) if (grid[d * W + p]) { bil++; if (awal < 0) awal = p; akhir = p; }
+            hariGuna.push(bil > 0);
+            const julat = bil ? akhir - awal + 1 : 0, lompong = julat - bil;
+            lompongMinggu += lompong;
+            if (jenis === 'minSehari') jumlah += Math.max(0, n - bil);
+            else if (jenis === 'minSehariAda' && bil) jumlah += Math.max(0, n - bil);
+            else if (jenis === 'minJulat' && bil) jumlah += Math.max(0, n - julat);
+            else if (jenis === 'maksLompong') jumlah += Math.max(0, lompong - n);
+            else if (jenis === 'maksLompongAwal' && bil) jumlah += Math.max(0, lompong + awal - n);
+            else if (jenis === 'maksLompongAkhir' && bil) jumlah += Math.max(0, lompong + (W - 1 - akhir) - n);
+        }
+        if (jenis === 'maksLompongMinggu') jumlah = Math.max(0, lompongMinggu - n);
+        if (jenis === 'minHari') jumlah = Math.max(0, n - hariGuna.filter(Boolean).length);
+        if (jenis === 'maksHariBerturut') {
+            let run = 0, mx = 0;
+            hariGuna.forEach(g => { run = g ? run + 1 : 0; mx = Math.max(mx, run); });
+            jumlah = Math.max(0, mx - n);
+        }
+        if (jenis === 'maksHariLapang') {
+            let terakhir = -1, mx = 0;
+            hariGuna.forEach((g, d) => { if (g) { if (terakhir >= 0) mx = Math.max(mx, d - terakhir - 1); terakhir = d; } });
+            jumlah = Math.max(0, mx - n);
+        }
+        return jumlah;
     }
 
     function hurufLabel(l) {
@@ -7164,8 +7259,14 @@ window.VJSolver = (function () {
         // Hubungan "mesti serentak": satukan semua agihan yang dipilih
         const hub = (inp.hubungan || []).filter(h => h.aktif !== false);
         hub.forEach(h => {
+            const meta = JENIS_HUB[h.jenis] || {};
             const idx = rows.map((r, i) => padanHub(h, r) ? i : -1).filter(i => i >= 0);
             if (!idx.length) { isu.push({ jenis: 'amaran', teks: `Hubungan "${namaHub(h)}" tidak sepadan dengan mana-mana agihan.` }); return; }
+            if (meta.ab === 'wajib' && (pilihKosong(h.pilihB) || !rows.some(r => padanHub(h, r, 'B')))) {
+                isu.push({ jenis: 'amaran', teks: `Hubungan "${namaHub(h)}" memerlukan Kumpulan B yang sepadan dengan sekurang-kurangnya satu agihan. Hubungan diabaikan.` });
+                h._abai = true;
+                return;
+            }
             if (h.jenis !== 'serentak') return;
             if (idx.some(i => rows[i].parts.join(',') !== rows[idx[0]].parts.join(','))) {
                 isu.push({ jenis: 'ralat', teks: `Hubungan "${namaHub(h)}": agihan yang dipilih mempunyai masa/pecahan berbeza, jadi tidak boleh serentak. Hubungan diabaikan.` });
@@ -7230,10 +7331,20 @@ window.VJSolver = (function () {
         });
 
         // Hubungan lain: senarai unit yang terlibat
-        const hubUnit = hub.filter(h => h.jenis !== 'serentak').map(h => ({
-            h, slot: new Set(h.slot || []),
-            units: units.filter(u => u.ahliRows.some(r => padanHub(h, r))).map(u => u.id)
-        }));
+        const hubUnit = hub.filter(h => h.jenis !== 'serentak' && !h._abai && JENIS_HUB[h.jenis]).map(h => {
+            const meta = JENIS_HUB[h.jenis];
+            const adaB = !!meta.ab && !pilihKosong(h.pilihB);
+            const inA = new Uint8Array(units.length), inB = new Uint8Array(units.length);
+            units.forEach(u => {
+                if (u.ahliRows.some(r => padanHub(h, r))) inA[u.id] = 1;
+                if (adaB && u.ahliRows.some(r => padanHub(h, r, 'B'))) inB[u.id] = 1;
+            });
+            return {
+                h, meta, adaB, inA, inB,
+                slot: new Set(h.slot || []), slotB: new Set(h.slotB || []),
+                units: units.filter(u => inA[u.id] || inB[u.id]).map(u => u.id)
+            };
+        });
 
         return { H, W, N, kelas, guru, units, blokK, blokG, isu, bilAuto, rows, hubUnit };
     }
@@ -7257,8 +7368,10 @@ window.VJSolver = (function () {
         // Hubungan: unit → indeks hubungan; kedudukan unit setiap hubungan mengikut slot & hari
         const relU = units.map(() => []);
         B.hubUnit.forEach((R, ri) => R.units.forEach(u => relU[u].push(ri)));
-        const occR = B.hubUnit.map(R => R.h.jenis === 'maksSerentak' ? Array.from({ length: N }, () => []) : null);
+        const occR = B.hubUnit.map(() => Array.from({ length: N }, () => []));
         const dayR = B.hubUnit.map(() => Array.from({ length: H }, () => []));
+        const relLembut = B.hubUnit.map(R => !!R.meta.lembut);
+        const relKeras = B.hubUnit.map(R => !R.meta.lembut && !JENIS_DOMAIN.has(R.h.jenis));
 
         function letak(u, s) {
             const T = units[u], d = Math.floor(s / W);
@@ -7270,7 +7383,7 @@ window.VJSolver = (function () {
             T.kelas.forEach(k => { dayLoadK[k][d] += T.len; });
             relU[u].forEach(ri => {
                 dayR[ri][d].push(u);
-                if (occR[ri]) for (let i = 0; i < T.len; i++) occR[ri][s + i].push(u);
+                for (let i = 0; i < T.len; i++) occR[ri][s + i].push(u);
             });
             pos[u] = s;
         }
@@ -7286,7 +7399,7 @@ window.VJSolver = (function () {
             const buang = arr => arr.splice(arr.indexOf(u), 1);
             relU[u].forEach(ri => {
                 buang(dayR[ri][d]);
-                if (occR[ri]) for (let i = 0; i < T.len; i++) buang(occR[ri][s + i]);
+                for (let i = 0; i < T.len; i++) buang(occR[ri][s + i]);
             });
             pos[u] = -1;
         }
@@ -7301,8 +7414,11 @@ window.VJSolver = (function () {
                     for (let i = 0; i < T.len && ok; i++) {
                         if (T.kelas.some(k => blokK[k][s + i]) || T.guru.some(g => blokG[g][s + i])) ok = false;
                         for (const ri of relU[u]) {
-                            const R = B.hubUnit[ri], ada = R.slot.has(`${d}-${p + i}`);
-                            if ((R.h.jenis === 'slotHanya' && !ada) || (R.h.jenis === 'slotLarang' && ada)) ok = false;
+                            const R = B.hubUnit[ri], J = R.h.jenis;
+                            if (!R.inA[u] || !JENIS_DOMAIN.has(J)) continue;
+                            const ada = R.slot.has(`${d}-${p + i}`);
+                            if ((J === 'slotHanya' && !ada) || (J === 'slotLarang' && ada) ||
+                                (J === 'tidakMula' && i === 0 && ada) || (J === 'tidakTamat' && i === T.len - 1 && ada)) ok = false;
                         }
                     }
                     if (ok) out.push(s);
@@ -7343,27 +7459,123 @@ window.VJSolver = (function () {
                     }
                 }
             }
-            for (const ri of relU[u]) {
-                const R = B.hubUnit[ri], n = R.h.nilai;
-                if (R.h.jenis === 'maksSerentak') {
-                    for (let i = 0; i < T.len; i++) {
-                        const ada = occR[ri][s + i].filter(x => x !== u && !set.has(x));
-                        if (ada.length >= Math.max(1, n)) ada.forEach(x => set.add(x));
-                    }
-                } else if (R.h.jenis === 'bezaHari') {
-                    dayR[ri][d].forEach(x => { if (x !== u && units[x].kump !== T.kump) set.add(x); });
-                } else if (R.h.jenis === 'maksSehari' && n > 0) {
-                    const ada = dayR[ri][d].filter(x => x !== u && !set.has(x));
-                    if (ada.reduce((a, x) => a + units[x].len, 0) + T.len > n) ada.forEach(x => set.add(x));
-                }
-            }
+            for (const ri of relU[u]) if (relKeras[ri]) konflikHubungan(ri, u, s, set);
             for (const x of set) if (kunci[x]) return null;
             return set;
         }
 
+        // Hubungan keras: tambah unit yang mesti diusir jika u diletak di s
+        function konflikHubungan(ri, u, s, set) {
+            const R = B.hubUnit[ri], J = R.h.jenis, n = R.h.nilai, T = units[u], d = Math.floor(s / W);
+            const akhirU = s + T.len - 1;
+            const aU = R.inA[u] === 1, bU = R.inB[u] === 1;
+            const hidup = x => x !== u && !set.has(x);
+            // Pihak lawan: tanpa Kumpulan B = agihan lain dalam pilihan; dengan B = A lawan B
+            const lawan = x => R.adaB ? ((aU && R.inB[x]) || (bU && R.inA[x])) : units[x].kump !== T.kump;
+            const hariIni = () => dayR[ri][d].filter(hidup);
+            const tamat = x => pos[x] + units[x].len - 1;
+            const bersebelahan = (x, a, b) => Math.floor(pos[x] / W) === Math.floor(a / W) && (tamat(x) === a - 1 || pos[x] === b + 1);
+
+            if (J === 'bezaWaktu') {
+                for (let i = 0; i < T.len; i++) occR[ri][s + i].forEach(x => { if (hidup(x) && lawan(x)) set.add(x); });
+            } else if (J === 'maksSerentak') {
+                for (let i = 0; i < T.len; i++) {
+                    const ada = occR[ri][s + i].filter(hidup);
+                    if (ada.length >= Math.max(1, n)) ada.forEach(x => set.add(x));
+                }
+            } else if (J === 'bezaHari') {
+                dayR[ri][d].forEach(x => { if (hidup(x) && lawan(x)) set.add(x); });
+            } else if (J === 'maksSehari' && n > 0) {
+                const ada = hariIni();
+                if (ada.reduce((a, x) => a + units[x].len, 0) + T.len > n) ada.forEach(x => set.add(x));
+            } else if (J === 'maksSesiSehari' && n > 0) {
+                const ada = hariIni();
+                if (ada.length + 1 > n) ada.forEach(x => set.add(x));
+            } else if (J === 'maksHari' && n > 0) {
+                const guna = [];
+                for (let dd = 0; dd < H; dd++) if (dd !== d && dayR[ri][dd].some(hidup)) guna.push(dd);
+                if (guna.length + 1 > n) {
+                    // Kosongkan hari yang paling sedikit sesinya
+                    guna.sort((a, b) => dayR[ri][a].filter(hidup).reduce((t, x) => t + units[x].len, 0) - dayR[ri][b].filter(hidup).reduce((t, x) => t + units[x].len, 0));
+                    guna.slice(0, guna.length + 1 - n).forEach(dd => dayR[ri][dd].filter(hidup).forEach(x => set.add(x)));
+                }
+            } else if (J === 'maksBerturut' && n > 0) {
+                const ada = p => { const x = d * W + p; return (x >= s && x <= akhirU) || occR[ri][x].some(hidup); };
+                let a = s - d * W, b = akhirU - d * W;
+                while (a > 0 && ada(a - 1)) a--;
+                while (b < W - 1 && ada(b + 1)) b++;
+                if (b - a + 1 > n) for (let p = a; p <= b; p++) occR[ri][d * W + p].forEach(x => { if (hidup(x)) set.add(x); });
+            } else if (J === 'maksJulat' && n > 0) {
+                // Pilih tingkap n waktu yang mengandungi u dan mengusir paling sedikit
+                const ada = hariIni();
+                let terbaik = null;
+                for (let lo = Math.max(d * W, akhirU - n + 1); lo <= s && lo + n - 1 < (d + 1) * W; lo++) {
+                    const luar = ada.filter(x => pos[x] < lo || tamat(x) > lo + n - 1);
+                    if (!terbaik || luar.length < terbaik.length) terbaik = luar;
+                }
+                (terbaik || ada).forEach(x => set.add(x));
+            } else if (J === 'hariBerikut') {
+                const sentuh = (x, slotSet, dd) => { for (let i = 0; i < units[x].len; i++) if (slotSet.has(`${dd}-${pos[x] % W + i}`)) return true; return false; };
+                let kenaA = false, kenaB = false;
+                for (let i = 0; i < T.len; i++) { const k = `${d}-${s % W + i}`; if (R.slot.has(k)) kenaA = true; if (R.slotB.has(k)) kenaB = true; }
+                if (kenaA && d + 1 < H) dayR[ri][d + 1].forEach(x => { if (hidup(x) && sentuh(x, R.slotB, d + 1)) set.add(x); });
+                if (kenaB && d > 0) dayR[ri][d - 1].forEach(x => { if (hidup(x) && sentuh(x, R.slot, d - 1)) set.add(x); });
+            } else if (J === 'tidakIkut') {
+                const lepas = akhirU + 1;
+                if (aU && lepas < (d + 1) * W) occR[ri][lepas].forEach(x => { if (hidup(x) && R.inB[x] && pos[x] === lepas) set.add(x); });
+                if (bU && s % W > 0) occR[ri][s - 1].forEach(x => { if (hidup(x) && R.inA[x] && tamat(x) === s - 1) set.add(x); });
+            } else if (J === 'tidakBersebelahan') {
+                dayR[ri][d].forEach(x => { if (hidup(x) && lawan(x) && bersebelahan(x, s, akhirU)) set.add(x); });
+            } else if (J === 'aSebelumBHari') {
+                dayR[ri][d].forEach(x => {
+                    if (!hidup(x)) return;
+                    if (aU && R.inB[x] && pos[x] <= akhirU) set.add(x);
+                    if (bU && R.inA[x] && tamat(x) >= s) set.add(x);
+                });
+            } else if (J === 'aSebelumBMinggu') {
+                R.units.forEach(x => {
+                    if (pos[x] < 0 || !hidup(x)) return;
+                    if (aU && R.inB[x] && pos[x] <= akhirU) set.add(x);
+                    if (bU && R.inA[x] && tamat(x) >= s) set.add(x);
+                });
+            } else if (J === 'hariASebelumB') {
+                R.units.forEach(x => {
+                    if (pos[x] < 0 || !hidup(x)) return;
+                    const dx = Math.floor(pos[x] / W);
+                    if (aU && R.inB[x] && dx <= d) set.add(x);
+                    if (bU && R.inA[x] && dx >= d) set.add(x);
+                });
+            } else if (J === 'aBersebelahanB') {
+                const semak = sisi => {
+                    const lain = dayR[ri][d].filter(x => hidup(x) && sisi[x]);
+                    if (lain.length && !lain.some(x => bersebelahan(x, s, akhirU))) lain.forEach(x => set.add(x));
+                };
+                if (aU) semak(R.inB);
+                if (bU) semak(R.inA);
+            }
+        }
+
+        // Grid sesi bagi sesuatu hubungan; jika u >= 0, u dianggap diletak di s & unit dalam `set` dianggap diusir
+        function gridHubungan(ri, u, s, set) {
+            const grid = new Uint8Array(N);
+            for (let x = 0; x < N; x++) if (occR[ri][x].some(y => y !== u && !(set && set.has(y)))) grid[x] = 1;
+            if (u >= 0) for (let i = 0; i < units[u].len; i++) grid[s + i] = 1;
+            return grid;
+        }
+
+        function kosHubunganLembut(u, s, set) {
+            let c = 0;
+            for (const ri of relU[u]) {
+                if (!relLembut[ri]) continue;
+                const R = B.hubUnit[ri];
+                c += 40 * ukurLembut(R.h.jenis, R.h.nilai, gridHubungan(ri, u, s, set), H, W);
+            }
+            return c;
+        }
+
         function kosLembut(u, s) {
             const T = units[u], d = Math.floor(s / W);
-            let c = 0;
+            let c = kosHubunganLembut(u, s, null);
             T.pairs.forEach(([k, sj]) => { c += 10 * ((daySub[k + '|' + sj + '|' + d] || []).length); });
             T.kelas.forEach(k => { c += 0.3 * dayLoadK[k][d]; });
             return c + Math.random();
@@ -7408,7 +7620,7 @@ window.VJSolver = (function () {
                         let kos;
                         if (set.size === 0) kos = kosLembut(u, s);
                         else {
-                            kos = 1000 + Math.random() * 300;
+                            kos = 1000 + Math.random() * 300 + kosHubunganLembut(u, s, set);
                             for (const x of set) kos += 200 * units[x].len + (iter - placedAt[x] < 25 ? 2000 : 0);
                         }
                         if (kos < bestKos) { bestKos = kos; best = s; bestSet = set; }
@@ -7437,11 +7649,19 @@ window.VJSolver = (function () {
                 if (s < 0) { tidakMuat.push({ desc: T.desc, len: T.len, sebab: sebabMati[u] || 'Tiada ruang tanpa bertembung dengan sesi lain / peraturan.' }); return; }
                 T.ahli.forEach(id => sesi.push({ uuid: id, ke: T.ke, hari: Math.floor(s / W), waktu: s % W, panjang: T.len, kunci: !!kunci[u] }));
             });
-            return { sesi, tidakMuat, isu: B.isu, stat: { unit: U, diletak: U - tidakMuat.length, iter, ms: Math.round(ms), bilAuto: B.bilAuto } };
+            const isu = B.isu.slice();
+            B.hubUnit.forEach(R => {
+                if (!R.meta.lembut) return;
+                const grid = new Uint8Array(N);
+                R.units.forEach(u => { if (akhir[u] >= 0) for (let i = 0; i < units[u].len; i++) grid[akhir[u] + i] = 1; });
+                const langgar = ukurLembut(R.h.jenis, R.h.nilai, grid, H, W);
+                if (langgar > 0) isu.push({ jenis: 'amaran', teks: `Hubungan lembut "${namaHub(R.h)}" tidak dipenuhi sepenuhnya (kekurangan/lebihan ${langgar}).` });
+            });
+            return { sesi, tidakMuat, isu, stat: { unit: U, diletak: U - tidakMuat.length, iter, ms: Math.round(ms), bilAuto: B.bilAuto } };
         }
     }
 
-    return { bina, susun, parsePecahan, pecahAuto, hurufLabel, JENIS_HUB, namaHub, padanHub };
+    return { bina, susun, parsePecahan, pecahAuto, hurufLabel, JENIS_HUB, namaHub, padanHub, pilihKosong, ukurLembut };
 })();
     </script>
     <script>
@@ -7658,15 +7878,7 @@ window.VJSolver = (function () {
         });
 
         // ---- Hubungan antara sesi ----
-        const HUB_HINT = {
-            serentak: 'Semua agihan yang dipilih diletak pada waktu yang sama (masa & pecahan mesti sama). Cth: dua kumpulan elektif.',
-            maksSerentak: 'Agihan yang dipilih tidak boleh berlangsung serentak melebihi bilangan ini. Cth: 1 makmal → maks 1 kelas Sains pada satu masa.',
-            bezaHari: 'Agihan yang dipilih tidak boleh jatuh pada hari yang sama. Cth: Matematik & Matematik Tambahan bagi kelas yang sama.',
-            maksSehari: 'Jumlah waktu bagi agihan yang dipilih dalam sehari tidak boleh melebihi nilai ini.',
-            slotHanya: 'Agihan yang dipilih hanya boleh diletak dalam slot yang ditanda. Cth: PJ waktu pagi sahaja.',
-            slotLarang: 'Agihan yang dipilih tidak boleh diletak dalam slot yang ditanda. Cth: tiada subjek teras selepas waktu ke-9.'
-        };
-        let hubSlotDraf = new Set();
+        let hubSlotDraf = new Set(), hubSlotDrafB = new Set();
 
         function hubTogglePanel() {
             const box = document.getElementById('hubPanel');
@@ -7674,11 +7886,17 @@ window.VJSolver = (function () {
                 const inp = VJStore.getSolverInput();
                 const opt = (rows, label) => rows.slice().sort((a, b) => String(a[1]).localeCompare(String(b[1]), 'ms', { numeric: true }))
                     .map(r => `<option value="${escapeHtml(r[0])}">${escapeHtml(label(r))}</option>`).join('');
-                document.getElementById('hubJenis').innerHTML = Object.entries(VJSolver.JENIS_HUB).map(([k, v]) => `<option value="${k}">${escapeHtml(v)}</option>`).join('');
-                document.getElementById('hubSubjek').innerHTML = opt(inp.subjek, r => r[2] ? `${r[1]} (${r[2]})` : r[1]);
-                document.getElementById('hubGuru').innerHTML = opt(inp.guru, r => r[1]);
-                document.getElementById('hubKelas').innerHTML = opt(inp.kelas, r => r[1]);
+                const kat = {};
+                Object.entries(VJSolver.JENIS_HUB).forEach(([k, m]) => { (kat[m.kat] = kat[m.kat] || []).push([k, m]); });
+                document.getElementById('hubJenis').innerHTML = Object.entries(kat).map(([nama, list]) =>
+                    `<optgroup label="${escapeHtml(nama)}">${list.map(([k, m]) => `<option value="${k}">${escapeHtml(m.nama)}${m.lembut ? ' (lembut)' : ''}</option>`).join('')}</optgroup>`).join('');
+                ['', 'B'].forEach(sfx => {
+                    document.getElementById('hubSubjek' + sfx).innerHTML = opt(inp.subjek, r => r[2] ? `${r[1]} (${r[2]})` : r[1]);
+                    document.getElementById('hubGuru' + sfx).innerHTML = opt(inp.guru, r => r[1]);
+                    document.getElementById('hubKelas' + sfx).innerHTML = opt(inp.kelas, r => r[1]);
+                });
                 hubSlotDraf = new Set();
+                hubSlotDrafB = new Set();
                 hubFormUpdate();
                 hubRenderList();
             }
@@ -7693,44 +7911,59 @@ window.VJSolver = (function () {
                 jenis: document.getElementById('hubJenis').value,
                 nama: document.getElementById('hubNama').value.trim(),
                 pilih: { subjek: hubDipilih('hubSubjek'), guru: hubDipilih('hubGuru'), kelas: hubDipilih('hubKelas') },
+                pilihB: { subjek: hubDipilih('hubSubjekB'), guru: hubDipilih('hubGuruB'), kelas: hubDipilih('hubKelasB') },
                 nilai: parseInt(document.getElementById('hubNilai').value) || 0,
-                slot: Array.from(hubSlotDraf)
+                slot: Array.from(hubSlotDraf),
+                slotB: Array.from(hubSlotDrafB)
             };
         }
 
-        function hubAgihanSepadan(h, inp) {
+        function hubAgihanSepadan(h, inp, sisi) {
             return inp.transaksi.filter(t => VJSolver.padanHub(h, {
                 subjek: String(t[5]), guru: String(t[1] || ''), kelas: String(t[3]).split(',').map(x => x.trim())
-            }));
+            }, sisi));
+        }
+
+        function hubTeksPadan(h, inp, sisi) {
+            if (VJSolver.pilihKosong(sisi === 'B' ? h.pilihB : h.pilih)) return '<span class="text-amber-700 font-semibold">Pilih sekurang-kurangnya satu subjek, guru atau kelas.</span>';
+            const padan = hubAgihanSepadan(h, inp, sisi);
+            return `<strong>${padan.length}</strong> agihan sepadan${padan.length ? ': ' + escapeHtml(padan.slice(0, 5).map(t => `${t[6]} (${t[4]}, ${t[2]})`).join('; ')) + (padan.length > 5 ? '…' : '') : ''}`;
         }
 
         function hubFormUpdate() {
             const h = hubDraf();
+            const m = VJSolver.JENIS_HUB[h.jenis] || {};
             const inp = VJStore.getSolverInput();
-            const pakaiNilai = h.jenis === 'maksSerentak' || h.jenis === 'maksSehari';
-            const pakaiSlot = h.jenis === 'slotHanya' || h.jenis === 'slotLarang';
-            document.getElementById('hubNilaiBox').classList.toggle('hidden', !pakaiNilai);
-            document.getElementById('hubNilaiLabel').innerText = h.jenis === 'maksSerentak' ? 'Maks serentak' : 'Maks waktu sehari';
-            document.getElementById('hubJenisHint').innerText = HUB_HINT[h.jenis] || '';
-            document.getElementById('hubSlotBox').classList.toggle('hidden', !pakaiSlot);
-            if (pakaiSlot) hubRenderSlotGrid(inp.slot);
-            const padan = hubAgihanSepadan(h, inp);
-            const tiadaPenapis = !h.pilih.subjek.length && !h.pilih.guru.length && !h.pilih.kelas.length;
-            document.getElementById('hubPadan').innerHTML = tiadaPenapis
-                ? '<span class="text-amber-700 font-semibold">Pilih sekurang-kurangnya satu subjek, guru atau kelas.</span>'
-                : `<strong>${padan.length}</strong> agihan sepadan${padan.length ? ': ' + escapeHtml(padan.slice(0, 6).map(t => `${t[6]} (${t[4]}, ${t[2]})`).join('; ')) + (padan.length > 6 ? '…' : '') : ''}`;
+            document.getElementById('hubNilaiBox').classList.toggle('hidden', !m.nilai);
+            document.getElementById('hubNilaiLabel').innerText = m.nilai || '';
+            document.getElementById('hubJenisHint').innerHTML = escapeHtml(m.hint || '') + (m.lembut ? ' <span class="font-bold text-amber-700">Kekangan lembut: diusahakan, tidak dijamin.</span>' : '');
+            document.getElementById('hubTajukA').innerText = m.ab ? 'Kumpulan A' : 'Pilih agihan';
+            document.getElementById('hubBoxB').classList.toggle('hidden', !m.ab);
+            document.getElementById('hubTajukB').innerText = m.ab === 'wajib' ? 'Kumpulan B' : 'Kumpulan B (pilihan — kosongkan untuk guna Kumpulan A sahaja)';
+            document.getElementById('hubSlotBox').classList.toggle('hidden', !m.slot);
+            document.getElementById('hubSlotBoxB').classList.toggle('hidden', !m.slotB);
+            document.getElementById('hubSlotLabel').innerText = (m.slot || '') + ' — klik petak / nama hari / nombor waktu';
+            document.getElementById('hubSlotLabelB').innerText = (m.slotB || '') + ' — klik petak / nama hari / nombor waktu';
+            if (m.slot) hubRenderSlotGrid('A', inp.slot);
+            if (m.slotB) hubRenderSlotGrid('B', inp.slot);
+            document.getElementById('hubPadanA').innerHTML = hubTeksPadan(h, inp, 'A');
+            document.getElementById('hubPadanB').innerHTML = m.ab ? (m.ab === 'pilihan' && VJSolver.pilihKosong(h.pilihB) ? '<span class="text-slate-400">Tidak diisi — kekangan dikenakan sesama Kumpulan A.</span>' : hubTeksPadan(h, inp, 'B')) : '';
+            document.getElementById('hubPadan').innerText = '';
         }
 
-        function hubRenderSlotGrid(cfg) {
+        function hubRenderSlotGrid(sisi, cfg) {
+            const draf = sisi === 'B' ? hubSlotDrafB : hubSlotDraf;
             let html = '<tr><th></th>' + cfg.waktu.map((w, p) => `<th data-col="${p}" class="px-1 py-0.5 font-bold text-slate-500 cursor-pointer hover:text-brand-700">${p + 1}</th>`).join('') + '</tr>';
             cfg.hari.forEach((h, d) => {
                 html += `<tr><th data-row="${d}" class="pr-2 text-left font-bold text-slate-600 cursor-pointer hover:text-brand-700">${escapeHtml(h)}</th>` +
-                    cfg.waktu.map((w, p) => `<td data-slot="${d}-${p}" class="w-7 h-6 border border-slate-200 cursor-pointer ${hubSlotDraf.has(`${d}-${p}`) ? 'bg-brand-500' : 'bg-white hover:bg-brand-50'}"></td>`).join('') + '</tr>';
+                    cfg.waktu.map((w, p) => `<td data-slot="${d}-${p}" class="w-7 h-6 border border-slate-200 cursor-pointer ${draf.has(`${d}-${p}`) ? (sisi === 'B' ? 'bg-violet-500' : 'bg-brand-500') : 'bg-white hover:bg-brand-50'}"></td>`).join('') + '</tr>';
             });
-            document.getElementById('hubSlotGrid').innerHTML = html;
+            document.getElementById(sisi === 'B' ? 'hubSlotGridB' : 'hubSlotGrid').innerHTML = html;
         }
 
-        document.getElementById('hubSlotGrid').addEventListener('click', e => {
+        ['hubSlotGrid', 'hubSlotGridB'].forEach(id => document.getElementById(id).addEventListener('click', e => {
+            const sisi = e.currentTarget.dataset.draf;
+            const draf = sisi === 'B' ? hubSlotDrafB : hubSlotDraf;
             const cfg = VJStore.getSlot();
             const cell = e.target.closest('[data-slot]'), row = e.target.closest('[data-row]'), col = e.target.closest('[data-col]');
             let keys = [];
@@ -7738,19 +7971,27 @@ window.VJSolver = (function () {
             else if (row) keys = cfg.waktu.map((_, p) => `${row.dataset.row}-${p}`);
             else if (col) keys = cfg.hari.map((_, d) => `${d}-${col.dataset.col}`);
             if (!keys.length) return;
-            const on = !keys.every(k => hubSlotDraf.has(k));
-            keys.forEach(k => { if (on) hubSlotDraf.add(k); else hubSlotDraf.delete(k); });
-            hubRenderSlotGrid(cfg);
-        });
+            const on = !keys.every(k => draf.has(k));
+            keys.forEach(k => { if (on) draf.add(k); else draf.delete(k); });
+            hubRenderSlotGrid(sisi, cfg);
+        }));
 
         function hubRingkasan(h, inp) {
-            const nama = (rows, ids) => ids.map(id => { const r = rows.find(x => x[0] === id); return r ? (r[2] && rows === inp.subjek ? r[2] : r[1]) : id; }).join(', ');
+            const m = VJSolver.JENIS_HUB[h.jenis] || {};
+            const nama = (rows, ids, kod) => ids.map(id => { const r = rows.find(x => x[0] === id); return r ? (kod && r[2] ? r[2] : r[1]) : id; }).join(', ');
+            const ringkas = p => {
+                const b = [];
+                if (p.subjek.length) b.push('Subjek: ' + nama(inp.subjek, p.subjek, true));
+                if (p.guru.length) b.push('Guru: ' + nama(inp.guru, p.guru));
+                if (p.kelas.length) b.push('Kelas: ' + nama(inp.kelas, p.kelas));
+                return b.join(' · ');
+            };
             const bahagian = [];
-            if (h.pilih.subjek.length) bahagian.push('Subjek: ' + nama(inp.subjek, h.pilih.subjek));
-            if (h.pilih.guru.length) bahagian.push('Guru: ' + nama(inp.guru, h.pilih.guru));
-            if (h.pilih.kelas.length) bahagian.push('Kelas: ' + nama(inp.kelas, h.pilih.kelas));
-            if (h.jenis === 'maksSerentak' || h.jenis === 'maksSehari') bahagian.push('Nilai: ' + h.nilai);
-            if (h.jenis === 'slotHanya' || h.jenis === 'slotLarang') bahagian.push(h.slot.length + ' slot');
+            const adaB = m.ab && !VJSolver.pilihKosong(h.pilihB);
+            bahagian.push((adaB ? 'A — ' : '') + ringkas(h.pilih));
+            if (adaB) bahagian.push('B — ' + ringkas(h.pilihB));
+            if (m.nilai) bahagian.push(`${m.nilai}: ${h.nilai}`);
+            if (m.slot) bahagian.push(`${h.slot.length} slot${m.slotB ? ' A, ' + h.slotB.length + ' slot B' : ''}`);
             return bahagian.join(' · ');
         }
 
@@ -7764,7 +8005,7 @@ window.VJSolver = (function () {
                 <div class="flex items-start gap-2 bg-white border border-slate-200 rounded-lg px-2.5 py-2 ${h.aktif ? '' : 'opacity-50'}">
                     <input type="checkbox" ${h.aktif ? 'checked' : ''} onchange="hubAktif('${escapeHtml(h.id)}', this.checked)" class="mt-0.5 w-3.5 h-3.5 accent-brand-600" title="Aktif">
                     <div class="flex-1 min-w-0">
-                        <div class="text-xs font-bold text-slate-800">${escapeHtml(VJSolver.namaHub(h))}${h.nama ? ` <span class="font-medium text-slate-400">· ${escapeHtml(VJSolver.JENIS_HUB[h.jenis])}</span>` : ''}</div>
+                        <div class="text-xs font-bold text-slate-800">${escapeHtml(VJSolver.namaHub(h))}${h.nama ? ` <span class="font-medium text-slate-400">· ${escapeHtml((VJSolver.JENIS_HUB[h.jenis] || {}).nama || h.jenis)}</span>` : ''}${(VJSolver.JENIS_HUB[h.jenis] || {}).lembut ? ' <span class="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">LEMBUT</span>' : ''}</div>
                         <div class="text-[11px] text-slate-500">${escapeHtml(hubRingkasan(h, inp))} · <strong>${hubAgihanSepadan(h, inp).length}</strong> agihan</div>
                     </div>
                     <button onclick="hubPadam('${escapeHtml(h.id)}')" class="text-rose-500 hover:text-rose-700 p-1" title="Padam"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
@@ -7775,11 +8016,20 @@ window.VJSolver = (function () {
         function hubTambah() {
             if (!isEditMode) { ensureEditMode(() => hubTambah()); return; }
             const h = hubDraf();
-            if (!h.pilih.subjek.length && !h.pilih.guru.length && !h.pilih.kelas.length) { showToast('Pilih sekurang-kurangnya satu subjek, guru atau kelas.', 'warning'); return; }
-            if ((h.jenis === 'slotHanya' || h.jenis === 'slotLarang') && !h.slot.length) { showToast('Tanda sekurang-kurangnya satu slot.', 'warning'); return; }
-            if ((h.jenis === 'maksSerentak' || h.jenis === 'maksSehari') && h.nilai < 1) { showToast('Nilai mesti sekurang-kurangnya 1.', 'warning'); return; }
-            const n = hubAgihanSepadan(h, VJStore.getSolverInput()).length;
+            const m = VJSolver.JENIS_HUB[h.jenis] || {};
+            const inp = VJStore.getSolverInput();
+            if (VJSolver.pilihKosong(h.pilih)) { showToast('Pilih sekurang-kurangnya satu subjek, guru atau kelas.', 'warning'); return; }
+            if (m.ab === 'wajib' && VJSolver.pilihKosong(h.pilihB)) { showToast('Jenis ini memerlukan Kumpulan B.', 'warning'); return; }
+            if (m.slot && !h.slot.length) { showToast('Tanda sekurang-kurangnya satu slot.', 'warning'); return; }
+            if (m.slotB && !h.slotB.length) { showToast('Tanda sekurang-kurangnya satu slot B.', 'warning'); return; }
+            if (m.nilai && h.nilai < 1 && !/^min|Lompong/.test(h.jenis)) { showToast('Nilai mesti sekurang-kurangnya 1.', 'warning'); return; }
+            if (!m.ab || VJSolver.pilihKosong(h.pilihB)) h.pilihB = { subjek: [], guru: [], kelas: [] };
+            if (!m.slot) h.slot = [];
+            if (!m.slotB) h.slotB = [];
+            if (!m.nilai) h.nilai = 0;
+            const n = hubAgihanSepadan(h, inp).length;
             if (!n) { showToast('Tiada agihan sepadan dengan pilihan ini.', 'warning'); return; }
+            if (m.ab && !VJSolver.pilihKosong(h.pilihB) && !hubAgihanSepadan(h, inp, 'B').length) { showToast('Tiada agihan sepadan dengan Kumpulan B.', 'warning'); return; }
             VJStore.setHubungan(VJStore.getHubungan().concat([h]));
             document.getElementById('hubNama').value = '';
             showToast(`Hubungan ditambah (${n} agihan).`, 'success');

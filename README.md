@@ -32,9 +32,17 @@ Semua data berada dalam memori pelayar, dan disimpan/dibuka sebagai **fail ZIP**
 - **Label serentak:** agihan dengan **huruf label yang sama** (cth C1/C2, G1/G2/G3), masa yang sama dan berkongsi
   sekurang-kurangnya satu kelas dijadualkan pada slot yang sama.
 - Slot diblok kelas & guru, serta peraturan susunan, sentiasa dipatuhi. Sesi yang tidak muat disenaraikan bersama sebabnya.
-- **Hubungan** (butang *Hubungan* dalam tab Susun Jadual) — pilih agihan melalui penapis subjek / guru / kelas, kemudian tetapkan:
-  mesti serentak · tidak boleh pada waktu yang sama (maks N serentak, cth makmal) · tidak boleh pada hari yang sama ·
-  maks waktu sehari · hanya pada slot terpilih · tidak boleh pada slot terpilih.
+- **Hubungan** (butang *Hubungan* dalam tab Susun Jadual) — 30 jenis kekangan antara sesi. Pilih agihan melalui penapis
+  subjek / guru / kelas (Kumpulan A, dan Kumpulan B bagi jenis "A & B"):
+  - *Waktu & serentak:* mesti serentak · tidak boleh pada waktu yang sama · maks sesi pada satu waktu
+  - *Hari:* tidak boleh hari sama · maks/min waktu sehari · maks sesi sehari · maks/min hari seminggu ·
+    maks hari berturut-turut · maks hari lapang di antara sesi
+  - *Berturut & lompong:* maks waktu berturut-turut · maks/min julat sehari · maks lompong sehari / seminggu
+    (termasuk varian kiraan waktu kosong di awal / akhir)
+  - *Slot:* hanya / tidak boleh pada slot · tidak boleh bermula / berakhir pada slot · slot A hari ini & slot B hari esok
+  - *Susunan A & B:* A tidak diikuti terus oleh B · tidak bersebelahan · A sebelum B (sehari / seminggu) ·
+    hari A sebelum hari B · A mesti bersebelahan B
+  - Jenis bertanda **lembut** (min, lompong, hari berturut / lapang) diusahakan tetapi tidak dijamin; pelanggaran dilaporkan.
 - Klik sesi untuk **kunci** — sesi berkunci kekal di tempatnya apabila jadual disusun semula.
 
 ## Isi fail ZIP

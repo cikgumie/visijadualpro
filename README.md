@@ -45,13 +45,16 @@ data/slot.json       hari, waktu, label blok & slot diblok setiap kelas
 
 ## Muat naik ke GitHub Pages
 
-1. Cipta repositori baharu di GitHub (cth: `visijadual`).
-2. Muat naik **kandungan folder `web/`** ini (`index.html` dan `.nojekyll`) ke akar repositori.
-3. Repositori → **Settings → Pages** → Source: *Deploy from a branch* → Branch: `main` / `(root)` → Save.
-4. Selepas 1–2 minit, laman tersedia di `https://<nama-pengguna>.github.io/visijadual/`.
+Laman langsung: https://cikgumie.github.io/visijadualpro/
+
+1. Push ke cawangan `main` — `index.html` dan `.nojekyll` berada di akar repositori.
+2. Repositori → **Settings → Pages** → Source: *Deploy from a branch* → Branch: `main` / `(root)`.
+3. Selepas 1–2 minit, perubahan tersedia di laman di atas.
+
+> Jangan push fail ZIP data sekolah — `.gitignore` sudah mengecualikan `*.zip`.
 
 Uji di komputer sendiri:
 
 ```bash
-python3 -m http.server 8765 --directory web
+python3 -m http.server 8765 --directory .
 ```

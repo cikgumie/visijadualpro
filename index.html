@@ -2,10 +2,10 @@
 <html lang="ms">
 
 <head>
-    <base target="_top">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VisiJadual Pro v2 — Sistem Pengurusan Jadual & Agihan Guru</title>
+    <title>VisiJadual Pro v2</title>
+    <meta name="description" content="Sistem Pengurusan Jadual & Agihan Guru — data disimpan dalam fail ZIP di komputer anda.">
 
     <!-- Google Fonts: Plus Jakarta Sans & Outfit -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -13,7 +13,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 
     <!-- Lucide Icons & Material Icons Fallback -->
-    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
 
     <!-- Tailwind CSS with Curated Theme Config -->
@@ -66,6 +66,1227 @@
 
     <!-- SheetJS Library for Excel Operations -->
     <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script>
+/**
+ * VISIJADUAL PRO V2 — BACKEND TEMPATAN (backend.js)
+ * Menggantikan Google Apps Script + Google Sheets.
+ * Semua data disimpan dalam memori pelayar. Pengguna boleh Buka / Simpan data sebagai fail ZIP.
+ *
+ * Struktur jadual (sama seperti helaian Google Sheet lama):
+ *   guru      : [ID, Nama Guru, Singkatan, Maksimum Masa]
+ *   kelas     : [ID, Nama Kelas, Tingkatan, Guru Kelas]
+ *   subjek    : [ID, Nama Subjek, Kod, Masa Per Minggu]
+ *   transaksi : [Timestamp, ID_Guru, Nama Guru, ID_Kelas, Nama Kelas, ID_Subjek, Nama Subjek, Masa, UUID, Label, Pecahan]
+ *   arkib     : [Nama_Sesi, Tarikh_Arkib, ...11 lajur transaksi]
+ *   tetapan   : { Kata_Laluan: 'admin123' }
+ */
+(function () {
+    const ZIP_FORMAT_VERSION = 1;
+    const AUTOSAVE_KEY = 'visijadual_web_autosave_v1';
+    const DEFAULT_PASSWORD = 'admin123';
+
+    // =========================================================================
+    // PANGKALAN DATA DALAM MEMORI
+    // =========================================================================
+    function emptyDb() {
+        return { guru: [], kelas: [], subjek: [], transaksi: [], arkib: [], tetapan: { Kata_Laluan: DEFAULT_PASSWORD }, slot: defaultSlot() };
+    }
+
+    // Slot masa: hari x waktu. Setiap kelas menyimpan slot yang DIBLOK sahaja: { "hari-waktu": "Label" }
+    const SLOT_LABEL_DEFAULT = [
+        { nama: 'Rehat', warna: 'amber' },
+        { nama: 'Perhimpunan', warna: 'sky' },
+        { nama: 'Kokurikulum', warna: 'emerald' },
+        { nama: 'Bina Insan', warna: 'violet' },
+        { nama: 'Tiada Kelas', warna: 'slate' }
+    ];
+
+    function genWaktu(mula, tempoh, bil) {
+        const [h, m] = String(mula || '07:30').split(':').map(n => parseInt(n) || 0);
+        let t = h * 60 + m;
+        const fmt = x => String(Math.floor(x / 60) % 24).padStart(2, '0') + ':' + String(x % 60).padStart(2, '0');
+        const out = [];
+        for (let i = 0; i < bil; i++) { out.push({ mula: fmt(t), tamat: fmt(t + tempoh) }); t += tempoh; }
+        return out;
+    }
+
+    function defaultSlot() {
+        return {
+            hari: ['Isnin', 'Selasa', 'Rabu', 'Khamis', 'Jumaat'],
+            waktu: genWaktu('07:30', 30, 11),
+            label: SLOT_LABEL_DEFAULT.map(l => Object.assign({}, l)),
+            kelas: {}
+        };
+    }
+
+    function normalizeSlot(raw) {
+        const out = defaultSlot();
+        if (!raw || typeof raw !== 'object') return out;
+        if (Array.isArray(raw.hari) && raw.hari.length) out.hari = raw.hari.map(String);
+        if (Array.isArray(raw.waktu) && raw.waktu.length) out.waktu = raw.waktu.map(w => ({ mula: String((w && w.mula) || ''), tamat: String((w && w.tamat) || '') }));
+        if (Array.isArray(raw.label) && raw.label.length) out.label = raw.label.filter(l => l && l.nama).map(l => ({ nama: String(l.nama), warna: String(l.warna || 'slate') }));
+        if (raw.kelas && typeof raw.kelas === 'object') {
+            Object.keys(raw.kelas).forEach(id => {
+                const blok = {};
+                Object.entries(raw.kelas[id] || {}).forEach(([k, v]) => { if (/^\d+-\d+$/.test(k) && v) blok[k] = String(v); });
+                out.kelas[id] = blok;
+            });
+        }
+        return out;
+    }
+
+    let db = emptyDb();
+    let fileName = null;     // nama fail ZIP semasa (jika ada)
+    let dirty = false;       // ada perubahan belum disimpan ke ZIP
+    const listeners = [];
+
+    function uuid() {
+        if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+        return 'u' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+    }
+
+    function nowIso() { return new Date().toISOString(); }
+
+    function fmtDate(v) {
+        const d = new Date(v);
+        if (!v || isNaN(d.getTime())) return String(v || '');
+        return d.toLocaleDateString('ms-MY') + ' ' + d.toLocaleTimeString('ms-MY');
+    }
+
+    function clone(o) { return JSON.parse(JSON.stringify(o)); }
+
+    function notify() { listeners.forEach(fn => { try { fn(getStatus()); } catch (e) { console.warn(e); } }); }
+
+    function markDirty() {
+        dirty = true;
+        autosave();
+        notify();
+    }
+
+    function autosave() {
+        try {
+            localStorage.setItem(AUTOSAVE_KEY, JSON.stringify({ db, fileName, dirty, savedAt: nowIso() }));
+        } catch (e) {
+            console.warn('Autosimpan ke pelayar gagal:', e);
+        }
+    }
+
+    function getStatus() {
+        return {
+            fileName,
+            dirty,
+            counts: { guru: db.guru.length, kelas: db.kelas.length, subjek: db.subjek.length, transaksi: db.transaksi.length }
+        };
+    }
+
+    // Pastikan setiap baris lengkap & jenis data betul (untuk data dari ZIP / autosimpan)
+    function normalizeDb(raw) {
+        const out = emptyDb();
+        const rows = (arr, len) => (Array.isArray(arr) ? arr : []).filter(Array.isArray).map(r => {
+            const row = r.slice(0, len);
+            while (row.length < len) row.push('');
+            return row;
+        });
+        out.guru = rows(raw.guru, 4).map(r => [String(r[0]), String(r[1]), String(r[2]), parseInt(r[3]) || 0]);
+        out.kelas = rows(raw.kelas, 4).map(r => [String(r[0]), String(r[1]), r[2] === '' ? '' : (parseInt(r[2]) || r[2]), String(r[3])]);
+        out.subjek = rows(raw.subjek, 4).map(r => [String(r[0]), String(r[1]), String(r[2]), parseInt(r[3]) || 0]);
+        out.transaksi = rows(raw.transaksi, 11).map(r => {
+            r[7] = parseInt(r[7]) || 0;
+            r[8] = r[8] ? String(r[8]) : uuid();
+            r[10] = r[10] ? String(r[10]) : String(r[7]);
+            return r;
+        });
+        out.arkib = rows(raw.arkib, 13).map(r => { r[9] = parseInt(r[9]) || 0; return r; });
+        if (raw.tetapan && typeof raw.tetapan === 'object') Object.assign(out.tetapan, raw.tetapan);
+        out.slot = normalizeSlot(raw.slot);
+        if (!String(out.tetapan.Kata_Laluan || '').trim()) out.tetapan.Kata_Laluan = DEFAULT_PASSWORD;
+        return out;
+    }
+
+    function getAdminPassword_() {
+        return String(db.tetapan.Kata_Laluan || '').trim() || DEFAULT_PASSWORD;
+    }
+
+    function makeTransaksiRow(data, ts) {
+        return [
+            ts || nowIso(),
+            data.guruId, data.guruNama,
+            data.kelasId, data.kelasNama,
+            data.subjekId, data.subjekNama,
+            parseInt(data.masa) || 0,
+            data.uuid || uuid(),
+            data.label || "",
+            data.pecahan || String(data.masa)
+        ];
+    }
+
+    // =========================================================================
+    // FUNGSI BACKEND (port dari Code.js)
+    // =========================================================================
+    const api = {
+        sahkanKataLaluanAdmin(inputPass) {
+            if (String(inputPass || "").trim() === getAdminPassword_()) {
+                return { success: true, message: "Kata laluan disahkan. Mod Edit aktif!" };
+            }
+            return { success: false, message: "Kata laluan tidak tepat. Sila cuba lagi." };
+        },
+
+        kemaskiniKataLaluanAdmin(oldPass, newPass) {
+            if (String(oldPass || "").trim() !== getAdminPassword_()) {
+                throw new Error("Kata laluan semasa tidak tepat.");
+            }
+            if (!newPass || String(newPass).trim().length < 3) {
+                throw new Error("Kata laluan baharu mestilah sekurang-kurangnya 3 aksara.");
+            }
+            db.tetapan.Kata_Laluan = String(newPass).trim();
+            markDirty();
+            return { success: true, message: "Kata laluan pentadbir berjaya dikemaskini!" };
+        },
+
+        getAllData() {
+            const transaksi = db.transaksi.map(r => {
+                const row = r.slice();
+                row[0] = fmtDate(row[0]);
+                return row;
+            });
+            const stats = {};
+            transaksi.forEach(row => {
+                stats[row[2]] = (stats[row[2]] || 0) + (parseInt(row[7]) || 0);
+            });
+            return clone({ guru: db.guru, kelas: db.kelas, subjek: db.subjek, transaksi: transaksi.reverse(), stats });
+        },
+
+        simpanJadualBulk(dataList) {
+            const ts = nowIso();
+            const newRows = (dataList || []).map(d => makeTransaksiRow(d, ts));
+            db.transaksi.push(...newRows);
+            if (newRows.length) markDirty();
+            return `Disimpan: ${newRows.length} rekod.`;
+        },
+
+        deleteAgihan(targetUuid) {
+            const targets = Array.isArray(targetUuid) ? targetUuid.map(String) : [String(targetUuid)];
+            const before = db.transaksi.length;
+            db.transaksi = db.transaksi.filter(r => !targets.includes(String(r[8])));
+            const deleted = before - db.transaksi.length;
+            if (deleted > 0) {
+                markDirty();
+                return `${deleted} rekod dipadam.`;
+            }
+            throw new Error("Data tidak dijumpai.");
+        },
+
+        updateAgihan(data, oldUuid) {
+            const idx = db.transaksi.findIndex(r => String(r[8]) === String(oldUuid));
+            if (idx > -1) {
+                const row = makeTransaksiRow(data, db.transaksi[idx][0]); // kekalkan cap masa asal
+                row[8] = oldUuid; // kekalkan UUID asal
+                db.transaksi[idx] = row;
+                markDirty();
+                return "Data dikemaskini!";
+            }
+            db.transaksi.push(makeTransaksiRow(Object.assign({}, data, { uuid: uuid() })));
+            markDirty();
+            return "Data ditambah sebagai rekod baharu.";
+        },
+
+        simpanDanKemaskiniBulk(updatesList, newInsertsList) {
+            const map = {};
+            db.transaksi.forEach((r, i) => { map[String(r[8])] = i; });
+
+            let updatedCount = 0;
+            (updatesList || []).forEach(item => {
+                const idx = map[String(item.uuid)];
+                if (idx === undefined) return;
+                const row = db.transaksi[idx];
+                const d = item.data || {};
+                const set = (key, col, fn) => { if (d[key] !== undefined && d[key] !== null) row[col] = fn ? fn(d[key]) : d[key]; };
+                set('guruId', 1); set('guruNama', 2);
+                set('kelasId', 3); set('kelasNama', 4);
+                set('subjekId', 5); set('subjekNama', 6);
+                set('masa', 7, v => parseInt(v) || 0);
+                set('label', 9); set('pecahan', 10);
+                updatedCount++;
+            });
+
+            const ts = nowIso();
+            const newRows = (newInsertsList || []).map(d => makeTransaksiRow(d, ts));
+            db.transaksi.push(...newRows);
+
+            if (updatedCount || newRows.length) markDirty();
+            const msgs = [];
+            if (updatedCount > 0) msgs.push(`${updatedCount} rekod dikemaskini`);
+            if (newRows.length > 0) msgs.push(`${newRows.length} rekod baharu ditambah`);
+            return msgs.length > 0 ? msgs.join(', ') + '!' : "Tiada perubahan.";
+        },
+
+        updateGuruKelas(namaKelas, namaGuru) {
+            const k = db.kelas.find(r => r[1] === namaKelas);
+            if (!k) throw new Error("Kelas tidak dijumpai dalam pangkalan data.");
+            k[3] = namaGuru;
+            markDirty();
+            return `Guru kelas untuk ${namaKelas} berjaya dikemaskini!`;
+        },
+
+        arkibkanAgihan(guruNamaList, snapshotName) {
+            if (!snapshotName || snapshotName.trim() === "") throw new Error("Nama sesi arkib tidak boleh kosong.");
+            const list = guruNamaList || [];
+            const tarikh = nowIso();
+            const arkibRows = db.transaksi
+                .filter(r => list.length === 0 || list.indexOf(String(r[2])) > -1)
+                .map(r => [snapshotName.trim(), tarikh, ...r]);
+            if (arkibRows.length === 0) throw new Error("Tiada rekod untuk guru yang dipilih.");
+            db.arkib.push(...arkibRows);
+            markDirty();
+            return `${arkibRows.length} rekod berjaya disalin ke sesi arkib "${snapshotName.trim()}". Data aktif masih kekal.`;
+        },
+
+        resetAgihan(guruNamaList) {
+            const list = guruNamaList || [];
+            const keep = db.transaksi.filter(r => !(list.length === 0 || list.indexOf(String(r[2])) > -1));
+            const deletedCount = db.transaksi.length - keep.length;
+            if (deletedCount === 0) throw new Error("Tiada rekod untuk guru yang dipilih.");
+            db.transaksi = keep;
+            markDirty();
+            return `${deletedCount} rekod berjaya dipadamkan dari senarai aktif. (Jika tersilap: pulihkan dari arkib, atau buka semula fail ZIP tanpa menyimpan.)`;
+        },
+
+        getArkibSesi() {
+            const map = {};
+            db.arkib.forEach(r => {
+                const nama = String(r[0]);
+                if (!map[nama]) map[nama] = { nama, tarikh: fmtDate(r[1]), bilRekod: 0 };
+                map[nama].bilRekod++;
+            });
+            return Object.values(map).reverse();
+        },
+
+        getArkibDetail(snapshotName) {
+            return clone(db.arkib
+                .filter(r => String(r[0]) === snapshotName)
+                .map(r => [fmtDate(r[2]), r[3], r[4], r[5], r[6], r[7], r[8], r[9], r[10], r[11], r[12]]));
+        },
+
+        restoreArkib(snapshotName) {
+            const rows = db.arkib.filter(r => String(r[0]) === snapshotName).map(r => r.slice(2, 13));
+            if (rows.length === 0) throw new Error("Tiada rekod untuk sesi arkib ini.");
+            const teachers = [...new Set(rows.map(r => String(r[2])))];
+            db.transaksi = db.transaksi.filter(r => teachers.indexOf(String(r[2])) === -1);
+            // UUID baharu supaya tidak bertembung jika sesi yang sama dipulihkan dua kali
+            db.transaksi.push(...rows.map(r => { const row = r.slice(); row[8] = uuid(); return row; }));
+            markDirty();
+            return `${rows.length} rekod dari sesi "${snapshotName}" berjaya dipulihkan ke senarai aktif (rekod lama guru yang sama telah digantikan).`;
+        },
+
+        importExcelJadual(rows) {
+            const lower = s => String(s).trim().toLowerCase();
+            const guruMap = {}, kelasMap = {}, subjekMap = {};
+            db.guru.forEach(r => { guruMap[lower(r[1])] = r[0]; });
+            db.kelas.forEach(r => { kelasMap[lower(r[1])] = r[0]; });
+            db.subjek.forEach(r => { subjekMap[lower(r[1])] = r[0]; });
+
+            const ts = nowIso();
+            const newRows = [];
+            (rows || []).forEach(row => {
+                const guruNama = String(row.Guru || row["Nama Guru"] || row["Nama_Guru"] || "").trim();
+                const kelasNama = String(row.Kelas || row["Nama Kelas"] || row["Nama_Kelas"] || "").trim();
+                const subjekNama = String(row.Subjek || row["Nama Subjek"] || row["Nama_Subjek"] || "").trim();
+                const masa = parseInt(row.Masa || row["Masa Diperuntukkan"] || 0) || 0;
+                const label = String(row.Label || "").trim();
+                const pecahan = String(row.Pecahan || row["Pecahan Masa"] || row["Pecahan_Masa"] || row.Masa || "").trim();
+                const tarikh = row.Tarikh || "";
+                if (!guruNama && !kelasNama && !subjekNama) return;
+
+                const kelasId = kelasNama.split(',').map(s => s.trim()).map(n => kelasMap[n.toLowerCase()] || n).join(', ');
+                let rowDate = ts;
+                if (tarikh) {
+                    const d = new Date(tarikh);
+                    if (!isNaN(d.getTime())) rowDate = d.toISOString();
+                }
+                newRows.push([
+                    rowDate,
+                    guruMap[guruNama.toLowerCase()] || "", guruNama,
+                    kelasId, kelasNama,
+                    subjekMap[subjekNama.toLowerCase()] || "", subjekNama,
+                    masa, uuid(),
+                    label === "-" ? "" : label,
+                    pecahan || String(masa)
+                ]);
+            });
+            if (newRows.length === 0) throw new Error("Tiada rekod sah untuk diimport.");
+            db.transaksi = newRows;
+            markDirty();
+            return `Berjaya mengimport ${newRows.length} rekod jadual dari fail Excel.`;
+        }
+    };
+
+    // =========================================================================
+    // PENGGANTI google.script.run (antara muka sama, supaya index.html tak perlu banyak diubah)
+    // =========================================================================
+    class LocalRunner {
+        constructor() {
+            this._success = () => {};
+            this._failure = (e) => console.error(e);
+        }
+        withSuccessHandler(fn) { this._success = fn; return this; }
+        withFailureHandler(fn) { this._failure = fn; return this; }
+    }
+    Object.keys(api).forEach(name => {
+        LocalRunner.prototype[name] = function (...args) {
+            const ok = this._success, fail = this._failure;
+            // Asinkron (seperti GAS) supaya UI loading sempat dipaparkan
+            setTimeout(() => {
+                let res;
+                try { res = api[name](...clone(args === undefined ? [] : args)); }
+                catch (e) { fail(e instanceof Error ? e : new Error(String(e))); return; }
+                ok(res);
+            }, 10);
+        };
+    });
+    window.google = { script: { get run() { return new LocalRunner(); } } };
+
+    // =========================================================================
+    // FAIL ZIP: BUKA & SIMPAN
+    // =========================================================================
+    const ZIP_FILES = { guru: 'guru.json', kelas: 'kelas.json', subjek: 'subjek.json', transaksi: 'transaksi.json', arkib: 'arkib.json', tetapan: 'tetapan.json', slot: 'slot.json' };
+
+    async function buildZipBlob() {
+        const zip = new JSZip();
+        zip.file('manifest.json', JSON.stringify({
+            app: 'VisiJadual Pro v2',
+            format: ZIP_FORMAT_VERSION,
+            savedAt: nowIso(),
+            counts: getStatus().counts
+        }, null, 2));
+        const folder = zip.folder('data');
+        Object.keys(ZIP_FILES).forEach(key => folder.file(ZIP_FILES[key], JSON.stringify(db[key], null, 1)));
+        zip.file('BACA_SAYA.txt',
+            'Fail data VisiJadual Pro v2.\r\n' +
+            'Buka fail ZIP ini melalui butang "Buka" dalam aplikasi VisiJadual.\r\n' +
+            'Jangan ubah struktur folder "data/" secara manual.\r\n');
+        return zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } });
+    }
+
+    function defaultZipName() {
+        const d = new Date();
+        const p = n => String(n).padStart(2, '0');
+        return `VisiJadual_${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}.zip`;
+    }
+
+    function markSaved(name) {
+        fileName = name || fileName;
+        dirty = false;
+        autosave();
+        notify();
+    }
+
+    async function openZip(file) {
+        const zip = await JSZip.loadAsync(file);
+        // Benarkan ZIP yang dimampatkan semula dalam satu folder induk (cth: "VisiJadual_x/data/guru.json")
+        const findEntry = (suffix) => {
+            const keys = Object.keys(zip.files).filter(k => !zip.files[k].dir && (k === suffix || k.endsWith('/' + suffix)));
+            return keys.length ? zip.files[keys.sort((a, b) => a.length - b.length)[0]] : null;
+        };
+        if (!findEntry('data/' + ZIP_FILES.guru) && !findEntry('data/' + ZIP_FILES.transaksi)) {
+            throw new Error('Fail ZIP ini bukan fail data VisiJadual (folder "data/" tidak dijumpai).');
+        }
+        const manifestEntry = findEntry('manifest.json');
+        if (manifestEntry) {
+            const manifest = JSON.parse(await manifestEntry.async('string'));
+            if (manifest.format > ZIP_FORMAT_VERSION) {
+                throw new Error('Fail ini dicipta oleh versi VisiJadual yang lebih baharu. Sila kemaskini aplikasi.');
+            }
+        }
+        const raw = {};
+        for (const key of Object.keys(ZIP_FILES)) {
+            const entry = findEntry('data/' + ZIP_FILES[key]);
+            if (!entry) continue;
+            try { raw[key] = JSON.parse(await entry.async('string')); }
+            catch (e) { throw new Error(`Fail ${ZIP_FILES[key]} dalam ZIP rosak: ${e.message}`); }
+        }
+        db = normalizeDb(raw);
+        fileName = file.name;
+        dirty = false;
+        autosave();
+        notify();
+        return getStatus();
+    }
+
+    function loadDb(rawDb, opts) {
+        db = normalizeDb(rawDb || {});
+        fileName = (opts && opts.fileName) || null;
+        dirty = !!(opts && opts.dirty);
+        autosave();
+        notify();
+    }
+
+    function restoreAutosave() {
+        try {
+            const saved = JSON.parse(localStorage.getItem(AUTOSAVE_KEY) || 'null');
+            if (!saved || !saved.db) return null;
+            db = normalizeDb(saved.db);
+            fileName = saved.fileName || null;
+            dirty = !!saved.dirty;
+            notify();
+            return saved;
+        } catch (e) {
+            console.warn('Gagal memulihkan autosimpan:', e);
+            return null;
+        }
+    }
+
+    function hasAutosave() {
+        try { return !!localStorage.getItem(AUTOSAVE_KEY); } catch (e) { return false; }
+    }
+
+    // =========================================================================
+    // DATA INDUK (Guru / Kelas / Subjek) — dahulu diedit terus dalam Google Sheet
+    // =========================================================================
+    const MASTER = {
+        guru: { prefix: 'G', cols: 4 },
+        kelas: { prefix: 'K', cols: 4 },
+        subjek: { prefix: 'S', cols: 4 }
+    };
+
+    function nextId(table) {
+        const prefix = MASTER[table].prefix;
+        let max = 0;
+        db[table].forEach(r => {
+            const m = String(r[0]).match(/(\d+)$/);
+            if (m) max = Math.max(max, parseInt(m[1]));
+        });
+        return prefix + String(max + 1).padStart(2, '0');
+    }
+
+    function getMaster(table) { return clone(db[table]); }
+
+    // Kira bilangan rekod agihan yang menggunakan sesuatu ID
+    function usageCount(table, id) {
+        id = String(id);
+        if (table === 'guru') return db.transaksi.filter(r => String(r[1]) === id).length;
+        if (table === 'subjek') return db.transaksi.filter(r => String(r[5]) === id).length;
+        if (table === 'kelas') return db.transaksi.filter(r => String(r[3]).split(',').map(s => s.trim()).includes(id)).length;
+        return 0;
+    }
+
+    /**
+     * Gantikan keseluruhan jadual induk. Nama baharu disebarkan ke rekod agihan (transaksi) & arkib tidak disentuh.
+     * rows: array baris [ID, Nama, ..., ...]. Baris tanpa ID diberi ID baharu.
+     */
+    function setMaster(table, rows) {
+        if (!MASTER[table]) throw new Error('Jadual tidak sah: ' + table);
+        const oldById = {};
+        db[table].forEach(r => { oldById[String(r[0])] = r; });
+
+        const seen = new Set();
+        const clean = [];
+        rows.forEach(r => {
+            const row = r.slice(0, 4).map(v => (typeof v === 'string' ? v.trim() : v));
+            while (row.length < 4) row.push('');
+            if (!String(row[1]).trim()) return; // nama wajib
+            if (!String(row[0]).trim()) row[0] = '';
+            clean.push(row);
+        });
+        // Beri ID kepada baris baharu (tidak guna semula ID lama yang telah dipadam)
+        let maxNum = 0;
+        [...db[table], ...clean].forEach(r => {
+            const m = String(r[0]).match(/(\d+)$/);
+            if (m) maxNum = Math.max(maxNum, parseInt(m[1]));
+        });
+        clean.forEach(r => {
+            if (!r[0]) r[0] = MASTER[table].prefix + String(++maxNum).padStart(2, '0');
+        });
+
+        clean.forEach(r => {
+            const id = String(r[0]);
+            if (seen.has(id)) throw new Error(`ID "${id}" berulang dalam senarai ${table}.`);
+            seen.add(id);
+        });
+        const names = new Set();
+        clean.forEach(r => {
+            const n = String(r[1]).toLowerCase();
+            if (names.has(n)) throw new Error(`Nama "${r[1]}" berulang dalam senarai ${table}.`);
+            names.add(n);
+        });
+
+        // Halang padam jika masih digunakan
+        Object.keys(oldById).forEach(id => {
+            if (!seen.has(id)) {
+                const n = usageCount(table, id);
+                if (n > 0) throw new Error(`"${oldById[id][1]}" tidak boleh dipadam kerana masih digunakan dalam ${n} rekod agihan.`);
+            }
+        });
+
+        if (table === 'guru') {
+            clean.forEach(r => { r[3] = parseInt(r[3]) || 0; });
+            const renamed = {};
+            clean.forEach(r => { const o = oldById[r[0]]; if (o && o[1] !== r[1]) renamed[o[1]] = r[1]; });
+            db.transaksi.forEach(t => { const g = clean.find(r => r[0] === String(t[1])); if (g) t[2] = g[1]; });
+            db.kelas.forEach(k => { if (renamed[k[3]]) k[3] = renamed[k[3]]; });
+        } else if (table === 'subjek') {
+            clean.forEach(r => { r[3] = parseInt(r[3]) || 0; });
+            db.transaksi.forEach(t => { const s = clean.find(r => r[0] === String(t[5])); if (s) t[6] = s[1]; });
+        } else if (table === 'kelas') {
+            clean.forEach(r => { r[2] = r[2] === '' ? '' : (parseInt(r[2]) || r[2]); });
+            const nameById = {};
+            clean.forEach(r => { nameById[r[0]] = r[1]; });
+            db.transaksi.forEach(t => {
+                const ids = String(t[3]).split(',').map(s => s.trim());
+                if (ids.some(id => nameById[id])) {
+                    const oldNames = String(t[4]).split(',').map(s => s.trim());
+                    t[4] = ids.map((id, i) => nameById[id] || oldNames[i] || id).join(', ');
+                }
+            });
+        }
+
+        db[table] = clean;
+        markDirty();
+        return clean.length;
+    }
+
+    // =========================================================================
+    // SLOT MASA KELAS
+    // =========================================================================
+    function slotInRange(key) {
+        const [d, p] = key.split('-').map(Number);
+        return d < db.slot.hari.length && p < db.slot.waktu.length;
+    }
+
+    function getSlot() { return clone(db.slot); }
+
+    function setSlotConfig(cfg) {
+        const hari = (cfg.hari || []).map(s => String(s).trim()).filter(Boolean);
+        const waktu = (cfg.waktu || []).map(w => ({ mula: String(w.mula || '').trim(), tamat: String(w.tamat || '').trim() }));
+        if (!hari.length) throw new Error('Sekurang-kurangnya satu hari diperlukan.');
+        if (!waktu.length) throw new Error('Sekurang-kurangnya satu waktu diperlukan.');
+        if (hari.length > 7 || waktu.length > 20) throw new Error('Maksimum 7 hari dan 20 waktu sehari.');
+        db.slot.hari = hari;
+        db.slot.waktu = waktu;
+        // Buang blok yang kini di luar julat
+        Object.values(db.slot.kelas).forEach(blok => Object.keys(blok).forEach(k => { if (!slotInRange(k)) delete blok[k]; }));
+        markDirty();
+    }
+
+    function addSlotLabel(nama, warna) {
+        nama = String(nama || '').trim();
+        if (!nama) throw new Error('Nama label tidak boleh kosong.');
+        if (db.slot.label.some(l => l.nama.toLowerCase() === nama.toLowerCase())) throw new Error(`Label "${nama}" sudah wujud.`);
+        db.slot.label.push({ nama, warna: warna || 'slate' });
+        markDirty();
+    }
+
+    function setKelasBlok(kelasId, blok) {
+        const clean = {};
+        Object.entries(blok || {}).forEach(([k, v]) => { if (v && slotInRange(k)) clean[k] = String(v); });
+        db.slot.kelas[String(kelasId)] = clean;
+        markDirty();
+    }
+
+    function copyKelasBlok(fromId, toIds) {
+        const src = db.slot.kelas[String(fromId)] || {};
+        toIds.forEach(id => { if (String(id) !== String(fromId)) db.slot.kelas[String(id)] = Object.assign({}, src); });
+        markDirty();
+    }
+
+    // Ringkasan setiap kelas: jumlah slot, slot diblok, slot boleh isi, waktu diagihkan
+    function slotSummary() {
+        const total = db.slot.hari.length * db.slot.waktu.length;
+        const agihan = {};
+        db.transaksi.forEach(t => {
+            String(t[3]).split(',').map(s => s.trim()).filter(Boolean)
+                .forEach(id => { agihan[id] = (agihan[id] || 0) + (parseInt(t[7]) || 0); });
+        });
+        const out = {};
+        db.kelas.forEach(k => {
+            const blok = Object.keys(db.slot.kelas[k[0]] || {}).filter(slotInRange).length;
+            out[k[0]] = { total, blok, boleh: total - blok, agihan: agihan[k[0]] || 0 };
+        });
+        return out;
+    }
+
+    window.VJStore = {
+        getSlot, setSlotConfig, addSlotLabel, setKelasBlok, copyKelasBlok, slotSummary, genWaktu,
+        getStatus, onChange: fn => listeners.push(fn),
+        buildZipBlob, markSaved, openZip, defaultZipName,
+        loadDb, restoreAutosave, hasAutosave,
+        newEmpty() { loadDb({ guru: [], kelas: [], subjek: [] }, { dirty: false }); },
+        getMaster, setMaster, nextId, usageCount,
+        isDirty: () => dirty
+    };
+})();
+
+    </script>
+    <script>
+/**
+ * VISIJADUAL PRO V2 — DATA CONTOH (sample-data.js)
+ * Digunakan oleh butang "Cuba Data Contoh" pada skrin permulaan.
+ */
+window.VJSampleData = function () {
+        const MOCK_GURU_NAMES = [
+            "ZURAIDAH BINTI ALI", "AHMAD BIN HASSAN", "NORLIZA BINTI ISMAIL", "SITI AISHAH BINTI OMAR",
+            "MOHD FAIZAL BIN ABDULLAH", "WAN ROSLAN BIN WAN DAUD", "AZIZAH BINTI OTHMAN", "CHE NOR AINI BINTI MAT",
+            "FARIDAH BINTI ZAINAL", "HARUN BIN ISMAIL", "ISMAIL BIN YAHYA", "JALIL BIN MOHD NOR",
+            "KAMSIAH BINTI BAKAR", "LATIFAH BINTI ABU", "MANSOR BIN KASSIM", "NIK ROZITA BINTI NIK LEH",
+            "OTHMAN BIN IBRAHIM", "PUZIAH BINTI EMBONG", "QISTINA BINTI AZMAN", "ROHANI BINTI JUSOH",
+            "SALLEH BIN CHE DIN", "TENGKU AMINAH BINTI T. MUSA", "UMAR BIN SALLEH", "VIMAL A/L RAMAN",
+            "WONG KAH WAI", "XAVIER A/L ANTHONY", "YUSOF BIN AWANG", "ZAINAL BIN BIDIN",
+            "AMINAH BINTI SULAIMAN", "BASHAR BIN IDRIS", "CHONG WEI HONG", "DAUD BIN OSMAN",
+            "ENDOK BINTI KADER", "FAUZI BIN CHE MAT", "GHAZALI BIN JUSOH", "HASNAH BINTI SALIM",
+            "IDRIS BIN MAHMUD", "JUNAIDAH BINTI SAAD", "KAMARUZAMAN BIN ARIFFIN", "LUKMAN HAKIM BIN DAUD",
+            "MAZNAH BINTI ABDUL GHANI", "NOR AZLAN BIN MAJID", "ONG LI TING", "PAUZI BIN DERAMAN",
+            "RAHIMAH BINTI YAACOB", "SHUKRI BIN ABDUL RAHMAN", "TAN SWEE HENG", "USMAN BIN SULONG",
+            "VICTORIA TAN", "WAHID BIN HASSAN", "YASMIN BINTI MUSTAPHA", "ZAKI BIN HARUN",
+            "AZLAN BIN MAT", "BAHARUDDIN BIN JAAFAR", "CHEE SIEW LING", "DYG NORAINI BINTI ABG YUSOF",
+            "EFFENDI BIN KAMIS", "FATIMAH BINTI DAUD"
+        ];
+
+        const MOCK_KELAS_LIST = [
+            ["K01", "1DN", 1, "ZURAIDAH BINTI ALI"], ["K02", "1IN", 1, "AHMAD BIN HASSAN"],
+            ["K03", "1KT", 1, "NORLIZA BINTI ISMAIL"], ["K04", "1OP", 1, "SITI AISHAH BINTI OMAR"],
+            ["K05", "1PA", 1, "MOHD FAIZAL BIN ABDULLAH"], ["K06", "1PR", 1, "WAN ROSLAN BIN WAN DAUD"],
+            ["K07", "2DN", 2, "AZIZAH BINTI OTHMAN"], ["K08", "2IN", 2, "CHE NOR AINI BINTI MAT"],
+            ["K09", "2KT", 2, "FARIDAH BINTI ZAINAL"], ["K10", "2OP", 2, "HARUN BIN ISMAIL"],
+            ["K11", "2PA", 2, "ISMAIL BIN YAHYA"], ["K12", "2PR", 2, "JALIL BIN MOHD NOR"],
+            ["K13", "3DN", 3, "KAMSIAH BINTI BAKAR"], ["K14", "3IN", 3, "LATIFAH BINTI ABU"],
+            ["K15", "3KT", 3, "MANSOR BIN KASSIM"], ["K16", "3OP", 3, "NIK ROZITA BINTI NIK LEH"],
+            ["K17", "3PA", 3, "OTHMAN BIN IBRAHIM"], ["K18", "3PR", 3, "PUZIAH BINTI EMBONG"],
+            ["K19", "4DN", 4, "QISTINA BINTI AZMAN"], ["K20", "4IN", 4, "ROHANI BINTI JUSOH"],
+            ["K21", "4KT", 4, "SALLEH BIN CHE DIN"], ["K22", "4OP", 4, "TENGKU AMINAH BINTI T. MUSA"],
+            ["K23", "4PA", 4, "UMAR BIN SALLEH"], ["K24", "4PR", 4, "VIMAL A/L RAMAN"],
+            ["K25", "5DN", 5, "WONG KAH WAI"], ["K26", "5IN", 5, "XAVIER A/L ANTHONY"],
+            ["K27", "5KT", 5, "YUSOF BIN AWANG"], ["K28", "5OP", 5, "ZAINAL BIN BIDIN"],
+            ["K29", "5PA", 5, "AMINAH BINTI SULAIMAN"]
+        ];
+
+        const MOCK_SUBJEK_LIST = [
+            ["S01", "Bahasa Melayu", "BM", 7],
+            ["S02", "Sejarah", "SJ", 4],
+            ["S03", "Matematik", "MATE", 6],
+            ["S04", "Bahasa Inggeris", "BI", 6],
+            ["S05", "Pendidikan Islam", "PI", 7],
+            ["S06", "Geografi", "GEO", 3],
+            ["S07", "Sains", "SC", 6],
+            ["S08", "Pendidikan Seni Visual", "PSV", 2],
+            ["S09", "Asas Sains Komputer", "ASK", 4],
+            ["S10", "Reka Bentuk & Teknologi", "RBT", 4],
+            ["S11", "Pendidikan Jasmani", "PJ", 2],
+            ["S12", "Pendidikan Kesihatan", "PK", 2],
+            ["S13", "Matematik Tambahan", "ADD MATH", 4],
+            ["S14", "Fizik", "FZ", 4],
+            ["S15", "Kimia", "KM", 4],
+            ["S16", "Biologi", "BIO", 4],
+            ["S17", "Prinsip Perakaunan", "PA", 4],
+            ["S18", "Perniagaan", "PERN", 4],
+            ["S19", "Tasawwur Islam", "TI", 4],
+            ["S20", "Sains Rumah Tangga", "SRT", 4],
+            ["S21", "Sains Sukan", "SS", 4],
+            ["S22", "PVMA", "PVMA", 11],
+            ["S23", "Pendidikan Islam PVMA", "PI PVMA", 3],
+            ["S24", "Matematik PVMA", "MATE PVMA", 3],
+            ["S25", "Elektif Khusus", "EX", 2]
+        ];
+
+        const mockGuru = MOCK_GURU_NAMES.map((name, i) => [`G${String(i+1).padStart(2, '0')}`, name, name.split(' ')[0], 24]);
+        const mockTransaksi = [];
+        const mockStats = {};
+
+        // Generate standard allocations for Lower Secondary (1DN to 3PR)
+        const lowerClasses = MOCK_KELAS_LIST.slice(0, 18);
+        const defaultLowerSubs = [
+            { id: "S01", nama: "Bahasa Melayu", kod: "BM", masa: 7, pecahan: "2,3,2", gOffset: 0 },
+            { id: "S02", nama: "Sejarah", kod: "SJ", masa: 4, pecahan: "2,2", gOffset: 1 },
+            { id: "S03", nama: "Matematik", kod: "MATE", masa: 6, pecahan: "2,2,2", gOffset: 2 },
+            { id: "S04", nama: "Bahasa Inggeris", kod: "BI", masa: 6, pecahan: "2,2,2", gOffset: 3 },
+            { id: "S05", nama: "Pendidikan Islam", kod: "PI", masa: 7, pecahan: "2,3,2", gOffset: 4 },
+            { id: "S06", nama: "Geografi", kod: "GEO", masa: 3, pecahan: "3", gOffset: 5 },
+            { id: "S07", nama: "Sains", kod: "SC", masa: 6, pecahan: "2,2,2", gOffset: 6 },
+            { id: "S08", nama: "Pendidikan Seni Visual", kod: "PSV", masa: 2, pecahan: "2", gOffset: 7 },
+            { id: "S10", nama: "Reka Bentuk & Teknologi", kod: "RBT", masa: 4, pecahan: "2,2", label: "G1", gOffset: 8 },
+            { id: "S11", nama: "Pendidikan Jasmani", kod: "PJ", masa: 2, pecahan: "2", gOffset: 9 },
+            { id: "S12", nama: "Pendidikan Kesihatan", kod: "PK", masa: 2, pecahan: "2", gOffset: 10 }
+        ];
+
+        lowerClasses.forEach((k, kIdx) => {
+            defaultLowerSubs.forEach(sub => {
+                const gIdx = (kIdx + sub.gOffset) % mockGuru.length;
+                const guru = mockGuru[gIdx];
+                const uuid = `mock_${k[1]}_${sub.kod}_${Math.random().toString(36).substr(2, 6)}`;
+                mockTransaksi.push([
+                    "2026-10-28T00:00:00.000Z",
+                    guru[0], guru[1],
+                    k[0], k[1],
+                    sub.id, sub.nama,
+                    sub.masa,
+                    uuid,
+                    sub.label || "",
+                    sub.pecahan
+                ]);
+                mockStats[guru[1]] = (mockStats[guru[1]] || 0) + sub.masa;
+            });
+        });
+
+        // Special 1PA SJ teacher: ZURAIDAH BINTI ALI
+        const paSjIdx = mockTransaksi.findIndex(t => t[4] === '1PA' && t[5] === 'S02');
+        if (paSjIdx > -1) {
+            const oldG = mockTransaksi[paSjIdx][2];
+            mockStats[oldG] -= 4;
+            mockTransaksi[paSjIdx][1] = "G01";
+            mockTransaksi[paSjIdx][2] = "ZURAIDAH BINTI ALI";
+            mockTransaksi[paSjIdx][10] = "2,2";
+            mockStats["ZURAIDAH BINTI ALI"] = (mockStats["ZURAIDAH BINTI ALI"] || 0) + 4;
+        }
+
+        // Add ASK elective for 1OP and 1PA
+        ["1OP", "1PA", "2OP", "2PA", "3OP", "3PA"].forEach(cName => {
+            const cObj = MOCK_KELAS_LIST.find(c => c[1] === cName);
+            if (cObj) {
+                const guru = mockGuru[15];
+                const uuid = `mock_${cName}_ASK_${Math.random().toString(36).substr(2, 6)}`;
+                mockTransaksi.push([
+                    "2026-10-28T00:00:00.000Z",
+                    guru[0], guru[1],
+                    cObj[0], cName,
+                    "S09", "Asas Sains Komputer",
+                    4,
+                    uuid,
+                    "G2",
+                    "2,2"
+                ]);
+                mockStats[guru[1]] = (mockStats[guru[1]] || 0) + 4;
+            }
+        });
+
+        // Add 4DN PVMA: 11 waktu
+        const c4dn = MOCK_KELAS_LIST.find(c => c[1] === '4DN');
+        if (c4dn) {
+            const guru = mockGuru[20];
+            mockTransaksi.push([
+                "2026-10-28T00:00:00.000Z",
+                guru[0], guru[1],
+                c4dn[0], "4DN",
+                "S22", "PVMA",
+                11,
+                `mock_4DN_PVMA`,
+                "",
+                "3,4,4"
+            ]);
+            mockStats[guru[1]] = (mockStats[guru[1]] || 0) + 11;
+        }
+        return { guru: mockGuru, kelas: MOCK_KELAS_LIST, subjek: MOCK_SUBJEK_LIST, transaksi: mockTransaksi };
+};
+
+    </script>
+    <script>
+/**
+ * VISIJADUAL PRO V2 — PENGURUSAN FAIL ZIP & DATA INDUK (fail.js)
+ * - Buka / Simpan / Simpan Sebagai fail ZIP
+ * - Skrin permulaan (Buka fail, Mula baru, Data contoh)
+ * - Penunjuk "belum disimpan" & amaran sebelum tutup tab
+ * - Modal Data Induk: urus senarai Guru, Kelas & Subjek
+ */
+(function () {
+    const supportsFsApi = typeof window.showSaveFilePicker === 'function' && typeof window.showOpenFilePicker === 'function';
+    const ZIP_PICKER_TYPES = [{ description: 'Fail Data VisiJadual (ZIP)', accept: { 'application/zip': ['.zip'] } }];
+    let fileHandle = null; // handle fail semasa (Chrome/Edge sahaja) untuk "Simpan" terus ke fail yang sama
+
+    const $ = id => document.getElementById(id);
+    const esc = s => (typeof escapeHtml === 'function' ? escapeHtml(s) : String(s == null ? '' : s));
+    const toast = (m, t, d) => (typeof showToast === 'function' ? showToast(m, t, d) : alert(m));
+    const icons = () => { if (window.lucide) lucide.createIcons(); };
+
+    function showLoading(msg) {
+        $('loadingOverlay').style.display = 'flex';
+        $('loadingMsg').innerText = msg;
+    }
+    function hideLoading() { $('loadingOverlay').style.display = 'none'; }
+
+    // =========================================================================
+    // STATUS FAIL DI HEADER
+    // =========================================================================
+    function renderFileStatus(st) {
+        st = st || VJStore.getStatus();
+        const el = $('fileStatusChip');
+        if (!el) return;
+        const name = st.fileName || 'Fail belum disimpan';
+        el.title = st.fileName ? `Fail: ${st.fileName}` : 'Data belum pernah disimpan ke fail ZIP';
+        el.innerHTML = `
+            <i data-lucide="file-archive" class="w-3.5 h-3.5 shrink-0"></i>
+            <span class="truncate max-w-[9rem]">${esc(name)}</span>
+            ${st.dirty ? '<span class="w-2 h-2 rounded-full bg-amber-400 shrink-0" title="Ada perubahan belum disimpan"></span>' : ''}`;
+        const saveBtn = $('btnSaveZip');
+        if (saveBtn) saveBtn.classList.toggle('ring-2', !!st.dirty);
+        document.title = (st.dirty ? '• ' : '') + 'VisiJadual Pro v2' + (st.fileName ? ` — ${st.fileName}` : '');
+        icons();
+    }
+
+    // =========================================================================
+    // SIMPAN ZIP
+    // =========================================================================
+    async function writeToHandle(handle, blob) {
+        const w = await handle.createWritable();
+        await w.write(blob);
+        await w.close();
+    }
+
+    async function saveZip(saveAs) {
+        try {
+            const blob = await VJStore.buildZipBlob();
+            const st = VJStore.getStatus();
+
+            if (supportsFsApi) {
+                if (!fileHandle || saveAs) {
+                    try {
+                        fileHandle = await window.showSaveFilePicker({
+                            suggestedName: st.fileName || VJStore.defaultZipName(),
+                            types: ZIP_PICKER_TYPES
+                        });
+                    } catch (e) {
+                        if (e.name === 'AbortError') return; // pengguna batal
+                        throw e;
+                    }
+                }
+                await writeToHandle(fileHandle, blob);
+                VJStore.markSaved(fileHandle.name);
+                toast(`Data disimpan ke "${fileHandle.name}".`, 'success');
+                return;
+            }
+
+            // Pelayar lain: muat turun fail
+            let name = st.fileName || VJStore.defaultZipName();
+            if (saveAs || !st.fileName) {
+                const input = prompt('Nama fail ZIP untuk dimuat turun:', name);
+                if (input === null) return;
+                name = input.trim() || VJStore.defaultZipName();
+            }
+            if (!/\.zip$/i.test(name)) name += '.zip';
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = name;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            setTimeout(() => URL.revokeObjectURL(url), 3000);
+            VJStore.markSaved(name);
+            toast(`Fail "${name}" dimuat turun ke folder Downloads.`, 'success');
+        } catch (e) {
+            console.error(e);
+            toast('Gagal menyimpan fail ZIP: ' + e.message, 'error', 6000);
+        }
+    }
+
+    // =========================================================================
+    // BUKA ZIP
+    // =========================================================================
+    function confirmDiscard() {
+        if (!VJStore.isDirty()) return true;
+        return confirm('⚠️ Ada perubahan yang BELUM disimpan ke fail ZIP.\n\nTeruskan dan buang perubahan tersebut?');
+    }
+
+    async function loadZipFile(file, handle) {
+        showLoading(`Membuka fail "${file.name}"...`);
+        try {
+            const st = await VJStore.openZip(file);
+            fileHandle = handle || null;
+            afterDataReplaced();
+            closeWelcome();
+            toast(`Fail "${file.name}" dibuka: ${st.counts.guru} guru, ${st.counts.kelas} kelas, ${st.counts.transaksi} agihan.`, 'success', 4500);
+        } catch (e) {
+            hideLoading();
+            console.error(e);
+            toast('Gagal membuka fail: ' + e.message, 'error', 7000);
+        }
+    }
+
+    async function openZip() {
+        if (!confirmDiscard()) return;
+        if (supportsFsApi) {
+            try {
+                const [handle] = await window.showOpenFilePicker({ types: ZIP_PICKER_TYPES, multiple: false });
+                const file = await handle.getFile();
+                await loadZipFile(file, handle);
+            } catch (e) {
+                if (e.name !== 'AbortError') toast('Gagal membuka fail: ' + e.message, 'error');
+            }
+            return;
+        }
+        $('zipFileInput').click();
+    }
+
+    function onZipInputChange(ev) {
+        const file = ev.target.files && ev.target.files[0];
+        ev.target.value = '';
+        if (file) loadZipFile(file, null);
+    }
+
+    // Data telah diganti sepenuhnya (buka fail / baru / contoh)
+    function afterDataReplaced() {
+        // Fail lain mungkin ada kata laluan lain — tutup Mod Edit & kosongkan undo
+        if (typeof isEditMode !== 'undefined' && isEditMode && typeof lockEditMode === 'function') {
+            isEditMode = false;
+            try { localStorage.removeItem(EDIT_MODE_STORAGE_KEY); } catch (e) {}
+            renderAuthModeUI();
+        }
+        if (typeof undoStack !== 'undefined') { undoStack.length = 0; updateUndoBtnUI(); }
+        loadAllData();
+    }
+
+    function newFile() {
+        if (!confirmDiscard()) return;
+        VJStore.newEmpty();
+        fileHandle = null;
+        afterDataReplaced();
+        closeWelcome();
+        toast('Fail baharu dicipta. Mulakan dengan menambah Guru, Kelas & Subjek di "Data Induk". Kata laluan lalai: admin123', 'info', 7000);
+        setTimeout(() => openDataInduk('guru'), 400);
+    }
+
+    function loadSample() {
+        if (!confirmDiscard()) return;
+        VJStore.loadDb(VJSampleData(), { dirty: true });
+        fileHandle = null;
+        afterDataReplaced();
+        closeWelcome();
+        toast('Data contoh dimuatkan. Kata laluan Mod Edit: admin123', 'info', 5000);
+    }
+
+    // =========================================================================
+    // SKRIN PERMULAAN
+    // =========================================================================
+    function openWelcome() {
+        hideLoading();
+        $('welcomeModal').style.display = 'flex';
+        icons();
+    }
+    function closeWelcome() { const m = $('welcomeModal'); if (m) m.style.display = 'none'; }
+
+    // Seret & lepas fail ZIP ke mana-mana bahagian halaman
+    function setupDragDrop() {
+        window.addEventListener('dragover', e => {
+            if (e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files')) e.preventDefault();
+        });
+        window.addEventListener('drop', e => {
+            const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+            if (!file || !/\.zip$/i.test(file.name)) return;
+            e.preventDefault();
+            if (confirmDiscard()) loadZipFile(file, null);
+        });
+    }
+
+    // =========================================================================
+    // DATA INDUK (GURU / KELAS / SUBJEK)
+    // =========================================================================
+    const DI_TABLES = {
+        guru: {
+            title: 'Guru', icon: 'users',
+            cols: [
+                { label: 'ID', ro: true, w: 'w-16' },
+                { label: 'Nama Guru', ph: 'cth: AHMAD BIN ALI' },
+                { label: 'Singkatan', ph: 'cth: AHMAD', w: 'w-32' },
+                { label: 'Maks. Waktu', type: 'number', w: 'w-24' }
+            ],
+            pasteHelp: 'Nama Guru [Tab] Singkatan [Tab] Maks. Waktu',
+            defaults: ['', '', '', 24]
+        },
+        kelas: {
+            title: 'Kelas', icon: 'school',
+            cols: [
+                { label: 'ID', ro: true, w: 'w-16' },
+                { label: 'Nama Kelas', ph: 'cth: 1 ARIF', w: 'w-40' },
+                { label: 'Tingkatan', type: 'number', w: 'w-24' },
+                { label: 'Guru Kelas', list: 'diGuruNames' }
+            ],
+            pasteHelp: 'Nama Kelas [Tab] Tingkatan [Tab] Guru Kelas',
+            defaults: ['', '', 1, '']
+        },
+        subjek: {
+            title: 'Subjek', icon: 'book-open',
+            cols: [
+                { label: 'ID', ro: true, w: 'w-16' },
+                { label: 'Nama Subjek', ph: 'cth: Bahasa Melayu' },
+                { label: 'Kod', ph: 'cth: BM', w: 'w-32' },
+                { label: 'Waktu/Minggu', type: 'number', w: 'w-24' }
+            ],
+            pasteHelp: 'Nama Subjek [Tab] Kod [Tab] Waktu/Minggu',
+            defaults: ['', '', '', 0]
+        }
+    };
+    let diTable = 'guru';
+    let diRows = [];
+    let diDirty = false;
+
+    function openDataInduk(table) {
+        if (typeof ensureEditMode === 'function' && !isEditMode) {
+            ensureEditMode(() => openDataInduk(table));
+            return;
+        }
+        diSwitch(table || diTable, true);
+        $('dataIndukModal').style.display = 'flex';
+    }
+
+    function closeDataInduk() {
+        if (diDirty && !confirm('Perubahan Data Induk belum disimpan. Tutup tanpa simpan?')) return;
+        diDirty = false;
+        $('dataIndukModal').style.display = 'none';
+    }
+
+    function diSwitch(table, force) {
+        if (!force && table === diTable) return;
+        if (!force && diDirty && !confirm('Perubahan pada senarai ini belum disimpan. Tukar tab dan buang perubahan?')) return;
+        diTable = table;
+        diRows = VJStore.getMaster(table);
+        diDirty = false;
+        $('diPasteBox').classList.add('hidden');
+        $('diSearch').value = '';
+        diRender();
+    }
+
+    function diRender() {
+        const cfg = DI_TABLES[diTable];
+        Object.keys(DI_TABLES).forEach(k => {
+            const b = $('diTab-' + k);
+            if (b) b.className = 'px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition ' +
+                (k === diTable ? 'bg-white text-brand-700 shadow-sm' : 'text-slate-500 hover:text-slate-800');
+        });
+        $('diPasteHelp').innerText = cfg.pasteHelp;
+
+        // Senarai nama guru untuk cadangan "Guru Kelas"
+        const dl = $('diGuruNames');
+        dl.innerHTML = VJStore.getMaster('guru').map(g => `<option value="${esc(g[1])}">`).join('');
+
+        const q = $('diSearch').value.trim().toLowerCase();
+        $('diHead').innerHTML = cfg.cols.map(c => `<th class="text-left px-2 py-2 font-bold text-slate-600 ${c.w || ''}">${c.label}</th>`).join('') +
+            '<th class="px-2 py-2 w-24 text-right font-bold text-slate-600">Guna</th><th class="w-10"></th>';
+
+        const body = diRows.map((r, i) => {
+            if (q && !r.some(v => String(v).toLowerCase().includes(q))) return '';
+            const used = r[0] ? VJStore.usageCount(diTable, r[0]) : 0;
+            const cells = cfg.cols.map((c, ci) => {
+                if (c.ro) return `<td class="px-2 py-1 font-mono text-[11px] text-slate-400">${esc(r[ci] || 'baru')}</td>`;
+                return `<td class="px-1 py-1"><input ${c.type === 'number' ? 'type="number" min="0"' : 'type="text"'} ${c.list ? `list="${c.list}"` : ''}
+                    value="${esc(r[ci])}" placeholder="${esc(c.ph || '')}" data-r="${i}" data-c="${ci}"
+                    class="di-input w-full border border-transparent hover:border-slate-200 focus:border-brand-600 bg-transparent focus:bg-white rounded-lg px-2 py-1.5 text-xs outline-none"></td>`;
+            }).join('');
+            return `<tr class="border-t border-slate-100 hover:bg-slate-50/70">${cells}
+                <td class="px-2 py-1 text-right text-[11px] ${used ? 'text-brand-700 font-bold' : 'text-slate-300'}">${used ? used + ' agihan' : '-'}</td>
+                <td class="px-1 py-1 text-center"><button onclick="VJFile.diDelete(${i})" class="p-1.5 rounded-lg ${used ? 'text-slate-300 cursor-not-allowed' : 'text-rose-500 hover:bg-rose-50'}"
+                    title="${used ? 'Masih digunakan dalam agihan — tidak boleh dipadam' : 'Padam'}"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button></td></tr>`;
+        }).join('');
+        $('diBody').innerHTML = body || `<tr><td colspan="6" class="text-center text-xs text-slate-400 py-10">Tiada ${cfg.title.toLowerCase()}. Klik "Tambah" atau "Tampal dari Excel".</td></tr>`;
+        $('diCount').innerText = `${diRows.length} ${cfg.title.toLowerCase()}`;
+        $('diSaveBtn').disabled = !diDirty;
+        $('diSaveBtn').classList.toggle('opacity-50', !diDirty);
+        icons();
+    }
+
+    function diOnInput(ev) {
+        const t = ev.target;
+        if (!t.classList.contains('di-input')) return;
+        diRows[+t.dataset.r][+t.dataset.c] = t.value;
+        if (!diDirty) {
+            diDirty = true;
+            $('diSaveBtn').disabled = false;
+            $('diSaveBtn').classList.remove('opacity-50');
+        }
+    }
+
+    function diAdd() {
+        diRows.push(DI_TABLES[diTable].defaults.slice());
+        diDirty = true;
+        $('diSearch').value = '';
+        diRender();
+        const inputs = document.querySelectorAll(`#diBody input[data-r="${diRows.length - 1}"]`);
+        if (inputs[0]) { inputs[0].scrollIntoView({ block: 'center' }); inputs[0].focus(); }
+    }
+
+    function diDelete(i) {
+        const r = diRows[i];
+        if (r[0] && VJStore.usageCount(diTable, r[0]) > 0) {
+            toast(`"${r[1]}" masih digunakan dalam agihan. Padam atau pindahkan agihan tersebut dahulu.`, 'warning', 5000);
+            return;
+        }
+        diRows.splice(i, 1);
+        diDirty = true;
+        diRender();
+    }
+
+    function diTogglePaste() {
+        $('diPasteBox').classList.toggle('hidden');
+        $('diPasteText').focus();
+    }
+
+    function diApplyPaste() {
+        const text = $('diPasteText').value;
+        const defaults = DI_TABLES[diTable].defaults;
+        const existing = new Set(diRows.map(r => String(r[1]).trim().toLowerCase()));
+        let added = 0, skipped = 0;
+        text.split(/\r?\n/).forEach(line => {
+            if (!line.trim()) return;
+            const parts = line.split('\t').map(s => s.trim());
+            const row = ['', parts[0] || '', parts[1] !== undefined ? parts[1] : defaults[2], parts[2] !== undefined ? parts[2] : defaults[3]];
+            if (!row[1] || existing.has(row[1].toLowerCase())) { skipped++; return; }
+            existing.add(row[1].toLowerCase());
+            diRows.push(row);
+            added++;
+        });
+        $('diPasteText').value = '';
+        $('diPasteBox').classList.add('hidden');
+        if (added) diDirty = true;
+        diRender();
+        toast(`${added} baris ditambah${skipped ? `, ${skipped} dilangkau (kosong/berulang)` : ''}. Klik "Simpan" untuk sahkan.`, added ? 'success' : 'warning');
+    }
+
+    function diSave() {
+        try {
+            const n = VJStore.setMaster(diTable, diRows);
+            diRows = VJStore.getMaster(diTable);
+            diDirty = false;
+            diRender();
+            loadAllData();
+            toast(`Senarai ${DI_TABLES[diTable].title} disimpan (${n} rekod). Ingat simpan fail ZIP.`, 'success');
+        } catch (e) {
+            toast(e.message, 'error', 6000);
+        }
+    }
+
+    // =========================================================================
+    // PERMULAAN
+    // =========================================================================
+    function init() {
+        VJStore.onChange(renderFileStatus);
+        $('zipFileInput').addEventListener('change', onZipInputChange);
+        $('diBody').addEventListener('input', diOnInput);
+        $('diSearch').addEventListener('input', diRender);
+        setupDragDrop();
+
+        window.addEventListener('beforeunload', e => {
+            if (VJStore.isDirty()) { e.preventDefault(); e.returnValue = ''; }
+        });
+        window.addEventListener('keydown', e => {
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); saveZip(e.shiftKey); }
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'o') { e.preventDefault(); openZip(); }
+        });
+
+        const restored = VJStore.restoreAutosave();
+        renderFileStatus();
+        if (restored) {
+            const st = VJStore.getStatus();
+            if (st.dirty) toast('Data sesi terakhir dipulihkan dari pelayar. Ada perubahan belum disimpan ke ZIP.', 'warning', 6000);
+            return true; // terus muat data
+        }
+        openWelcome();
+        return false;
+    }
+
+    window.VJFile = {
+        init, saveZip, openZip, newFile, loadSample, openWelcome, closeWelcome,
+        openDataInduk, closeDataInduk, diSwitch, diAdd, diDelete, diTogglePaste, diApplyPaste, diSave,
+        supportsFsApi
+    };
+})();
+
+    </script>
 
     <style>
         /* Smooth Scrollbar */
@@ -371,6 +1592,126 @@
     <div id="toastContainer"></div>
 
     <!-- Hidden File Input for Excel Import -->
+    <!-- ============================================================== -->
+    <!-- FAIL ZIP: INPUT TERSEMBUNYI (pelayar tanpa File System Access) -->
+    <!-- ============================================================== -->
+    <input type="file" id="zipFileInput" accept=".zip,application/zip" class="hidden">
+    <datalist id="diGuruNames"></datalist>
+
+    <!-- ============================================================== -->
+    <!-- MODAL: SKRIN PERMULAAN (BUKA / BARU / CONTOH)                  -->
+    <!-- ============================================================== -->
+    <div id="welcomeModal" class="modal" style="z-index: 70;">
+        <div class="modal-content max-w-md">
+            <div class="bg-premium-header p-6 text-white shrink-0">
+                <div class="flex items-center gap-3">
+                    <div class="p-2.5 bg-white/10 rounded-xl">
+                        <i data-lucide="layout-grid" class="w-6 h-6 text-white"></i>
+                    </div>
+                    <div>
+                        <h2 class="font-heading font-extrabold text-lg">VisiJadual Pro v2</h2>
+                        <p class="text-[11px] text-white/80">Sistem Agihan Waktu & Kawalan Beban Guru</p>
+                    </div>
+                </div>
+            </div>
+            <div class="bg-white p-5 space-y-2.5">
+                <p class="text-xs text-slate-500 mb-1">Data anda disimpan dalam <strong>fail ZIP</strong> di komputer sendiri — tiada pelayan atau Google Sheet.</p>
+
+                <button onclick="VJFile.openZip()" class="w-full flex items-center gap-3 p-3.5 rounded-xl border-2 border-brand-200 bg-brand-50 hover:bg-brand-100 text-left transition">
+                    <div class="p-2 bg-brand-600 text-white rounded-lg shrink-0"><i data-lucide="folder-open" class="w-5 h-5"></i></div>
+                    <div>
+                        <div class="text-sm font-bold text-slate-800">Buka Fail ZIP</div>
+                        <div class="text-[11px] text-slate-500">Sambung kerja dari fail yang telah disimpan</div>
+                    </div>
+                </button>
+
+                <button onclick="VJFile.newFile()" class="w-full flex items-center gap-3 p-3.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-left transition">
+                    <div class="p-2 bg-slate-100 text-slate-700 rounded-lg shrink-0"><i data-lucide="file-plus" class="w-5 h-5"></i></div>
+                    <div>
+                        <div class="text-sm font-bold text-slate-800">Mula Baru (Kosong)</div>
+                        <div class="text-[11px] text-slate-500">Masukkan senarai guru, kelas & subjek sekolah anda</div>
+                    </div>
+                </button>
+
+                <button onclick="VJFile.loadSample()" class="w-full flex items-center gap-3 p-3.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-left transition">
+                    <div class="p-2 bg-amber-100 text-amber-700 rounded-lg shrink-0"><i data-lucide="sparkles" class="w-5 h-5"></i></div>
+                    <div>
+                        <div class="text-sm font-bold text-slate-800">Cuba Data Contoh</div>
+                        <div class="text-[11px] text-slate-500">Lihat cara sistem berfungsi dengan data rekaan</div>
+                    </div>
+                </button>
+
+                <p class="text-[10px] text-slate-400 text-center pt-1">Petua: seret & lepas fail ZIP ke halaman ini untuk membukanya.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================== -->
+    <!-- MODAL: DATA INDUK (GURU / KELAS / SUBJEK)                      -->
+    <!-- ============================================================== -->
+    <div id="dataIndukModal" class="modal">
+        <div class="modal-content" style="max-width: 820px;">
+            <div class="bg-premium-header p-4 flex justify-between items-center text-white shrink-0">
+                <div class="flex items-center gap-2">
+                    <div class="p-1.5 bg-white/10 rounded-lg"><i data-lucide="database" class="w-4 h-4 text-white"></i></div>
+                    <div>
+                        <h2 class="font-heading font-bold text-sm">Data Induk</h2>
+                        <p class="text-[10px] text-white/80">Senarai guru, kelas & subjek sekolah</p>
+                    </div>
+                </div>
+                <button type="button" onclick="VJFile.closeDataInduk()" class="hover:bg-white/20 rounded-full p-1 text-white/80 hover:text-white transition">
+                    <i data-lucide="x" class="w-4 h-4"></i>
+                </button>
+            </div>
+
+            <div class="bg-slate-50 border-b border-slate-200 px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 shrink-0">
+                <div class="flex items-center gap-1 bg-slate-200/70 p-1 rounded-xl">
+                    <button id="diTab-guru" onclick="VJFile.diSwitch('guru')"><i data-lucide="users" class="w-3.5 h-3.5"></i> Guru</button>
+                    <button id="diTab-kelas" onclick="VJFile.diSwitch('kelas')"><i data-lucide="school" class="w-3.5 h-3.5"></i> Kelas</button>
+                    <button id="diTab-subjek" onclick="VJFile.diSwitch('subjek')"><i data-lucide="book-open" class="w-3.5 h-3.5"></i> Subjek</button>
+                </div>
+                <div class="flex items-center gap-1.5">
+                    <div class="relative">
+                        <i data-lucide="search" class="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2 pointer-events-none"></i>
+                        <input id="diSearch" type="text" placeholder="Cari..." class="w-32 sm:w-40 pl-8 pr-2 py-1.5 border border-slate-200 rounded-lg text-xs outline-none focus:border-brand-600 bg-white">
+                    </div>
+                    <button onclick="VJFile.diTogglePaste()" class="px-2.5 py-1.5 border border-slate-200 bg-white hover:bg-slate-100 rounded-lg text-xs font-bold text-slate-700 flex items-center gap-1.5" title="Tampal banyak baris sekaligus dari Excel">
+                        <i data-lucide="clipboard-paste" class="w-3.5 h-3.5"></i> <span class="hidden sm:inline">Tampal dari Excel</span>
+                    </button>
+                    <button onclick="VJFile.diAdd()" class="px-2.5 py-1.5 bg-brand-50 border border-brand-200 hover:bg-brand-100 rounded-lg text-xs font-bold text-brand-700 flex items-center gap-1.5">
+                        <i data-lucide="plus" class="w-3.5 h-3.5"></i> Tambah
+                    </button>
+                </div>
+            </div>
+
+            <div id="diPasteBox" class="hidden bg-amber-50 border-b border-amber-200 p-4 shrink-0">
+                <p class="text-[11px] text-slate-600 mb-1.5">Salin lajur dari Excel dan tampal di bawah. Susunan lajur: <strong id="diPasteHelp"></strong>. Satu baris = satu rekod. ID akan dijana automatik.</p>
+                <textarea id="diPasteText" rows="5" class="w-full border border-amber-300 rounded-lg p-2 text-xs font-mono outline-none focus:border-brand-600 bg-white" placeholder="Tampal di sini (Ctrl+V)..."></textarea>
+                <div class="flex justify-end gap-2 mt-2">
+                    <button onclick="VJFile.diTogglePaste()" class="px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-600">Batal</button>
+                    <button onclick="VJFile.diApplyPaste()" class="px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-xs font-bold">Tambah ke Senarai</button>
+                </div>
+            </div>
+
+            <div class="bg-white overflow-y-auto flex-1 min-h-[240px]">
+                <table class="w-full text-xs">
+                    <thead class="bg-slate-50 sticky top-0 z-10"><tr id="diHead"></tr></thead>
+                    <tbody id="diBody"></tbody>
+                </table>
+            </div>
+
+            <div class="bg-slate-50 border-t border-slate-200 px-4 py-3 flex items-center justify-between gap-2 shrink-0">
+                <span id="diCount" class="text-[11px] text-slate-500 font-medium"></span>
+                <div class="flex items-center gap-2">
+                    <button onclick="VJFile.closeDataInduk()" class="px-3 py-2 bg-white border border-slate-200 hover:bg-slate-100 text-slate-600 rounded-xl text-xs font-bold transition">Tutup</button>
+                    <button id="diSaveBtn" onclick="VJFile.diSave()" class="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-bold shadow transition flex items-center gap-1.5">
+                        <i data-lucide="check" class="w-3.5 h-3.5"></i> Simpan Senarai
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <input type="file" id="importExcelInput" accept=".xlsx, .xls" class="hidden" onchange="handleImportExcelSelect(event)">
 
     <!-- Loading Overlay with Skeleton Spinner -->
@@ -611,7 +1952,7 @@
                         </div>
                         <div>
                             <p class="text-xs font-bold text-slate-800">Arkibkan Agihan (Snapshot Salinan)</p>
-                            <p class="text-[11px] text-slate-500">Salin agihan ke helaian arkib untuk sandaran. Rekod aktif <strong>tidak dipadam</strong>.</p>
+                            <p class="text-[11px] text-slate-500">Salin agihan ke arkib (dalam fail ZIP) untuk sandaran. Rekod aktif <strong>tidak dipadam</strong>.</p>
                         </div>
                     </div>
                     <input type="text" id="arkibNamaSesi" class="w-full text-xs border border-slate-300 rounded-xl p-2.5 outline-none focus:border-brand-600 mb-2.5 bg-white font-medium" placeholder="Cth: Sesi Akhir Tahun 2025 (Versi 1.0)">
@@ -761,11 +2102,25 @@
                 <span id="undoCountBadge" class="hidden text-[10px] bg-amber-400 text-slate-900 px-1.5 py-0.5 rounded-full font-bold">0</span>
             </button>
 
-            <!-- Sync / Refresh Button -->
-            <button onclick="loadAllData()" class="p-2 hover:bg-white/15 rounded-xl text-white transition flex items-center gap-1.5 text-xs font-semibold" title="Muat Semula Data dari Google Sheets">
-                <i data-lucide="refresh-cw" class="w-4 h-4"></i>
-                <span class="hidden md:inline">Segerak</span>
-            </button>
+            <!-- Fail ZIP: Status, Baru, Buka, Simpan -->
+            <div class="flex items-center gap-1 pl-2 border-l border-white/20">
+                <span id="fileStatusChip" class="hidden lg:flex items-center gap-1.5 text-[11px] font-medium text-white/80 bg-white/10 px-2.5 py-1 rounded-full border border-white/15"></span>
+                <button onclick="VJFile.newFile()" class="p-2 hover:bg-white/15 rounded-xl text-white transition flex items-center gap-1.5 text-xs font-semibold" title="Fail baharu (kosong)">
+                    <i data-lucide="file-plus" class="w-4 h-4"></i>
+                    <span class="hidden xl:inline">Baru</span>
+                </button>
+                <button onclick="VJFile.openZip()" class="p-2 hover:bg-white/15 rounded-xl text-white transition flex items-center gap-1.5 text-xs font-semibold" title="Buka fail ZIP (Ctrl+O)">
+                    <i data-lucide="folder-open" class="w-4 h-4"></i>
+                    <span class="hidden md:inline">Buka</span>
+                </button>
+                <button id="btnSaveZip" onclick="VJFile.saveZip(false)" class="px-2.5 py-1.5 bg-white text-brand-700 hover:bg-white/90 ring-amber-400 rounded-xl transition flex items-center gap-1.5 text-xs font-bold shadow-sm" title="Simpan ke fail ZIP (Ctrl+S)">
+                    <i data-lucide="save" class="w-4 h-4"></i>
+                    <span class="hidden sm:inline">Simpan</span>
+                </button>
+                <button onclick="VJFile.saveZip(true)" class="p-2 hover:bg-white/15 rounded-xl text-white transition" title="Simpan Sebagai fail ZIP baharu (Ctrl+Shift+S)">
+                    <i data-lucide="save-all" class="w-4 h-4"></i>
+                </button>
+            </div>
 
             <!-- Mode Status & Edit Mode Button -->
             <div id="authModeContainer" class="flex items-center gap-2 pl-2 border-l border-white/20 text-white">
@@ -798,10 +2153,16 @@
             <button onclick="switchTab('arkib')" id="nav-arkib" class="nav-tab">
                 <i data-lucide="archive" class="w-4 h-4"></i> Arkib Data
             </button>
+            <button onclick="switchTab('slot')" id="nav-slot" class="nav-tab">
+                <i data-lucide="calendar-clock" class="w-4 h-4"></i> Slot Masa
+            </button>
         </div>
 
         <!-- Quick Action Buttons -->
         <div class="flex items-center gap-1.5 py-1.5">
+            <button onclick="VJFile.openDataInduk()" class="text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition" title="Urus senarai Guru, Kelas & Subjek">
+                <i data-lucide="database" class="w-3.5 h-3.5"></i> Data Induk
+            </button>
             <button onclick="openArkibModal()" class="text-rose-600 hover:bg-rose-50 px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition" title="Urus Arkib dan Reset">
                 <i data-lucide="archive" class="w-3.5 h-3.5"></i> Arkib/Reset
             </button>
@@ -1204,290 +2565,118 @@
                 <p class="text-center text-slate-400 italic text-xs py-8">Memuatkan data arkib...</p>
             </div>
         </div>
+
+        <!-- ============================================================== -->
+        <!-- VIEW 7: SLOT MASA KELAS (SLOT BOLEH ISI / BLOK)                -->
+        <!-- ============================================================== -->
+        <div id="view-slot" class="view-section hidden bg-white border border-slate-200 rounded-2xl shadow-card overflow-hidden">
+            <div class="p-3.5 bg-slate-50/80 border-b border-slate-200 flex flex-wrap justify-between items-center gap-2 no-print">
+                <div class="flex items-center gap-2">
+                    <i data-lucide="calendar-clock" class="w-4 h-4 text-brand-600"></i>
+                    <h3 class="text-sm font-heading font-bold text-slate-800">Slot Masa Kelas</h3>
+                    <span id="slotOverview" class="text-[11px] text-slate-500"></span>
+                </div>
+                <button onclick="slotToggleSettings()" class="px-3 py-1.5 border border-slate-200 bg-white hover:bg-slate-100 rounded-lg text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                    <i data-lucide="settings-2" class="w-3.5 h-3.5"></i> Tetapan Hari & Waktu
+                </button>
+            </div>
+
+            <!-- Tetapan hari & waktu -->
+            <div id="slotSettings" class="hidden p-4 border-b border-slate-200 bg-indigo-50/40">
+                <div class="grid md:grid-cols-2 gap-4">
+                    <div class="space-y-3">
+                        <div>
+                            <label class="block text-xs font-bold text-slate-700 mb-1">Hari persekolahan <span class="font-normal text-slate-400">(asingkan dengan koma)</span></label>
+                            <input id="slotCfgHari" type="text" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs outline-none focus:border-brand-600 bg-white">
+                            <div class="flex gap-1.5 mt-1.5">
+                                <button onclick="slotPresetHari('Isnin, Selasa, Rabu, Khamis, Jumaat')" class="px-2 py-1 text-[11px] font-bold bg-white border border-slate-200 rounded-lg hover:bg-slate-100">Isnin – Jumaat</button>
+                                <button onclick="slotPresetHari('Ahad, Isnin, Selasa, Rabu, Khamis')" class="px-2 py-1 text-[11px] font-bold bg-white border border-slate-200 rounded-lg hover:bg-slate-100">Ahad – Khamis</button>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-slate-700 mb-1">Jana waktu secara automatik</label>
+                            <div class="flex flex-wrap items-end gap-2">
+                                <div><span class="block text-[10px] text-slate-500">Bil. waktu sehari</span><input id="slotGenBil" type="number" min="1" max="20" value="11" class="w-20 border border-slate-300 rounded-lg px-2 py-1.5 text-xs bg-white"></div>
+                                <div><span class="block text-[10px] text-slate-500">Mula</span><input id="slotGenMula" type="time" value="07:30" class="border border-slate-300 rounded-lg px-2 py-1 text-xs bg-white"></div>
+                                <div><span class="block text-[10px] text-slate-500">Minit / waktu</span><input id="slotGenTempoh" type="number" min="5" max="120" value="30" class="w-20 border border-slate-300 rounded-lg px-2 py-1.5 text-xs bg-white"></div>
+                                <button onclick="slotGenerate()" class="px-3 py-1.5 bg-white border border-brand-200 text-brand-700 rounded-lg text-xs font-bold hover:bg-brand-50">Jana</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1">Senarai waktu <span class="font-normal text-slate-400">(boleh ubah masa setiap waktu)</span></label>
+                        <div id="slotCfgWaktu" class="grid grid-cols-2 sm:grid-cols-3 gap-1.5 max-h-48 overflow-y-auto p-1"></div>
+                    </div>
+                </div>
+                <div class="flex justify-end gap-2 mt-3">
+                    <button onclick="slotToggleSettings()" class="px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600">Batal</button>
+                    <button onclick="slotSaveSettings()" class="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-bold shadow flex items-center gap-1.5"><i data-lucide="check" class="w-3.5 h-3.5"></i> Simpan Tetapan</button>
+                </div>
+            </div>
+
+            <div class="flex flex-col lg:flex-row min-h-[60vh]">
+                <!-- Senarai kelas -->
+                <div class="lg:w-64 shrink-0 border-b lg:border-b-0 lg:border-r border-slate-200 bg-slate-50/50">
+                    <div class="px-3 py-2 text-[10px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200">Kelas · agihan / slot boleh isi</div>
+                    <div id="slotKelasList" class="max-h-[30vh] lg:max-h-[70vh] overflow-y-auto p-2 space-y-1"></div>
+                </div>
+
+                <!-- Grid slot kelas terpilih -->
+                <div class="flex-1 min-w-0 p-4">
+                    <div id="slotEmpty" class="text-center text-xs text-slate-400 py-16">Tiada kelas. Tambah kelas di "Data Induk" dahulu.</div>
+                    <div id="slotEditor" class="hidden">
+                        <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
+                            <div>
+                                <h4 id="slotKelasTitle" class="font-heading font-bold text-lg text-slate-800"></h4>
+                                <p id="slotKelasStats" class="text-xs text-slate-500"></p>
+                            </div>
+                            <div class="flex flex-wrap gap-1.5">
+                                <button onclick="slotOpenCopyPanel()" class="px-2.5 py-1.5 border border-brand-200 bg-brand-50 hover:bg-brand-100 rounded-lg text-xs font-bold text-brand-700 flex items-center gap-1.5"><i data-lucide="list-checks" class="w-3.5 h-3.5"></i> Salin ke Kelas Pilihan</button>
+                                <button onclick="slotCopy('tingkatan')" class="px-2.5 py-1.5 border border-slate-200 bg-white hover:bg-slate-100 rounded-lg text-xs font-bold text-slate-700 flex items-center gap-1.5"><i data-lucide="copy" class="w-3.5 h-3.5"></i> Salin ke Tingkatan Sama</button>
+                                <button onclick="slotCopy('semua')" class="px-2.5 py-1.5 border border-slate-200 bg-white hover:bg-slate-100 rounded-lg text-xs font-bold text-slate-700 flex items-center gap-1.5"><i data-lucide="copy-check" class="w-3.5 h-3.5"></i> Salin ke Semua Kelas</button>
+                                <button onclick="slotClear()" class="px-2.5 py-1.5 border border-rose-200 bg-rose-50 hover:bg-rose-100 rounded-lg text-xs font-bold text-rose-700 flex items-center gap-1.5"><i data-lucide="eraser" class="w-3.5 h-3.5"></i> Kosongkan</button>
+                            </div>
+                        </div>
+
+                        <div id="slotCopyPanel" class="hidden mb-3 p-3 bg-brand-50/50 border border-brand-200 rounded-xl">
+                            <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+                                <p class="text-xs font-bold text-slate-700">Salin susunan slot <span id="slotCopyFrom" class="text-brand-700"></span> ke kelas berikut:</p>
+                                <div class="flex gap-2 text-[11px] font-bold">
+                                    <button onclick="slotCopyCheckAll(true)" class="text-brand-600 hover:underline">Pilih Semua</button>
+                                    <span class="text-slate-300">|</span>
+                                    <button onclick="slotCopyCheckAll(false)" class="text-slate-400 hover:underline">Nyahpilih</button>
+                                </div>
+                            </div>
+                            <div id="slotCopyList" class="space-y-1.5"></div>
+                            <div class="flex items-center justify-between gap-2 mt-3">
+                                <span id="slotCopyCount" class="text-[11px] text-slate-500"></span>
+                                <div class="flex gap-2">
+                                    <button onclick="slotCloseCopyPanel()" class="px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-600">Batal</button>
+                                    <button onclick="slotCopySelected()" class="px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5"><i data-lucide="copy" class="w-3.5 h-3.5"></i> Salin</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="flex flex-wrap items-center gap-1.5 mb-3 p-2 bg-slate-50 border border-slate-200 rounded-xl">
+                            <span class="text-[11px] font-bold text-slate-500 mr-1">Berus:</span>
+                            <div id="slotBrushes" class="flex flex-wrap gap-1.5"></div>
+                            <button onclick="slotAddLabel()" class="px-2 py-1 text-[11px] font-bold text-brand-700 hover:bg-brand-50 rounded-lg flex items-center gap-1"><i data-lucide="plus" class="w-3 h-3"></i> Label</button>
+                        </div>
+
+                        <div class="overflow-x-auto border border-slate-200 rounded-xl">
+                            <table id="slotGrid" class="w-full text-xs select-none" style="touch-action: none;"></table>
+                        </div>
+                        <p class="text-[11px] text-slate-400 mt-2">Pilih berus, kemudian klik atau seret pada petak. Klik nama hari / nombor waktu untuk isi satu baris / lajur. Klik semula petak berlabel sama untuk membuka semula slot.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
     </main>
 
     <!-- ============================================================== -->
     <!-- LOGIK JAVASCRIPT & STATE MANAGEMENT                            -->
     <!-- ============================================================== -->
     <script>
-        // ==============================================================
-        // MOCK ENVIRONMENT FOR LOCAL PREVIEW / OFFLINE TESTING
-        // Automatically disabled when running inside Google Apps Script
-        // ==============================================================
-        if (typeof google === 'undefined') {
-            (function() {
-                const MOCK_GURU_NAMES = [
-                    "ZURAIDAH BINTI ALI", "AHMAD BIN HASSAN", "NORLIZA BINTI ISMAIL", "SITI AISHAH BINTI OMAR",
-                    "MOHD FAIZAL BIN ABDULLAH", "WAN ROSLAN BIN WAN DAUD", "AZIZAH BINTI OTHMAN", "CHE NOR AINI BINTI MAT",
-                    "FARIDAH BINTI ZAINAL", "HARUN BIN ISMAIL", "ISMAIL BIN YAHYA", "JALIL BIN MOHD NOR",
-                    "KAMSIAH BINTI BAKAR", "LATIFAH BINTI ABU", "MANSOR BIN KASSIM", "NIK ROZITA BINTI NIK LEH",
-                    "OTHMAN BIN IBRAHIM", "PUZIAH BINTI EMBONG", "QISTINA BINTI AZMAN", "ROHANI BINTI JUSOH",
-                    "SALLEH BIN CHE DIN", "TENGKU AMINAH BINTI T. MUSA", "UMAR BIN SALLEH", "VIMAL A/L RAMAN",
-                    "WONG KAH WAI", "XAVIER A/L ANTHONY", "YUSOF BIN AWANG", "ZAINAL BIN BIDIN",
-                    "AMINAH BINTI SULAIMAN", "BASHAR BIN IDRIS", "CHONG WEI HONG", "DAUD BIN OSMAN",
-                    "ENDOK BINTI KADER", "FAUZI BIN CHE MAT", "GHAZALI BIN JUSOH", "HASNAH BINTI SALIM",
-                    "IDRIS BIN MAHMUD", "JUNAIDAH BINTI SAAD", "KAMARUZAMAN BIN ARIFFIN", "LUKMAN HAKIM BIN DAUD",
-                    "MAZNAH BINTI ABDUL GHANI", "NOR AZLAN BIN MAJID", "ONG LI TING", "PAUZI BIN DERAMAN",
-                    "RAHIMAH BINTI YAACOB", "SHUKRI BIN ABDUL RAHMAN", "TAN SWEE HENG", "USMAN BIN SULONG",
-                    "VICTORIA TAN", "WAHID BIN HASSAN", "YASMIN BINTI MUSTAPHA", "ZAKI BIN HARUN",
-                    "AZLAN BIN MAT", "BAHARUDDIN BIN JAAFAR", "CHEE SIEW LING", "DYG NORAINI BINTI ABG YUSOF",
-                    "EFFENDI BIN KAMIS", "FATIMAH BINTI DAUD"
-                ];
-
-                const MOCK_KELAS_LIST = [
-                    ["K01", "1DN", 1, "ZURAIDAH BINTI ALI"], ["K02", "1IN", 1, "AHMAD BIN HASSAN"],
-                    ["K03", "1KT", 1, "NORLIZA BINTI ISMAIL"], ["K04", "1OP", 1, "SITI AISHAH BINTI OMAR"],
-                    ["K05", "1PA", 1, "MOHD FAIZAL BIN ABDULLAH"], ["K06", "1PR", 1, "WAN ROSLAN BIN WAN DAUD"],
-                    ["K07", "2DN", 2, "AZIZAH BINTI OTHMAN"], ["K08", "2IN", 2, "CHE NOR AINI BINTI MAT"],
-                    ["K09", "2KT", 2, "FARIDAH BINTI ZAINAL"], ["K10", "2OP", 2, "HARUN BIN ISMAIL"],
-                    ["K11", "2PA", 2, "ISMAIL BIN YAHYA"], ["K12", "2PR", 2, "JALIL BIN MOHD NOR"],
-                    ["K13", "3DN", 3, "KAMSIAH BINTI BAKAR"], ["K14", "3IN", 3, "LATIFAH BINTI ABU"],
-                    ["K15", "3KT", 3, "MANSOR BIN KASSIM"], ["K16", "3OP", 3, "NIK ROZITA BINTI NIK LEH"],
-                    ["K17", "3PA", 3, "OTHMAN BIN IBRAHIM"], ["K18", "3PR", 3, "PUZIAH BINTI EMBONG"],
-                    ["K19", "4DN", 4, "QISTINA BINTI AZMAN"], ["K20", "4IN", 4, "ROHANI BINTI JUSOH"],
-                    ["K21", "4KT", 4, "SALLEH BIN CHE DIN"], ["K22", "4OP", 4, "TENGKU AMINAH BINTI T. MUSA"],
-                    ["K23", "4PA", 4, "UMAR BIN SALLEH"], ["K24", "4PR", 4, "VIMAL A/L RAMAN"],
-                    ["K25", "5DN", 5, "WONG KAH WAI"], ["K26", "5IN", 5, "XAVIER A/L ANTHONY"],
-                    ["K27", "5KT", 5, "YUSOF BIN AWANG"], ["K28", "5OP", 5, "ZAINAL BIN BIDIN"],
-                    ["K29", "5PA", 5, "AMINAH BINTI SULAIMAN"]
-                ];
-
-                const MOCK_SUBJEK_LIST = [
-                    ["S01", "Bahasa Melayu", "BM", 7],
-                    ["S02", "Sejarah", "SJ", 4],
-                    ["S03", "Matematik", "MATE", 6],
-                    ["S04", "Bahasa Inggeris", "BI", 6],
-                    ["S05", "Pendidikan Islam", "PI", 7],
-                    ["S06", "Geografi", "GEO", 3],
-                    ["S07", "Sains", "SC", 6],
-                    ["S08", "Pendidikan Seni Visual", "PSV", 2],
-                    ["S09", "Asas Sains Komputer", "ASK", 4],
-                    ["S10", "Reka Bentuk & Teknologi", "RBT", 4],
-                    ["S11", "Pendidikan Jasmani", "PJ", 2],
-                    ["S12", "Pendidikan Kesihatan", "PK", 2],
-                    ["S13", "Matematik Tambahan", "ADD MATH", 4],
-                    ["S14", "Fizik", "FZ", 4],
-                    ["S15", "Kimia", "KM", 4],
-                    ["S16", "Biologi", "BIO", 4],
-                    ["S17", "Prinsip Perakaunan", "PA", 4],
-                    ["S18", "Perniagaan", "PERN", 4],
-                    ["S19", "Tasawwur Islam", "TI", 4],
-                    ["S20", "Sains Rumah Tangga", "SRT", 4],
-                    ["S21", "Sains Sukan", "SS", 4],
-                    ["S22", "PVMA", "PVMA", 11],
-                    ["S23", "Pendidikan Islam PVMA", "PI PVMA", 3],
-                    ["S24", "Matematik PVMA", "MATE PVMA", 3],
-                    ["S25", "Elektif Khusus", "EX", 2]
-                ];
-
-                const mockGuru = MOCK_GURU_NAMES.map((name, i) => [`G${String(i+1).padStart(2, '0')}`, name, name.split(' ')[0], 24]);
-                const mockTransaksi = [];
-                const mockStats = {};
-
-                // Generate standard allocations for Lower Secondary (1DN to 3PR)
-                const lowerClasses = MOCK_KELAS_LIST.slice(0, 18);
-                const defaultLowerSubs = [
-                    { id: "S01", nama: "Bahasa Melayu", kod: "BM", masa: 7, pecahan: "2,3,2", gOffset: 0 },
-                    { id: "S02", nama: "Sejarah", kod: "SJ", masa: 4, pecahan: "2,2", gOffset: 1 },
-                    { id: "S03", nama: "Matematik", kod: "MATE", masa: 6, pecahan: "2,2,2", gOffset: 2 },
-                    { id: "S04", nama: "Bahasa Inggeris", kod: "BI", masa: 6, pecahan: "2,2,2", gOffset: 3 },
-                    { id: "S05", nama: "Pendidikan Islam", kod: "PI", masa: 7, pecahan: "2,3,2", gOffset: 4 },
-                    { id: "S06", nama: "Geografi", kod: "GEO", masa: 3, pecahan: "3", gOffset: 5 },
-                    { id: "S07", nama: "Sains", kod: "SC", masa: 6, pecahan: "2,2,2", gOffset: 6 },
-                    { id: "S08", nama: "Pendidikan Seni Visual", kod: "PSV", masa: 2, pecahan: "2", gOffset: 7 },
-                    { id: "S10", nama: "Reka Bentuk & Teknologi", kod: "RBT", masa: 4, pecahan: "2,2", label: "G1", gOffset: 8 },
-                    { id: "S11", nama: "Pendidikan Jasmani", kod: "PJ", masa: 2, pecahan: "2", gOffset: 9 },
-                    { id: "S12", nama: "Pendidikan Kesihatan", kod: "PK", masa: 2, pecahan: "2", gOffset: 10 }
-                ];
-
-                lowerClasses.forEach((k, kIdx) => {
-                    defaultLowerSubs.forEach(sub => {
-                        const gIdx = (kIdx + sub.gOffset) % mockGuru.length;
-                        const guru = mockGuru[gIdx];
-                        const uuid = `mock_${k[1]}_${sub.kod}_${Math.random().toString(36).substr(2, 6)}`;
-                        mockTransaksi.push([
-                            "28/10/2026 08:00:00",
-                            guru[0], guru[1],
-                            k[0], k[1],
-                            sub.id, sub.nama,
-                            sub.masa,
-                            uuid,
-                            sub.label || "",
-                            sub.pecahan
-                        ]);
-                        mockStats[guru[1]] = (mockStats[guru[1]] || 0) + sub.masa;
-                    });
-                });
-
-                // Special 1PA SJ teacher: ZURAIDAH BINTI ALI
-                const paSjIdx = mockTransaksi.findIndex(t => t[4] === '1PA' && t[5] === 'S02');
-                if (paSjIdx > -1) {
-                    const oldG = mockTransaksi[paSjIdx][2];
-                    mockStats[oldG] -= 4;
-                    mockTransaksi[paSjIdx][1] = "G01";
-                    mockTransaksi[paSjIdx][2] = "ZURAIDAH BINTI ALI";
-                    mockTransaksi[paSjIdx][10] = "2,2";
-                    mockStats["ZURAIDAH BINTI ALI"] = (mockStats["ZURAIDAH BINTI ALI"] || 0) + 4;
-                }
-
-                // Add ASK elective for 1OP and 1PA
-                ["1OP", "1PA", "2OP", "2PA", "3OP", "3PA"].forEach(cName => {
-                    const cObj = MOCK_KELAS_LIST.find(c => c[1] === cName);
-                    if (cObj) {
-                        const guru = mockGuru[15];
-                        const uuid = `mock_${cName}_ASK_${Math.random().toString(36).substr(2, 6)}`;
-                        mockTransaksi.push([
-                            "28/10/2026 08:00:00",
-                            guru[0], guru[1],
-                            cObj[0], cName,
-                            "S09", "Asas Sains Komputer",
-                            4,
-                            uuid,
-                            "G2",
-                            "2,2"
-                        ]);
-                        mockStats[guru[1]] = (mockStats[guru[1]] || 0) + 4;
-                    }
-                });
-
-                // Add 4DN PVMA: 11 waktu
-                const c4dn = MOCK_KELAS_LIST.find(c => c[1] === '4DN');
-                if (c4dn) {
-                    const guru = mockGuru[20];
-                    mockTransaksi.push([
-                        "28/10/2026 08:00:00",
-                        guru[0], guru[1],
-                        c4dn[0], "4DN",
-                        "S22", "PVMA",
-                        11,
-                        `mock_4DN_PVMA`,
-                        "",
-                        "3,4,4"
-                    ]);
-                    mockStats[guru[1]] = (mockStats[guru[1]] || 0) + 11;
-                }
-
-                const mockDb = {
-                    guru: mockGuru,
-                    kelas: MOCK_KELAS_LIST,
-                    subjek: MOCK_SUBJEK_LIST,
-                    transaksi: mockTransaksi,
-                    stats: mockStats
-                };
-
-                class MockGasRunner {
-                    constructor() {
-                        this._success = () => {};
-                        this._failure = () => {};
-                    }
-                    withSuccessHandler(fn) { this._success = fn; return this; }
-                    withFailureHandler(fn) { this._failure = fn; return this; }
-                    getAllData() {
-                        setTimeout(() => this._success(JSON.parse(JSON.stringify(mockDb))), 60);
-                    }
-                    simpanJadualBulk(payloads) {
-                        setTimeout(() => {
-                            payloads.forEach(p => {
-                                const uuid = 'mock_' + Math.random().toString(36).substr(2, 9);
-                                mockDb.transaksi.unshift([
-                                    new Date().toLocaleDateString('ms-MY'),
-                                    p.guruId, p.guruNama,
-                                    p.kelasId, p.kelasNama,
-                                    p.subjekId, p.subjekNama,
-                                    parseInt(p.masa),
-                                    uuid,
-                                    p.label || "",
-                                    p.pecahan || String(p.masa)
-                                ]);
-                                mockDb.stats[p.guruNama] = (mockDb.stats[p.guruNama] || 0) + parseInt(p.masa);
-                            });
-                            this._success(`Disimpan: ${payloads.length} rekod.`);
-                        }, 80);
-                    }
-                    updateAgihan(p, oldUuid) {
-                        setTimeout(() => {
-                            const idx = mockDb.transaksi.findIndex(t => t[8] === oldUuid);
-                            if (idx > -1) {
-                                const oldM = parseInt(mockDb.transaksi[idx][7]) || 0;
-                                const oldG = mockDb.transaksi[idx][2];
-                                mockDb.stats[oldG] = Math.max(0, (mockDb.stats[oldG] || 0) - oldM);
-                                mockDb.transaksi.splice(idx, 1);
-                            }
-                            const uuid = 'mock_' + Math.random().toString(36).substr(2, 9);
-                            mockDb.transaksi.unshift([
-                                new Date().toLocaleDateString('ms-MY'),
-                                p.guruId, p.guruNama,
-                                p.kelasId, p.kelasNama,
-                                p.subjekId, p.subjekNama,
-                                parseInt(p.masa),
-                                uuid,
-                                p.label || "",
-                                p.pecahan || String(p.masa)
-                            ]);
-                            mockDb.stats[p.guruNama] = (mockDb.stats[p.guruNama] || 0) + parseInt(p.masa);
-                            this._success("Data dikemaskini!");
-                        }, 80);
-                    }
-                    deleteAgihan(targetUuid) {
-                        setTimeout(() => {
-                            const targets = Array.isArray(targetUuid) ? targetUuid.map(String) : [String(targetUuid)];
-                            mockDb.transaksi = mockDb.transaksi.filter(t => {
-                                if (targets.includes(String(t[8]))) {
-                                    const oldM = parseInt(t[7]) || 0;
-                                    const oldG = t[2];
-                                    mockDb.stats[oldG] = Math.max(0, (mockDb.stats[oldG] || 0) - oldM);
-                                    return false;
-                                }
-                                return true;
-                            });
-                            this._success("Data dipadam.");
-                        }, 80);
-                    }
-                    getArkibSesi() { setTimeout(() => this._success([]), 50); }
-                    getArkibDetail() { setTimeout(() => this._success([]), 50); }
-                    restoreArkib() { setTimeout(() => this._success("Dipulihkan."), 50); }
-                    arkibkanAgihan() { setTimeout(() => this._success("Diarkibkan."), 50); }
-                    resetAgihan() { setTimeout(() => this._success("Direset."), 50); }
-                    updateGuruKelas(namaKelas, namaGuru) {
-                        setTimeout(() => {
-                            const k = mockDb.kelas.find(c => c[1] === namaKelas);
-                            if (k) k[3] = namaGuru;
-                            this._success(`Guru kelas untuk ${namaKelas} berjaya dikemaskini!`);
-                        }, 80);
-                    }
-                    sahkanKataLaluanAdmin(inputPass) {
-                        setTimeout(() => {
-                            const stored = localStorage.getItem('visijadual_mock_admin_pass') || 'admin123';
-                            if (String(inputPass || "").trim() === stored) {
-                                this._success({ success: true, message: "Kata laluan sah. Mod Edit diaktifkan." });
-                            } else {
-                                this._success({ success: false, message: "Kata laluan salah. Sila cuba lagi." });
-                            }
-                        }, 50);
-                    }
-                    kemaskiniKataLaluanAdmin(oldPass, newPass) {
-                        setTimeout(() => {
-                            const stored = localStorage.getItem('visijadual_mock_admin_pass') || 'admin123';
-                            if (String(oldPass || "").trim() !== stored) {
-                                if (this._failure) this._failure(new Error("Kata laluan semasa tidak tepat."));
-                                return;
-                            }
-                            localStorage.setItem('visijadual_mock_admin_pass', String(newPass).trim());
-                            this._success({ success: true, message: "Kata laluan berjaya dikemaskini!" });
-                        }, 50);
-                    }
-                }
-
-                window.google = {
-                    script: {
-                        get run() {
-                            return new MockGasRunner();
-                        }
-                    }
-                };
-            })();
-        }
-
         // =========================================================================
         // UTILITI KESELAMATAN & SANITASI XSS
         // =========================================================================
@@ -1535,7 +2724,7 @@
             renderAuthModeUI();
 
             loadDraftFromLocalStorage();
-            loadAllData();
+            if (VJFile.init()) loadAllData();
 
             window.onclick = function (event) {
                 if (!event.target.closest('.custom-select-trigger')) {
@@ -3633,7 +4822,7 @@
 
             const btn = document.getElementById('btnSimpanSemua');
             const originalText = btn.innerHTML;
-            btn.innerHTML = `<div class="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> Menyimpan ke Sheets...`;
+            btn.innerHTML = `<div class="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> Menyimpan...`;
             btn.disabled = true;
 
             const savedUuids = [];
@@ -5220,6 +6409,342 @@
         function exportBandingKePDF() {
             window.print();
         }
+    </script>
+    <script>
+        // =========================================================================
+        // SLOT MASA KELAS — tetapkan slot boleh isi & slot diblok bagi setiap kelas
+        // =========================================================================
+        const SLOT_WARNA = {
+            amber: 'bg-amber-100 text-amber-800 border-amber-300',
+            sky: 'bg-sky-100 text-sky-800 border-sky-300',
+            emerald: 'bg-emerald-100 text-emerald-800 border-emerald-300',
+            violet: 'bg-violet-100 text-violet-800 border-violet-300',
+            slate: 'bg-slate-200 text-slate-700 border-slate-300',
+            rose: 'bg-rose-100 text-rose-800 border-rose-300',
+            orange: 'bg-orange-100 text-orange-800 border-orange-300',
+            teal: 'bg-teal-100 text-teal-800 border-teal-300',
+            pink: 'bg-pink-100 text-pink-800 border-pink-300',
+            lime: 'bg-lime-100 text-lime-800 border-lime-300'
+        };
+        let slotSelKelas = null;   // ID kelas terpilih
+        let slotBrush = null;      // nama label (blok) atau '' untuk "Boleh Isi"
+        let slotWork = {};         // salinan blok kelas terpilih semasa melukis
+        let slotPaint = null;      // { value } semasa seretan aktif
+        let slotCfgWaktuDraft = [];
+
+        function slotLabelClass(nama, cfg) {
+            const l = (cfg || VJStore.getSlot()).label.find(x => x.nama === nama);
+            return SLOT_WARNA[(l && l.warna) || 'slate'] || SLOT_WARNA.slate;
+        }
+
+        function slotSortedKelas() {
+            return dbData.kelas.slice().sort((a, b) =>
+                (parseInt(a[2]) || 0) - (parseInt(b[2]) || 0) || String(a[1]).localeCompare(String(b[1]), 'ms', { numeric: true }));
+        }
+
+        function slotStatus(s) {
+            if (s.agihan > s.boleh) return { cls: 'bg-rose-100 text-rose-700', txt: `Lebih ${s.agihan - s.boleh}` };
+            if (s.agihan === s.boleh) return { cls: 'bg-emerald-100 text-emerald-700', txt: 'Padan' };
+            return { cls: 'bg-amber-100 text-amber-700', txt: `Baki ${s.boleh - s.agihan}` };
+        }
+
+        function renderSlotView() {
+            const view = document.getElementById('view-slot');
+            if (!view || view.classList.contains('hidden')) return;
+            const cfg = VJStore.getSlot();
+            const sum = VJStore.slotSummary();
+            const kelas = slotSortedKelas();
+
+            if (slotBrush === null) slotBrush = cfg.label.length ? cfg.label[0].nama : '';
+            if (!kelas.some(k => k[0] === slotSelKelas)) slotSelKelas = kelas.length ? kelas[0][0] : null;
+
+            const lebih = kelas.filter(k => sum[k[0]] && sum[k[0]].agihan > sum[k[0]].boleh).length;
+            document.getElementById('slotOverview').innerHTML =
+                `· ${cfg.hari.length} hari × ${cfg.waktu.length} waktu = ${cfg.hari.length * cfg.waktu.length} slot seminggu` +
+                (lebih ? ` · <span class="text-rose-600 font-bold">${lebih} kelas melebihi slot</span>` : '');
+
+            document.getElementById('slotKelasList').innerHTML = kelas.map(k => {
+                const s = sum[k[0]];
+                const st = slotStatus(s);
+                const active = k[0] === slotSelKelas;
+                return `<button onclick="slotSelect('${escapeHtml(k[0])}')" class="w-full flex items-center justify-between gap-2 px-2.5 py-2 rounded-lg text-left transition ${active ? 'bg-brand-600 text-white shadow' : 'hover:bg-white text-slate-700'}">
+                    <span class="text-xs font-bold truncate">${escapeHtml(k[1])}</span>
+                    <span class="flex items-center gap-1.5 shrink-0">
+                        <span class="text-[11px] ${active ? 'text-white/80' : 'text-slate-500'}">${s.agihan}/${s.boleh}</span>
+                        <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full ${st.cls}">${st.txt}</span>
+                    </span></button>`;
+            }).join('');
+
+            const editor = document.getElementById('slotEditor');
+            document.getElementById('slotEmpty').classList.toggle('hidden', !!slotSelKelas);
+            editor.classList.toggle('hidden', !slotSelKelas);
+            if (!slotSelKelas) { lucide.createIcons(); return; }
+
+            const k = dbData.kelas.find(x => x[0] === slotSelKelas);
+            if (!slotPaint) slotWork = cfg.kelas[slotSelKelas] ? Object.assign({}, cfg.kelas[slotSelKelas]) : {};
+            const s = sum[slotSelKelas];
+            const st = slotStatus(s);
+            document.getElementById('slotKelasTitle').innerHTML = `${escapeHtml(k[1])} <span class="text-xs font-medium text-slate-400">Tingkatan ${escapeHtml(k[2])}${k[3] ? ' · ' + escapeHtml(k[3]) : ''}</span>`;
+            document.getElementById('slotKelasStats').innerHTML =
+                `<strong class="text-slate-700">${s.boleh}</strong> slot boleh isi · <strong class="text-slate-700">${s.blok}</strong> diblok · ` +
+                `<strong class="text-slate-700">${s.agihan}</strong> waktu telah diagihkan <span class="ml-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full ${st.cls}">${st.txt}</span>`;
+
+            // Berus
+            const brushBtn = (val, text, cls) => {
+                const on = slotBrush === val;
+                return `<button onclick="slotSetBrush(${JSON.stringify(val).replace(/"/g, '&quot;')})" class="px-2.5 py-1 rounded-lg border text-[11px] font-bold transition ${cls} ${on ? 'ring-2 ring-brand-600 ring-offset-1' : 'opacity-80 hover:opacity-100'}">${escapeHtml(text)}</button>`;
+            };
+            document.getElementById('slotBrushes').innerHTML =
+                brushBtn('', 'Boleh Isi', 'bg-white text-slate-700 border-slate-300') +
+                cfg.label.map(l => brushBtn(l.nama, l.nama, SLOT_WARNA[l.warna] || SLOT_WARNA.slate)).join('');
+
+            renderSlotGrid(cfg);
+            lucide.createIcons();
+        }
+
+        function renderSlotGrid(cfg) {
+            cfg = cfg || VJStore.getSlot();
+            let html = `<thead><tr class="bg-slate-50"><th class="px-2 py-2 text-left text-[11px] font-bold text-slate-500 w-20 border-b border-slate-200">Hari</th>`;
+            cfg.waktu.forEach((w, p) => {
+                html += `<th data-col="${p}" class="slot-colhead px-1 py-1.5 border-b border-l border-slate-200 cursor-pointer hover:bg-brand-50 min-w-[56px]" title="Klik untuk isi seluruh lajur">
+                    <div class="text-xs font-bold text-slate-700">${p + 1}</div><div class="text-[9px] font-medium text-slate-400">${escapeHtml(w.mula)}${w.tamat ? '–' + escapeHtml(w.tamat) : ''}</div></th>`;
+            });
+            html += `</tr></thead><tbody>`;
+            cfg.hari.forEach((h, d) => {
+                html += `<tr><th data-row="${d}" class="slot-rowhead px-2 py-1 text-left text-xs font-bold text-slate-700 bg-slate-50 border-t border-slate-200 cursor-pointer hover:bg-brand-50" title="Klik untuk isi seluruh baris">${escapeHtml(h)}</th>`;
+                cfg.waktu.forEach((w, p) => {
+                    const v = slotWork[`${d}-${p}`];
+                    const cls = v ? slotLabelClass(v, cfg) : 'bg-white hover:bg-brand-50 text-slate-300';
+                    html += `<td data-slot="${d}-${p}" class="slot-cell border-t border-l border-slate-200 p-0.5 cursor-pointer">
+                        <div class="h-10 rounded-md border flex items-center justify-center text-center leading-tight px-0.5 text-[10px] font-bold ${v ? cls : cls + ' border-transparent'}">${v ? escapeHtml(v) : '·'}</div></td>`;
+                });
+                html += `</tr>`;
+            });
+            document.getElementById('slotGrid').innerHTML = html + `</tbody>`;
+        }
+
+        function slotSelect(id) {
+            slotSelKelas = id;
+            slotCloseCopyPanel();
+            slotPaint = null;
+            renderSlotView();
+        }
+
+        function slotSetBrush(val) {
+            slotBrush = val;
+            renderSlotView();
+        }
+
+        function slotCommit() {
+            try { VJStore.setKelasBlok(slotSelKelas, slotWork); }
+            catch (e) { showToast(e.message, 'error'); }
+            renderSlotView();
+        }
+
+        function slotApply(keys) {
+            // Jika semua petak sudah berlabel sama dengan berus -> buka semula (toggle)
+            const allSame = slotBrush && keys.every(k => slotWork[k] === slotBrush);
+            keys.forEach(k => { if (slotBrush && !allSame) slotWork[k] = slotBrush; else delete slotWork[k]; });
+            slotCommit();
+        }
+
+        // ---- Melukis dengan tetikus / sentuhan ----
+        function slotPaintCell(td) {
+            const key = td.dataset.slot;
+            if (slotPaint.value) slotWork[key] = slotPaint.value; else delete slotWork[key];
+            const box = td.firstElementChild;
+            const v = slotPaint.value;
+            box.className = 'h-10 rounded-md border flex items-center justify-center text-center leading-tight px-0.5 text-[10px] font-bold ' +
+                (v ? slotLabelClass(v) : 'bg-white hover:bg-brand-50 text-slate-300 border-transparent');
+            box.textContent = v || '·';
+        }
+
+        function slotOnPointerDown(e) {
+            const cell = e.target.closest('.slot-cell');
+            const row = e.target.closest('.slot-rowhead');
+            const col = e.target.closest('.slot-colhead');
+            if (!cell && !row && !col) return;
+            e.preventDefault();
+            if (!isEditMode) { ensureEditMode(() => renderSlotView()); return; }
+            const cfg = VJStore.getSlot();
+            if (row) { slotApply(cfg.waktu.map((_, p) => `${row.dataset.row}-${p}`)); return; }
+            if (col) { slotApply(cfg.hari.map((_, d) => `${d}-${col.dataset.col}`)); return; }
+            const cur = slotWork[cell.dataset.slot];
+            slotPaint = { value: (slotBrush && cur !== slotBrush) ? slotBrush : '' };
+            slotPaintCell(cell);
+        }
+
+        function slotOnPointerMove(e) {
+            if (!slotPaint) return;
+            const el = document.elementFromPoint(e.clientX, e.clientY);
+            const cell = el && el.closest('#slotGrid .slot-cell');
+            if (cell) slotPaintCell(cell);
+        }
+
+        function slotOnPointerUp() {
+            if (!slotPaint) return;
+            slotPaint = null;
+            slotCommit();
+        }
+
+        // ---- Tindakan kelas ----
+        function slotCopy(scope) {
+            if (!isEditMode) { ensureEditMode(() => slotCopy(scope)); return; }
+            const k = dbData.kelas.find(x => x[0] === slotSelKelas);
+            const targets = dbData.kelas.filter(x => x[0] !== slotSelKelas && (scope === 'semua' || String(x[2]) === String(k[2])));
+            if (!targets.length) { showToast('Tiada kelas lain untuk disalin.', 'warning'); return; }
+            const desc = scope === 'semua' ? `SEMUA ${targets.length} kelas lain` : `${targets.length} kelas Tingkatan ${k[2]} (${targets.map(x => x[1]).join(', ')})`;
+            if (!confirm(`Salin susunan slot ${k[1]} ke ${desc}?\n\nSlot sedia ada kelas tersebut akan diganti.`)) return;
+            VJStore.copyKelasBlok(slotSelKelas, targets.map(x => x[0]));
+            showToast(`Slot ${k[1]} disalin ke ${targets.length} kelas.`, 'success');
+            renderSlotView();
+        }
+
+        // ---- Salin ke kelas pilihan ----
+        function slotOpenCopyPanel() {
+            if (!isEditMode) { ensureEditMode(() => slotOpenCopyPanel()); return; }
+            const src = dbData.kelas.find(x => x[0] === slotSelKelas);
+            document.getElementById('slotCopyFrom').innerText = src[1];
+            const groups = {};
+            slotSortedKelas().filter(k => k[0] !== slotSelKelas).forEach(k => {
+                (groups[k[2]] = groups[k[2]] || []).push(k);
+            });
+            document.getElementById('slotCopyList').innerHTML = Object.keys(groups).map(t => `
+                <div class="flex flex-wrap items-center gap-1.5">
+                    <button onclick="slotCopyCheckTing('${escapeHtml(t)}')" class="w-24 text-left text-[11px] font-bold text-slate-500 hover:text-brand-700" title="Pilih / nyahpilih semua kelas tingkatan ini">Tingkatan ${escapeHtml(t)}</button>
+                    ${groups[t].map(k => `
+                        <label class="flex items-center gap-1.5 px-2 py-1 bg-white border border-slate-200 rounded-lg cursor-pointer hover:border-brand-300 text-xs font-semibold text-slate-700">
+                            <input type="checkbox" value="${escapeHtml(k[0])}" data-ting="${escapeHtml(k[2])}" onchange="slotCopyUpdateCount()" class="slot-copy-check w-3.5 h-3.5 accent-brand-600"> ${escapeHtml(k[1])}
+                        </label>`).join('')}
+                </div>`).join('') || '<p class="text-xs text-slate-400">Tiada kelas lain.</p>';
+            slotCopyUpdateCount();
+            document.getElementById('slotCopyPanel').classList.remove('hidden');
+            lucide.createIcons();
+        }
+
+        function slotCloseCopyPanel() { document.getElementById('slotCopyPanel').classList.add('hidden'); }
+
+        function slotCopyChecks() { return Array.from(document.querySelectorAll('.slot-copy-check')); }
+
+        function slotCopyUpdateCount() {
+            const n = slotCopyChecks().filter(c => c.checked).length;
+            document.getElementById('slotCopyCount').innerText = `${n} kelas dipilih`;
+        }
+
+        function slotCopyCheckAll(on) {
+            slotCopyChecks().forEach(c => { c.checked = on; });
+            slotCopyUpdateCount();
+        }
+
+        function slotCopyCheckTing(t) {
+            const boxes = slotCopyChecks().filter(c => c.dataset.ting === t);
+            const on = !boxes.every(c => c.checked);
+            boxes.forEach(c => { c.checked = on; });
+            slotCopyUpdateCount();
+        }
+
+        function slotCopySelected() {
+            const ids = slotCopyChecks().filter(c => c.checked).map(c => c.value);
+            if (!ids.length) { showToast('Pilih sekurang-kurangnya satu kelas.', 'warning'); return; }
+            const src = dbData.kelas.find(x => x[0] === slotSelKelas);
+            const names = dbData.kelas.filter(k => ids.includes(k[0])).map(k => k[1]);
+            if (!confirm(`Salin susunan slot ${src[1]} ke ${ids.length} kelas (${names.join(', ')})?\n\nSlot sedia ada kelas tersebut akan diganti.`)) return;
+            VJStore.copyKelasBlok(slotSelKelas, ids);
+            slotCloseCopyPanel();
+            showToast(`Slot ${src[1]} disalin ke ${ids.length} kelas.`, 'success');
+            renderSlotView();
+        }
+
+        function slotClear() {
+            if (!isEditMode) { ensureEditMode(() => slotClear()); return; }
+            const k = dbData.kelas.find(x => x[0] === slotSelKelas);
+            if (!confirm(`Buka semula SEMUA slot untuk ${k[1]}?`)) return;
+            slotWork = {};
+            slotCommit();
+        }
+
+        function slotAddLabel() {
+            if (!isEditMode) { ensureEditMode(() => slotAddLabel()); return; }
+            const nama = prompt('Nama label blok baharu (cth: Mesyuarat, Pendidikan Moral):');
+            if (!nama) return;
+            const used = VJStore.getSlot().label.map(l => l.warna);
+            const warna = Object.keys(SLOT_WARNA).find(w => !used.includes(w)) || 'slate';
+            try {
+                VJStore.addSlotLabel(nama, warna);
+                slotBrush = nama.trim();
+                renderSlotView();
+            } catch (e) { showToast(e.message, 'error'); }
+        }
+
+        // ---- Tetapan hari & waktu ----
+        function slotToggleSettings() {
+            const box = document.getElementById('slotSettings');
+            if (box.classList.contains('hidden')) {
+                if (!isEditMode) { ensureEditMode(() => slotToggleSettings()); return; }
+                const cfg = VJStore.getSlot();
+                document.getElementById('slotCfgHari').value = cfg.hari.join(', ');
+                document.getElementById('slotGenBil').value = cfg.waktu.length;
+                if (cfg.waktu[0] && cfg.waktu[0].mula) document.getElementById('slotGenMula').value = cfg.waktu[0].mula;
+                slotCfgWaktuDraft = cfg.waktu;
+                slotRenderWaktuDraft();
+            }
+            box.classList.toggle('hidden');
+        }
+
+        function slotPresetHari(txt) { document.getElementById('slotCfgHari').value = txt; }
+
+        function slotGenerate() {
+            const bil = Math.min(20, Math.max(1, parseInt(document.getElementById('slotGenBil').value) || 1));
+            const tempoh = Math.max(5, parseInt(document.getElementById('slotGenTempoh').value) || 30);
+            slotCfgWaktuDraft = VJStore.genWaktu(document.getElementById('slotGenMula').value, tempoh, bil);
+            slotRenderWaktuDraft();
+        }
+
+        function slotRenderWaktuDraft() {
+            document.getElementById('slotCfgWaktu').innerHTML = slotCfgWaktuDraft.map((w, i) =>
+                `<div class="flex items-center gap-1 bg-white border border-slate-200 rounded-lg px-1.5 py-1">
+                    <span class="text-[11px] font-bold text-slate-500 w-5 text-right">${i + 1}</span>
+                    <input type="time" value="${escapeHtml(w.mula)}" onchange="slotCfgWaktuDraft[${i}].mula=this.value" class="text-[11px] outline-none w-full min-w-0">
+                    <span class="text-slate-300">–</span>
+                    <input type="time" value="${escapeHtml(w.tamat)}" onchange="slotCfgWaktuDraft[${i}].tamat=this.value" class="text-[11px] outline-none w-full min-w-0">
+                </div>`).join('');
+        }
+
+        function slotSaveSettings() {
+            const hari = document.getElementById('slotCfgHari').value.split(',').map(s => s.trim()).filter(Boolean);
+            const cfg = VJStore.getSlot();
+            const lost = Object.values(cfg.kelas).reduce((n, blok) => n + Object.keys(blok).filter(k => {
+                const [d, p] = k.split('-').map(Number);
+                return d >= hari.length || p >= slotCfgWaktuDraft.length;
+            }).length, 0);
+            if (lost && !confirm(`${lost} slot diblok berada di luar hari/waktu baharu dan akan dibuang. Teruskan?`)) return;
+            try {
+                VJStore.setSlotConfig({ hari, waktu: slotCfgWaktuDraft });
+                document.getElementById('slotSettings').classList.add('hidden');
+                showToast('Tetapan hari & waktu disimpan.', 'success');
+                renderSlotView();
+            } catch (e) { showToast(e.message, 'error'); }
+        }
+
+        // ---- Sambungan ke aplikasi ----
+        (function () {
+            const grid = document.getElementById('slotGrid');
+            grid.addEventListener('pointerdown', slotOnPointerDown);
+            window.addEventListener('pointermove', slotOnPointerMove);
+            window.addEventListener('pointerup', slotOnPointerUp);
+            window.addEventListener('pointercancel', slotOnPointerUp);
+
+            const origSwitchTab = switchTab;
+            switchTab = function (tabName) {
+                origSwitchTab(tabName);
+                if (tabName === 'slot') renderSlotView();
+            };
+            const origProcessData = processData;
+            processData = function (data) {
+                origProcessData(data);
+                renderSlotView();
+            };
+        })();
     </script>
 </body>
 

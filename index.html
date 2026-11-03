@@ -3160,10 +3160,8 @@ window.VJSampleData = function () {
         }
 
         function ensureEditMode(callback) {
-            if (isEditMode) {
-                if (typeof callback === 'function') callback();
-                return true;
-            }
+            // Callback hanya untuk disambung selepas buka kunci; pemanggil terus berjalan jika sudah dalam Mod Edit.
+            if (isEditMode) return true;
             promptUnlockEditMode(callback);
             return false;
         }

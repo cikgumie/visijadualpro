@@ -239,6 +239,7 @@
     let db = emptyDb();
     let fileName = null;     // nama fail ZIP semasa (jika ada)
     let dirty = false;       // ada perubahan belum disimpan ke ZIP
+    let rev = 0;             // kaunter perubahan data (untuk Redo)
     const listeners = [];
 
     function uuid() {
@@ -259,6 +260,7 @@
     function notify() { listeners.forEach(fn => { try { fn(getStatus()); } catch (e) { console.warn(e); } }); }
 
     function markDirty() {
+        rev++;
         dirty = true;
         autosave();
         notify();
@@ -276,6 +278,7 @@
         return {
             fileName,
             dirty,
+            rev,
             counts: { guru: db.guru.length, kelas: db.kelas.length, subjek: db.subjek.length, transaksi: db.transaksi.length }
         };
     }
@@ -878,7 +881,10 @@
         loadDb, restoreAutosave, hasAutosave,
         newEmpty() { loadDb({ guru: [], kelas: [], subjek: [] }, { dirty: false }); },
         getMaster, setMaster, nextId, usageCount,
-        isDirty: () => dirty
+        isDirty: () => dirty,
+        // Snapshot penuh data (untuk Redo); restore menggantikan data & menandakan perubahan
+        snapshot() { return clone(db); },
+        restore(snap) { db = normalizeDb(snap); markDirty(); }
     };
 })();
 
@@ -1194,7 +1200,7 @@ window.VJSampleData = function () {
             try { localStorage.removeItem(EDIT_MODE_STORAGE_KEY); } catch (e) {}
             renderAuthModeUI();
         }
-        if (typeof undoStack !== 'undefined') { undoStack.length = 0; updateUndoBtnUI(); }
+        if (typeof undoStack !== 'undefined') { undoStack.length = 0; if (typeof redoStack !== 'undefined') redoStack.length = 0; updateUndoBtnUI(); }
         loadAllData();
     }
 
@@ -1844,32 +1850,80 @@ window.VJSampleData = function () {
             }
         }
 
-        /* Navigation Tabs */
-        .nav-tab {
+        /* Menu sisi (kiri) */
+        .side-nav {
+            width: 13.5rem;
+            flex-shrink: 0;
+            display: flex;
+            flex-direction: column;
+            background: #fff;
+            border-right: 1px solid #E2E8F0;
+            transition: width 0.2s ease;
+        }
+
+        .side-nav.collapsed { width: 3.75rem; }
+        .side-nav.collapsed .nav-label { display: none; }
+        .side-nav.collapsed .nav-tab,
+        .side-nav.collapsed .side-act { justify-content: center; padding-left: 0; padding-right: 0; }
+
+        .nav-tab, .side-act {
             cursor: pointer;
-            border-bottom: 2.5px solid transparent;
-            color: #64748B;
-            transition: all 0.2s ease;
-            font-weight: 600;
-            font-size: 0.875rem;
+            width: 100%;
             display: flex;
             align-items: center;
-            gap: 0.5rem;
-            padding: 0.75rem 1rem;
+            gap: 0.65rem;
+            padding: 0.6rem 0.75rem;
+            border-radius: 0.6rem;
+            font-weight: 600;
+            font-size: 0.83rem;
             white-space: nowrap;
+            transition: all 0.15s ease;
+            text-align: left;
+        }
+
+        .side-act { font-size: 0.78rem; padding: 0.45rem 0.75rem; }
+        .nav-tab:focus:not(:focus-visible), .side-act:focus:not(:focus-visible) { outline: none; box-shadow: none; }
+
+        .nav-tab {
+            color: #64748B;
+            border-left: 3px solid transparent;
         }
 
         .nav-tab:hover {
             color: #1E293B;
-            background-color: #F8FAFC;
+            background-color: #F1F5F9;
         }
 
         .nav-tab.active {
-            border-bottom: 2.5px solid #4F46E5;
             color: #4F46E5;
             background-color: #EEF2FF;
-            border-radius: 6px 6px 0 0;
+            border-left-color: #4F46E5;
         }
+
+        /* Bar alat */
+        .tb-btn {
+            display: flex;
+            align-items: center;
+            gap: 0.35rem;
+            padding: 0.4rem 0.6rem;
+            border-radius: 0.5rem;
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: #334155;
+            white-space: nowrap;
+            flex-shrink: 0;
+            transition: background-color 0.15s ease;
+        }
+
+        .tb-btn:hover:not(:disabled) { background-color: #F1F5F9; }
+        .tb-sep { width: 1px; height: 1.4rem; background: #E2E8F0; margin: 0 0.2rem; flex-shrink: 0; }
+
+        @media (max-width: 767px) {
+            .side-nav { position: fixed; top: 56px; bottom: 0; left: 0; z-index: 40; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.18); }
+            .side-nav.collapsed { width: 0; overflow: hidden; border: 0; box-shadow: none; }
+        }
+
+        @media print { .side-nav { display: none !important; } }
 
         /* Floating Action Button (FAB) */
         .fab {
@@ -2590,61 +2644,21 @@ window.VJSampleData = function () {
     <!-- ============================================================== -->
     <!-- TOP NAVBAR & BRAND HEADER                                      -->
     <!-- ============================================================== -->
-    <header class="h-[56px] bg-premium-header flex items-center justify-between px-4 sm:px-6 shadow-premium z-30 shrink-0 border-b border-white/10">
-        <div class="flex items-center gap-3">
-            <div class="p-2 bg-white/10 rounded-xl backdrop-blur-md">
-                <i data-lucide="layout-grid" class="w-5 h-5 text-white"></i>
-            </div>
-            <div>
+    <header class="h-[56px] bg-premium-header flex items-center justify-between px-3 sm:px-5 shadow-premium z-30 shrink-0 border-b border-white/10">
+        <div class="flex items-center gap-3 min-w-0">
+            <button onclick="toggleSideNav()" class="p-2 bg-white/10 hover:bg-white/20 rounded-xl backdrop-blur-md transition" title="Kecilkan / besarkan menu">
+                <i data-lucide="panel-left" class="w-5 h-5 text-white"></i>
+            </button>
+            <div class="min-w-0">
                 <div class="text-white font-heading font-extrabold text-base tracking-wide flex items-center gap-2">
                     VisiJadual <span class="text-[10px] bg-white/20 text-white px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">Pro v2</span>
                 </div>
-                <div class="text-[10px] text-white/80 font-medium tracking-wide hidden sm:block">Sistem Agihan Waktu & Kawalan Beban Guru</div>
+                <div class="text-[10px] text-white/80 font-medium tracking-wide hidden sm:block truncate">Sistem Agihan Waktu & Kawalan Beban Guru</div>
             </div>
         </div>
 
-        <!-- Global Search Bar & Actions -->
-        <div class="flex items-center gap-2 sm:gap-4">
-            <!-- Live Search Bar -->
-            <div class="relative w-44 sm:w-64">
-                <i data-lucide="search" class="w-4 h-4 text-white/60 absolute left-3 top-2.5 pointer-events-none"></i>
-                <input type="text" id="globalSearchInput" oninput="handleGlobalSearch(event)" placeholder="Cari guru / subjek / kelas..." class="w-full pl-9 pr-7 py-1.5 rounded-xl bg-white/15 text-white placeholder-white/60 text-xs outline-none focus:bg-white focus:text-slate-800 focus:placeholder-slate-400 transition-all border border-white/20">
-                <button id="clearSearchBtn" onclick="clearGlobalSearch()" class="absolute right-2.5 top-2 text-white/60 hover:text-white hidden">
-                    <i data-lucide="x" class="w-3.5 h-3.5"></i>
-                </button>
-            </div>
-
-            <!-- Global Undo Button -->
-            <button id="btnGlobalUndo" onclick="popAndExecuteUndo()" disabled class="p-2 hover:bg-white/15 rounded-xl text-white transition flex items-center gap-1.5 text-xs font-semibold opacity-40 disabled:cursor-not-allowed" title="Batal Tindakan Terakhir (Pintasan: Ctrl+Z)">
-                <i data-lucide="undo-2" class="w-4 h-4"></i>
-                <span class="hidden md:inline">Undo</span>
-                <span id="undoCountBadge" class="hidden text-[10px] bg-amber-400 text-slate-900 px-1.5 py-0.5 rounded-full font-bold">0</span>
-            </button>
-
-            <!-- Fail ZIP: Status, Baru, Buka, Simpan -->
-            <div class="flex items-center gap-1 pl-2 border-l border-white/20">
-                <span id="fileStatusChip" class="hidden lg:flex items-center gap-1.5 text-[11px] font-medium text-white/80 bg-white/10 px-2.5 py-1 rounded-full border border-white/15"></span>
-                <button onclick="VJFile.newFile()" class="p-2 hover:bg-white/15 rounded-xl text-white transition flex items-center gap-1.5 text-xs font-semibold" title="Fail baharu (kosong)">
-                    <i data-lucide="file-plus" class="w-4 h-4"></i>
-                    <span class="hidden xl:inline">Baru</span>
-                </button>
-                <button onclick="VJFile.openZip()" class="p-2 hover:bg-white/15 rounded-xl text-white transition flex items-center gap-1.5 text-xs font-semibold" title="Buka fail ZIP (Ctrl+O)">
-                    <i data-lucide="folder-open" class="w-4 h-4"></i>
-                    <span class="hidden md:inline">Buka</span>
-                </button>
-                <button id="btnSaveZip" onclick="VJFile.saveZip(false)" class="px-2.5 py-1.5 bg-white text-brand-700 hover:bg-white/90 ring-amber-400 rounded-xl transition flex items-center gap-1.5 text-xs font-bold shadow-sm" title="Simpan ke fail ZIP (Ctrl+S)">
-                    <i data-lucide="save" class="w-4 h-4"></i>
-                    <span class="hidden sm:inline">Simpan</span>
-                </button>
-                <button onclick="VJFile.saveZip(true)" class="p-2 hover:bg-white/15 rounded-xl text-white transition" title="Simpan Sebagai fail ZIP baharu (Ctrl+Shift+S)">
-                    <i data-lucide="save-all" class="w-4 h-4"></i>
-                </button>
-                <button onclick="VJDrive.openMenu()" id="btnDrive" class="p-2 hover:bg-white/15 rounded-xl text-white transition flex items-center gap-1.5 text-xs font-semibold" title="Simpan / Buka di Google Drive">
-                    <i data-lucide="cloud" class="w-4 h-4"></i>
-                    <span class="hidden xl:inline">Drive</span>
-                </button>
-            </div>
-
+        <div class="flex items-center gap-2 sm:gap-3">
+            <span id="fileStatusChip" class="hidden md:flex items-center gap-1.5 text-[11px] font-medium text-white/80 bg-white/10 px-2.5 py-1 rounded-full border border-white/15"></span>
             <!-- Mode Status & Edit Mode Button -->
             <div id="authModeContainer" class="flex items-center gap-2 pl-2 border-l border-white/20 text-white">
                 <!-- Dynamically populated by renderAuthModeUI() -->
@@ -2653,61 +2667,98 @@ window.VJSampleData = function () {
     </header>
 
     <!-- ============================================================== -->
-    <!-- SECONDARY TOOLBAR & NAVIGATION TABS                           -->
+    <!-- BAR ALAT: UNDO / REDO · FAIL · DRIVE · CARIAN                   -->
     <!-- ============================================================== -->
-    <div class="bg-white border-b border-slate-200 px-4 sm:px-6 shrink-0 flex flex-wrap items-center justify-between no-print gap-2">
-        <!-- Navigation Tabs -->
-        <div class="flex items-center overflow-x-auto gap-0.5">
-            <button onclick="switchTab('guru')" id="nav-guru" class="nav-tab">
-                <i data-lucide="users" class="w-4 h-4"></i> Jadual Guru
-            </button>
-            <button onclick="switchTab('matrix')" id="nav-matrix" class="nav-tab active">
-                <i data-lucide="grid" class="w-4 h-4"></i> Matriks Kelas
-            </button>
-            <button onclick="switchTab('kelas')" id="nav-kelas" class="nav-tab">
-                <i data-lucide="school" class="w-4 h-4"></i> Rumusan Kelas
-            </button>
-            <button onclick="switchTab('subjek')" id="nav-subjek" class="nav-tab">
-                <i data-lucide="book-open" class="w-4 h-4"></i> Analisis Subjek
-            </button>
-            <button onclick="switchTab('banding')" id="nav-banding" class="nav-tab">
-                <i data-lucide="git-compare" class="w-4 h-4"></i> Banding Jadual
-            </button>
-            <button onclick="switchTab('arkib')" id="nav-arkib" class="nav-tab">
-                <i data-lucide="archive" class="w-4 h-4"></i> Arkib Data
-            </button>
-            <button onclick="switchTab('slot')" id="nav-slot" class="nav-tab">
-                <i data-lucide="calendar-clock" class="w-4 h-4"></i> Slot Masa
-            </button>
-            <button onclick="switchTab('jadual')" id="nav-jadual" class="nav-tab">
-                <i data-lucide="wand-sparkles" class="w-4 h-4"></i> Susun Jadual
-            </button>
-            <button onclick="switchTab('ganti')" id="nav-ganti" class="nav-tab">
-                <i data-lucide="user-check" class="w-4 h-4"></i> Guru Ganti
-            </button>
-        </div>
-
-        <!-- Quick Action Buttons -->
-        <div class="flex items-center gap-1.5 py-1.5">
-            <button onclick="VJFile.openDataInduk()" class="text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition" title="Urus senarai Guru, Kelas & Subjek">
-                <i data-lucide="database" class="w-3.5 h-3.5"></i> Data Induk
-            </button>
-            <button onclick="openArkibModal()" class="text-rose-600 hover:bg-rose-50 px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition" title="Urus Arkib dan Reset">
-                <i data-lucide="archive" class="w-3.5 h-3.5"></i> Arkib/Reset
-            </button>
-            <button onclick="exportToExcel()" class="text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition" title="Eksport ke fail Excel">
-                <i data-lucide="download" class="w-3.5 h-3.5"></i> Eksport Excel
-            </button>
-            <button onclick="triggerImportExcel()" class="text-brand-700 bg-brand-50 hover:bg-brand-100 border border-brand-200 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition" title="Import jadual dari fail Excel">
-                <i data-lucide="upload" class="w-3.5 h-3.5"></i> Import Excel
+    <div class="bg-white border-b border-slate-200 px-3 sm:px-5 py-1.5 shrink-0 flex items-center gap-1.5 no-print overflow-x-auto">
+        <button id="btnGlobalUndo" onclick="popAndExecuteUndo()" disabled class="tb-btn opacity-40 disabled:cursor-not-allowed" title="Batal Tindakan Terakhir (Ctrl+Z)">
+            <i data-lucide="undo-2" class="w-4 h-4"></i><span class="hidden md:inline">Undo</span>
+            <span id="undoCountBadge" class="hidden text-[10px] bg-amber-400 text-slate-900 px-1.5 py-0.5 rounded-full font-bold">0</span>
+        </button>
+        <button id="btnGlobalRedo" onclick="popAndExecuteRedo()" disabled class="tb-btn opacity-40 disabled:cursor-not-allowed" title="Buat Semula (Ctrl+Y)">
+            <i data-lucide="redo-2" class="w-4 h-4"></i><span class="hidden md:inline">Redo</span>
+            <span id="redoCountBadge" class="hidden text-[10px] bg-sky-300 text-slate-900 px-1.5 py-0.5 rounded-full font-bold">0</span>
+        </button>
+        <span class="tb-sep"></span>
+        <button onclick="VJFile.newFile()" class="tb-btn" title="Fail baharu (kosong)">
+            <i data-lucide="file-plus" class="w-4 h-4"></i><span class="hidden lg:inline">Baru</span>
+        </button>
+        <button onclick="VJFile.openZip()" class="tb-btn" title="Buka fail ZIP (Ctrl+O)">
+            <i data-lucide="folder-open" class="w-4 h-4"></i><span class="hidden md:inline">Buka</span>
+        </button>
+        <button id="btnSaveZip" onclick="VJFile.saveZip(false)" class="px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white ring-amber-400 rounded-lg transition flex items-center gap-1.5 text-xs font-bold shadow-sm shrink-0" title="Simpan ke fail ZIP (Ctrl+S)">
+            <i data-lucide="save" class="w-4 h-4"></i><span class="hidden sm:inline">Simpan</span>
+        </button>
+        <button onclick="VJFile.saveZip(true)" class="tb-btn" title="Simpan Sebagai fail ZIP baharu (Ctrl+Shift+S)">
+            <i data-lucide="save-all" class="w-4 h-4"></i>
+        </button>
+        <button onclick="VJDrive.openMenu()" id="btnDrive" class="tb-btn text-sky-700" title="Simpan / Buka di Google Drive">
+            <i data-lucide="cloud" class="w-4 h-4"></i><span class="hidden md:inline">Drive</span>
+        </button>
+        <span class="tb-sep"></span>
+        <!-- Carian -->
+        <div class="relative flex-1 min-w-[150px] max-w-md">
+            <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-2 pointer-events-none"></i>
+            <input type="text" id="globalSearchInput" oninput="handleGlobalSearch(event)" placeholder="Cari guru / subjek / kelas..." class="w-full pl-9 pr-7 py-1.5 rounded-lg bg-slate-50 text-slate-800 placeholder-slate-400 text-xs outline-none border border-slate-200 focus:bg-white focus:border-brand-500 transition">
+            <button id="clearSearchBtn" onclick="clearGlobalSearch()" class="absolute right-2 top-1.5 text-slate-400 hover:text-slate-700 hidden">
+                <i data-lucide="x" class="w-3.5 h-3.5"></i>
             </button>
         </div>
     </div>
 
     <!-- ============================================================== -->
+    <!-- MENU SISI (KIRI) + KANDUNGAN                                    -->
+    <!-- ============================================================== -->
+    <div class="flex-1 flex min-h-0">
+        <aside id="sideNav" class="side-nav no-print">
+            <nav class="flex-1 overflow-y-auto p-2 space-y-0.5">
+                <button onclick="switchTab('guru')" id="nav-guru" class="nav-tab" title="Jadual Guru">
+                    <i data-lucide="users" class="w-4 h-4 shrink-0"></i><span class="nav-label">Jadual Guru</span>
+                </button>
+                <button onclick="switchTab('matrix')" id="nav-matrix" class="nav-tab active" title="Matriks Kelas">
+                    <i data-lucide="grid" class="w-4 h-4 shrink-0"></i><span class="nav-label">Matriks Kelas</span>
+                </button>
+                <button onclick="switchTab('kelas')" id="nav-kelas" class="nav-tab" title="Rumusan Kelas">
+                    <i data-lucide="school" class="w-4 h-4 shrink-0"></i><span class="nav-label">Rumusan Kelas</span>
+                </button>
+                <button onclick="switchTab('subjek')" id="nav-subjek" class="nav-tab" title="Analisis Subjek">
+                    <i data-lucide="book-open" class="w-4 h-4 shrink-0"></i><span class="nav-label">Analisis Subjek</span>
+                </button>
+                <button onclick="switchTab('banding')" id="nav-banding" class="nav-tab" title="Banding Jadual">
+                    <i data-lucide="git-compare" class="w-4 h-4 shrink-0"></i><span class="nav-label">Banding Jadual</span>
+                </button>
+                <button onclick="switchTab('arkib')" id="nav-arkib" class="nav-tab" title="Arkib Data">
+                    <i data-lucide="archive" class="w-4 h-4 shrink-0"></i><span class="nav-label">Arkib Data</span>
+                </button>
+                <button onclick="switchTab('slot')" id="nav-slot" class="nav-tab" title="Slot Masa">
+                    <i data-lucide="calendar-clock" class="w-4 h-4 shrink-0"></i><span class="nav-label">Slot Masa</span>
+                </button>
+                <button onclick="switchTab('jadual')" id="nav-jadual" class="nav-tab" title="Susun Jadual">
+                    <i data-lucide="wand-sparkles" class="w-4 h-4 shrink-0"></i><span class="nav-label">Susun Jadual</span>
+                </button>
+                <button onclick="switchTab('ganti')" id="nav-ganti" class="nav-tab" title="Guru Ganti">
+                    <i data-lucide="user-check" class="w-4 h-4 shrink-0"></i><span class="nav-label">Guru Ganti</span>
+                </button>
+            </nav>
+            <div class="p-2 border-t border-slate-200 space-y-0.5">
+                <button onclick="VJFile.openDataInduk()" class="side-act text-slate-700 hover:bg-slate-100" title="Urus senarai Guru, Kelas & Subjek">
+                    <i data-lucide="database" class="w-4 h-4 shrink-0"></i><span class="nav-label">Data Induk</span>
+                </button>
+                <button onclick="openArkibModal()" class="side-act text-rose-600 hover:bg-rose-50" title="Urus Arkib dan Reset">
+                    <i data-lucide="archive-restore" class="w-4 h-4 shrink-0"></i><span class="nav-label">Arkib / Reset</span>
+                </button>
+                <button onclick="exportToExcel()" class="side-act text-emerald-700 hover:bg-emerald-50" title="Eksport ke fail Excel">
+                    <i data-lucide="download" class="w-4 h-4 shrink-0"></i><span class="nav-label">Eksport Excel</span>
+                </button>
+                <button onclick="triggerImportExcel()" class="side-act text-brand-700 hover:bg-brand-50" title="Import jadual dari fail Excel">
+                    <i data-lucide="upload" class="w-4 h-4 shrink-0"></i><span class="nav-label">Import Excel</span>
+                </button>
+            </div>
+        </aside>
+
+    <!-- ============================================================== -->
     <!-- MAIN CONTENT VIEW AREA                                         -->
     <!-- ============================================================== -->
-    <main class="flex-1 overflow-y-auto p-4 sm:p-6 bg-slate-50/50">
+    <main class="flex-1 min-w-0 overflow-y-auto p-4 sm:p-6 bg-slate-50/50">
 
 
 
@@ -3521,6 +3572,7 @@ window.VJSampleData = function () {
             </div>
         </div>
     </main>
+    </div>
 
     <!-- ============================================================== -->
     <!-- LOGIK JAVASCRIPT & STATE MANAGEMENT                            -->
@@ -3550,6 +3602,8 @@ window.VJSampleData = function () {
         let currentGuruFilter = 'all'; // 'all', 'kurang', 'cukup', 'lebih'
         let currentSearchQuery = '';
         let undoStack = [];
+        let redoStack = [];          // snapshot data sebelum setiap Undo
+        let masaUndoRedo = 0;        // perubahan data dalam tempoh ini datang daripada Undo/Redo sendiri
 
         // --- AUTHENTICATION & EDIT MODE STATE ---
         const EDIT_MODE_STORAGE_KEY = 'visijadual_edit_mode_active';
@@ -3594,6 +3648,13 @@ window.VJSampleData = function () {
                     }
                     e.preventDefault();
                     popAndExecuteUndo();
+                }
+                // Ctrl+Y atau Ctrl+Shift+Z untuk Redo
+                if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'y' || (e.key.toLowerCase() === 'z' && e.shiftKey))) {
+                    const tag = (document.activeElement && document.activeElement.tagName || '').toLowerCase();
+                    if (tag === 'input' || tag === 'textarea' || (document.activeElement && document.activeElement.isContentEditable)) return;
+                    e.preventDefault();
+                    popAndExecuteRedo();
                 }
                 // Escape to close modals or cancel matrix selection
                 if (e.key === 'Escape') {
@@ -4001,6 +4062,7 @@ window.VJSampleData = function () {
         // 4. UNDO STACK ENGINE (MENYOKONG PADAM, TAMBAH & KEMASKINI)
         // =========================================================================
         function pushToUndo(action) {
+            redoStack.length = 0;    // tindakan baharu: Redo tidak lagi sah
             undoStack.push(action);
             if (undoStack.length > 20) undoStack.shift();
             updateUndoBtnUI();
@@ -4012,8 +4074,19 @@ window.VJSampleData = function () {
                 return;
             }
             if (!ensureEditMode(() => popAndExecuteUndo())) return;
+            masaUndoRedo = Date.now();
+            const sebelum = VJStore.snapshot();
             const action = undoStack.pop();
+            redoStack.push({ snap: sebelum, desc: action.desc || 'tindakan' });
+            if (redoStack.length > 20) redoStack.shift();
             updateUndoBtnUI();
+
+            if (action.type === 'snapshot') {
+                VJStore.restore(action.snap);
+                loadAllData();
+                showToast(`Dibatalkan: ${action.desc || 'tindakan'}.`, 'success');
+                return;
+            }
 
             if (action.type === 'delete') {
                 showToast(`Memulihkan ${action.desc || 'agihan'}...`, 'info', 2000);
@@ -4097,7 +4170,43 @@ window.VJSampleData = function () {
             }
         }
 
+        function popAndExecuteRedo() {
+            if (redoStack.length === 0) {
+                showToast("Tiada tindakan untuk dibuat semula (Senarai Redo kosong).", 'info', 2500);
+                return;
+            }
+            if (!ensureEditMode(() => popAndExecuteRedo())) return;
+            masaUndoRedo = Date.now();
+            const r = redoStack.pop();
+            // Keadaan semasa masuk ke Undo supaya Redo boleh dibatalkan semula
+            undoStack.push({ type: 'snapshot', snap: VJStore.snapshot(), desc: r.desc });
+            if (undoStack.length > 20) undoStack.shift();
+            VJStore.restore(r.snap);
+            updateUndoBtnUI();
+            loadAllData();
+            showToast(`Dibuat semula: ${r.desc}.`, 'success');
+        }
+
+        // Perubahan data lain (bukan daripada Undo/Redo) menjadikan Redo tidak sah
+        (function () {
+            let revTerakhir = VJStore.getStatus().rev;
+            VJStore.onChange(st => {
+                if (st.rev === revTerakhir) return;
+                revTerakhir = st.rev;
+                if (Date.now() - masaUndoRedo > 1500 && redoStack.length) { redoStack.length = 0; updateUndoBtnUI(); }
+            });
+        })();
+
         function updateUndoBtnUI() {
+            const rbtn = document.getElementById('btnGlobalRedo');
+            const rbadge = document.getElementById('redoCountBadge');
+            if (rbtn) {
+                const ada = redoStack.length > 0;
+                rbtn.toggleAttribute('disabled', !ada);
+                rbtn.classList.toggle('opacity-40', !ada);
+                rbtn.title = ada ? `Buat semula: ${redoStack[redoStack.length - 1].desc} (Ctrl+Y)` : 'Tiada tindakan untuk dibuat semula (Ctrl+Y)';
+                if (rbadge) { rbadge.innerText = redoStack.length; rbadge.classList.toggle('hidden', !ada); }
+            }
             const btn = document.getElementById('btnGlobalUndo');
             const badge = document.getElementById('undoCountBadge');
             if (!btn) return;
@@ -5405,7 +5514,22 @@ window.VJSampleData = function () {
         // =========================================================================
         // 8. TABS & FORM INPUT OPERATIONS
         // =========================================================================
+        function toggleSideNav(paksa) {
+            const nav = document.getElementById('sideNav');
+            if (!nav) return;
+            const kecil = typeof paksa === 'boolean' ? paksa : !nav.classList.contains('collapsed');
+            nav.classList.toggle('collapsed', kecil);
+            try { localStorage.setItem('visijadual_sidenav_kecil', kecil ? '1' : '0'); } catch (e) {}
+        }
+        (function () {
+            let kecil = window.innerWidth < 768;
+            try { const v = localStorage.getItem('visijadual_sidenav_kecil'); if (v !== null && window.innerWidth >= 768) kecil = v === '1'; } catch (e) {}
+            const nav = document.getElementById('sideNav');
+            if (nav) nav.classList.toggle('collapsed', kecil);
+        })();
+
         function switchTab(tabName) {
+            if (window.innerWidth < 768) document.getElementById('sideNav')?.classList.add('collapsed');
             document.querySelectorAll('.view-section').forEach(el => el.classList.add('hidden'));
             const target = document.getElementById(`view-${tabName}`);
             if (target) target.classList.remove('hidden');

@@ -45,6 +45,19 @@ Semua data berada dalam memori pelayar, dan disimpan/dibuka sebagai **fail ZIP**
   - Jenis bertanda **lembut** (min, lompong, hari berturut / lapang) diusahakan tetapi tidak dijamin; pelanggaran dilaporkan.
 - Klik sesi untuk **kunci** — sesi berkunci kekal di tempatnya apabila jadual disusun semula.
 
+## Guru ganti
+
+Tab **Guru Ganti** menggunakan jadual yang telah disusun (tab Susun Jadual).
+
+- **Kalendar:** pilih tarikh → rekod guru tidak hadir (sepanjang hari atau julat waktu) → sistem mencadangkan guru ganti
+  bagi setiap waktu yang terjejas → tukar pilihan jika perlu → **Sahkan & Simpan**. Rekod boleh dibatalkan, dicetak atau dieksport ke Excel.
+- **Cadangan adil:** calon disusun mengikut jumlah minit ganti paling rendah (sejak *Mula pengiraan beban* + minit dibawa),
+  kemudian tugas ganti paling lama. Hanya rekod yang **disahkan** dikira.
+- Calon mestilah layak, hadir, tidak mengajar pada waktu itu, slot guru tidak diblok, belum ganti pada waktu yang sama
+  dan belum mencapai had tugas ganti sehari (lalai 2).
+- **Beban Guru Ganti:** laporan minit & bilangan tugas setiap guru.
+- **Tetapan & Cuti:** nama sekolah untuk cetakan, tarikh mula pengiraan, kelayakan / had / minit bawa setiap guru, senarai cuti.
+
 ## Isi fail ZIP
 
 ```
@@ -59,6 +72,7 @@ data/slot.json       hari, waktu, label blok & slot diblok setiap kelas dan seti
 data/peraturan.json  peraturan susunan jadual (sesi subjek sehari, had waktu guru)
 data/jadual.json     kedudukan setiap sesi dalam jadual (hari, waktu, dikunci)
 data/hubungan.json   hubungan / kekangan antara sesi
+data/gantian.json    guru ganti: tetapan, kelayakan guru, guru tidak hadir, cuti, rekod pengesahan
 ```
 
 ## Pindah data dari versi Google Sheet lama

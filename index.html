@@ -95,7 +95,36 @@
     // PANGKALAN DATA DALAM MEMORI
     // =========================================================================
     function emptyDb() {
-        return { guru: [], kelas: [], subjek: [], transaksi: [], arkib: [], tetapan: { Kata_Laluan: DEFAULT_PASSWORD }, slot: defaultSlot(), peraturan: Object.assign({}, PERATURAN_DEFAULT), jadual: emptyJadual(), hubungan: [] };
+        return { guru: [], kelas: [], subjek: [], transaksi: [], arkib: [], tetapan: { Kata_Laluan: DEFAULT_PASSWORD }, slot: defaultSlot(), peraturan: Object.assign({}, PERATURAN_DEFAULT), jadual: emptyJadual(), hubungan: [], gantian: emptyGantian() };
+    }
+
+    // Guru ganti: tetapan, guru tidak hadir, cuti, rekod pengesahan
+    function emptyGantian() {
+        return { tetapan: { namaSekolah: '', mulaKira: new Date().getFullYear() + '-01-01', disediakan: 'Pentadbir Sekolah' }, guru: {}, tidakHadir: [], cuti: [], rekod: [] };
+    }
+
+    function normalizeGantian(raw) {
+        const out = emptyGantian();
+        if (!raw || typeof raw !== 'object') return out;
+        const tarikh = v => /^\d{4}-\d{2}-\d{2}$/.test(String(v || '')) ? String(v) : '';
+        const masa = v => /^\d{2}:\d{2}$/.test(String(v || '')) ? String(v) : '';
+        if (raw.tetapan && typeof raw.tetapan === 'object') {
+            out.tetapan.namaSekolah = String(raw.tetapan.namaSekolah || '');
+            out.tetapan.mulaKira = tarikh(raw.tetapan.mulaKira) || out.tetapan.mulaKira;
+            out.tetapan.disediakan = String(raw.tetapan.disediakan || out.tetapan.disediakan);
+        }
+        Object.entries(raw.guru || {}).forEach(([id, g]) => {
+            out.guru[String(id)] = { layak: !(g && g.layak === false), maksSehari: Math.max(0, parseInt(g && g.maksSehari) || 2), minitBawa: parseInt(g && g.minitBawa) || 0 };
+        });
+        out.tidakHadir = (Array.isArray(raw.tidakHadir) ? raw.tidakHadir : []).filter(x => x && tarikh(x.tarikh) && x.guru).map(x => ({
+            id: String(x.id || uuid()), tarikh: tarikh(x.tarikh), guru: String(x.guru), mula: masa(x.mula), tamat: masa(x.tamat), sebab: String(x.sebab || '')
+        }));
+        out.cuti = (Array.isArray(raw.cuti) ? raw.cuti : []).filter(x => x && tarikh(x.tarikh)).map(x => ({ id: String(x.id || uuid()), tarikh: tarikh(x.tarikh), nama: String(x.nama || '') }));
+        out.rekod = (Array.isArray(raw.rekod) ? raw.rekod : []).filter(x => x && tarikh(x.tarikh)).map(x => ({
+            id: String(x.id || uuid()), tarikh: tarikh(x.tarikh), status: x.status === 'BATAL' ? 'BATAL' : 'SAH',
+            dicipta: String(x.dicipta || ''), oleh: String(x.oleh || ''), catatan: String(x.catatan || ''), baris: Array.isArray(x.baris) ? x.baris : []
+        }));
+        return out;
     }
 
     // Peraturan susunan jadual. Nilai 0 = tiada had.
@@ -266,6 +295,7 @@
         out.peraturan = normalizePeraturan(raw.peraturan);
         out.jadual = normalizeJadual(raw.jadual);
         out.hubungan = normalizeHubungan(raw.hubungan);
+        out.gantian = normalizeGantian(raw.gantian);
         if (!String(out.tetapan.Kata_Laluan || '').trim()) out.tetapan.Kata_Laluan = DEFAULT_PASSWORD;
         return out;
     }
@@ -515,7 +545,7 @@
     // =========================================================================
     // FAIL ZIP: BUKA & SIMPAN
     // =========================================================================
-    const ZIP_FILES = { guru: 'guru.json', kelas: 'kelas.json', subjek: 'subjek.json', transaksi: 'transaksi.json', arkib: 'arkib.json', tetapan: 'tetapan.json', slot: 'slot.json', peraturan: 'peraturan.json', jadual: 'jadual.json', hubungan: 'hubungan.json' };
+    const ZIP_FILES = { guru: 'guru.json', kelas: 'kelas.json', subjek: 'subjek.json', transaksi: 'transaksi.json', arkib: 'arkib.json', tetapan: 'tetapan.json', slot: 'slot.json', peraturan: 'peraturan.json', jadual: 'jadual.json', hubungan: 'hubungan.json', gantian: 'gantian.json' };
 
     async function buildZipBlob() {
         const zip = new JSZip();
@@ -823,8 +853,15 @@
         markDirty();
     }
 
+    function getGantian() { return clone(db.gantian); }
+
+    function setGantian(g) {
+        db.gantian = normalizeGantian(g);
+        markDirty();
+    }
+
     window.VJStore = {
-        getHubungan, setHubungan,
+        getHubungan, setHubungan, getGantian, setGantian,
         getSlot, setSlotConfig, addSlotLabel, setKelasBlok, setGuruBlok, copyKelasBlok, slotSummary, guruSlotSummary, genWaktu,
         getPeraturan, setPeraturan, PERATURAN_DEFAULT, getJadual, setJadual,
         getSolverInput() { return clone({ guru: db.guru, kelas: db.kelas, subjek: db.subjek, transaksi: db.transaksi, slot: db.slot, peraturan: db.peraturan, jadual: db.jadual, hubungan: db.hubungan }); },
@@ -2280,6 +2317,9 @@ window.VJSampleData = function () {
             <button onclick="switchTab('jadual')" id="nav-jadual" class="nav-tab">
                 <i data-lucide="wand-sparkles" class="w-4 h-4"></i> Susun Jadual
             </button>
+            <button onclick="switchTab('ganti')" id="nav-ganti" class="nav-tab">
+                <i data-lucide="user-check" class="w-4 h-4"></i> Guru Ganti
+            </button>
         </div>
 
         <!-- Quick Action Buttons -->
@@ -2811,6 +2851,157 @@ window.VJSampleData = function () {
                             <i data-lucide="triangle-alert" class="w-3.5 h-3.5 text-amber-600"></i> Isu & sesi belum dijadualkan
                         </div>
                         <ul id="jdlIsu" class="max-h-72 overflow-y-auto divide-y divide-slate-100 text-xs"></ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============================================================== -->
+        <!-- VIEW 9: GURU GANTI (KALENDAR, CADANGAN, BEBAN, TETAPAN)        -->
+        <!-- ============================================================== -->
+        <div id="view-ganti" class="view-section hidden bg-white border border-slate-200 rounded-2xl shadow-card overflow-hidden">
+            <div class="p-3.5 bg-slate-50/80 border-b border-slate-200 flex flex-wrap justify-between items-center gap-2 no-print">
+                <div class="flex flex-wrap items-center gap-2">
+                    <i data-lucide="user-check" class="w-4 h-4 text-brand-600"></i>
+                    <h3 class="text-sm font-heading font-bold text-slate-800">Guru Ganti</h3>
+                    <span id="gtOverview" class="text-[11px] text-slate-500"></span>
+                </div>
+                <div class="flex p-0.5 bg-slate-200/70 rounded-lg text-[11px] font-bold">
+                    <button onclick="gtSetMode('kalendar')" id="gtModeKalendar" class="px-3 py-1 rounded-md transition">Kalendar</button>
+                    <button onclick="gtSetMode('beban')" id="gtModeBeban" class="px-3 py-1 rounded-md transition">Beban Guru Ganti</button>
+                    <button onclick="gtSetMode('tetapan')" id="gtModeTetapan" class="px-3 py-1 rounded-md transition">Tetapan & Cuti</button>
+                </div>
+            </div>
+
+            <!-- KALENDAR -->
+            <div id="gtPaneKalendar" class="flex flex-col lg:flex-row min-h-[60vh]">
+                <div class="lg:w-80 shrink-0 border-b lg:border-b-0 lg:border-r border-slate-200 bg-slate-50/50 p-3">
+                    <div class="flex items-center justify-between mb-2">
+                        <button onclick="gtBulan(-1)" class="p-1.5 hover:bg-white rounded-lg text-slate-600" title="Bulan terdahulu"><i data-lucide="chevron-left" class="w-4 h-4"></i></button>
+                        <button onclick="gtBulan(0)" id="gtBulanLabel" class="text-sm font-heading font-bold text-slate-800 hover:text-brand-700" title="Kembali ke bulan ini"></button>
+                        <button onclick="gtBulan(1)" class="p-1.5 hover:bg-white rounded-lg text-slate-600" title="Bulan seterusnya"><i data-lucide="chevron-right" class="w-4 h-4"></i></button>
+                    </div>
+                    <div id="gtKalendar" class="grid grid-cols-7 gap-1 text-center"></div>
+                    <div class="flex flex-wrap gap-x-3 gap-y-1 mt-3 text-[10px] text-slate-500">
+                        <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded bg-amber-200"></span> Ada guru tidak hadir</span>
+                        <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded bg-emerald-200"></span> Guru ganti disahkan</span>
+                        <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded bg-rose-200"></span> Cuti</span>
+                    </div>
+                </div>
+
+                <div class="flex-1 min-w-0 p-4 space-y-4">
+                    <div class="flex flex-wrap items-baseline justify-between gap-2">
+                        <div>
+                            <h4 id="gtTajuk" class="font-heading font-bold text-lg text-slate-800"></h4>
+                            <p id="gtInfo" class="text-xs text-slate-500"></p>
+                        </div>
+                        <div class="flex flex-wrap items-center gap-1.5 no-print">
+                            <button onclick="gtSejarah()" class="px-3 py-1.5 border border-slate-200 bg-white hover:bg-slate-100 rounded-lg text-xs font-bold text-slate-700 flex items-center gap-1.5"><i data-lucide="history" class="w-3.5 h-3.5"></i> Sejarah</button>
+                            <button onclick="gtCetak()" class="px-3 py-1.5 border border-slate-200 bg-white hover:bg-slate-100 rounded-lg text-xs font-bold text-slate-700 flex items-center gap-1.5"><i data-lucide="printer" class="w-3.5 h-3.5"></i> Cetak</button>
+                            <button onclick="gtEksportExcel()" class="px-3 py-1.5 border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 rounded-lg text-xs font-bold text-emerald-700 flex items-center gap-1.5"><i data-lucide="download" class="w-3.5 h-3.5"></i> Excel</button>
+                        </div>
+                    </div>
+
+                    <!-- Guru tidak hadir -->
+                    <div class="border border-slate-200 rounded-xl overflow-hidden">
+                        <div class="px-3 py-2 bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                            <i data-lucide="user-x" class="w-3.5 h-3.5 text-amber-600"></i> Guru tidak hadir
+                        </div>
+                        <div class="p-3 border-b border-slate-100 flex flex-wrap items-end gap-2 no-print">
+                            <label class="block flex-1 min-w-[180px]"><span class="block text-[10px] font-bold text-slate-500 mb-0.5">Guru</span>
+                                <select id="gtThGuru" class="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-xs bg-white"></select></label>
+                            <label class="block"><span class="block text-[10px] font-bold text-slate-500 mb-0.5">Dari waktu</span>
+                                <select id="gtThMula" class="border border-slate-300 rounded-lg px-2 py-1.5 text-xs bg-white"></select></label>
+                            <label class="block"><span class="block text-[10px] font-bold text-slate-500 mb-0.5">Hingga waktu</span>
+                                <select id="gtThTamat" class="border border-slate-300 rounded-lg px-2 py-1.5 text-xs bg-white"></select></label>
+                            <label class="block flex-1 min-w-[140px]"><span class="block text-[10px] font-bold text-slate-500 mb-0.5">Sebab</span>
+                                <input id="gtThSebab" type="text" list="gtSebabList" placeholder="Cth: Cuti sakit" class="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-xs"></label>
+                            <datalist id="gtSebabList"><option>Cuti sakit</option><option>Cuti rehat khas</option><option>Urusan rasmi</option><option>Kursus</option><option>Mesyuarat</option></datalist>
+                            <button onclick="gtTambahTidakHadir()" class="px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5"><i data-lucide="plus" class="w-3.5 h-3.5"></i> Tambah</button>
+                        </div>
+                        <ul id="gtTidakHadir" class="divide-y divide-slate-100 text-xs"></ul>
+                    </div>
+
+                    <!-- Cadangan guru ganti -->
+                    <div class="border border-slate-200 rounded-xl overflow-hidden">
+                        <div class="px-3 py-2 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2">
+                            <span class="text-xs font-bold text-slate-700 flex items-center gap-1.5"><i data-lucide="repeat" class="w-3.5 h-3.5 text-brand-600"></i> Cadangan guru ganti <span id="gtStatus" class="text-[10px] px-1.5 py-0.5 rounded-full"></span></span>
+                            <div class="flex flex-wrap gap-1.5 no-print">
+                                <button onclick="gtBatal()" id="gtBtnBatal" class="px-3 py-1.5 border border-rose-200 bg-rose-50 hover:bg-rose-100 rounded-lg text-xs font-bold text-rose-700 flex items-center gap-1.5"><i data-lucide="undo-2" class="w-3.5 h-3.5"></i> Batal Pengesahan</button>
+                                <button onclick="gtSahkan()" id="gtBtnSahkan" class="px-3.5 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-xs font-bold shadow flex items-center gap-1.5"><i data-lucide="check-check" class="w-3.5 h-3.5"></i> Sahkan & Simpan</button>
+                            </div>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-xs">
+                                <thead><tr class="bg-slate-50 text-[11px] text-slate-500 text-left">
+                                    <th class="px-3 py-2 font-bold">Waktu</th><th class="px-3 py-2 font-bold">Kelas</th><th class="px-3 py-2 font-bold">Subjek</th>
+                                    <th class="px-3 py-2 font-bold">Guru tidak hadir</th><th class="px-3 py-2 font-bold">Guru ganti</th></tr></thead>
+                                <tbody id="gtCadangan" class="divide-y divide-slate-100"></tbody>
+                            </table>
+                        </div>
+                        <div class="px-3 py-2 border-t border-slate-100 flex flex-wrap items-center gap-2 no-print">
+                            <input id="gtCatatan" type="text" placeholder="Catatan pengesahan (pilihan)" class="flex-1 min-w-[200px] border border-slate-300 rounded-lg px-2 py-1.5 text-xs">
+                            <p class="text-[10px] text-slate-400">Cadangan disusun ikut jumlah minit ganti terendah (adil). Hanya rekod disahkan dikira dalam beban.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- BEBAN GURU GANTI -->
+            <div id="gtPaneBeban" class="hidden p-4 space-y-3">
+                <div class="flex flex-wrap items-end gap-2">
+                    <label class="block"><span class="block text-[10px] font-bold text-slate-500 mb-0.5">Hingga tarikh (tidak termasuk)</span>
+                        <input id="gtBebanTarikh" type="date" class="border border-slate-300 rounded-lg px-2 py-1.5 text-xs"></label>
+                    <button onclick="gtRenderBeban()" class="px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5"><i data-lucide="bar-chart-3" class="w-3.5 h-3.5"></i> Jana Laporan</button>
+                    <p id="gtBebanInfo" class="text-[11px] text-slate-500"></p>
+                </div>
+                <div class="overflow-x-auto border border-slate-200 rounded-xl">
+                    <table class="w-full text-xs">
+                        <thead><tr class="bg-slate-50 text-[11px] text-slate-500 text-left">
+                            <th class="px-3 py-2 font-bold">Guru</th><th class="px-3 py-2 font-bold text-right">Jumlah minit</th><th class="px-3 py-2 font-bold text-right">Bil. tugas</th>
+                            <th class="px-3 py-2 font-bold">Tugas terakhir</th><th class="px-3 py-2 font-bold w-1/3">Taburan</th></tr></thead>
+                        <tbody id="gtBeban" class="divide-y divide-slate-100"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- TETAPAN & CUTI -->
+            <div id="gtPaneTetapan" class="hidden p-4 grid lg:grid-cols-2 gap-4">
+                <div class="space-y-3">
+                    <div class="border border-slate-200 rounded-xl p-3 space-y-2">
+                        <p class="text-xs font-bold text-slate-700">Tetapan laporan</p>
+                        <label class="block"><span class="block text-[10px] font-bold text-slate-500 mb-0.5">Nama sekolah (untuk cetakan)</span>
+                            <input id="gtSetSekolah" type="text" class="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-xs"></label>
+                        <div class="grid grid-cols-2 gap-2">
+                            <label class="block"><span class="block text-[10px] font-bold text-slate-500 mb-0.5">Mula pengiraan beban</span>
+                                <input id="gtSetMula" type="date" class="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-xs"></label>
+                            <label class="block"><span class="block text-[10px] font-bold text-slate-500 mb-0.5">Disediakan oleh</span>
+                                <input id="gtSetOleh" type="text" class="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-xs"></label>
+                        </div>
+                        <div class="flex justify-end"><button onclick="gtSimpanTetapan()" class="px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5"><i data-lucide="check" class="w-3.5 h-3.5"></i> Simpan Tetapan</button></div>
+                    </div>
+                    <div class="border border-slate-200 rounded-xl overflow-hidden">
+                        <div class="px-3 py-2 bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-700 flex items-center gap-1.5"><i data-lucide="calendar-off" class="w-3.5 h-3.5 text-rose-600"></i> Cuti / hari tiada persekolahan</div>
+                        <div class="p-3 flex flex-wrap items-end gap-2 border-b border-slate-100">
+                            <input id="gtCutiTarikh" type="date" class="border border-slate-300 rounded-lg px-2 py-1.5 text-xs">
+                            <input id="gtCutiNama" type="text" placeholder="Cth: Hari Kebangsaan" class="flex-1 min-w-[140px] border border-slate-300 rounded-lg px-2 py-1.5 text-xs">
+                            <button onclick="gtTambahCuti()" class="px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5"><i data-lucide="plus" class="w-3.5 h-3.5"></i> Tambah</button>
+                        </div>
+                        <ul id="gtCuti" class="divide-y divide-slate-100 text-xs max-h-72 overflow-y-auto"></ul>
+                    </div>
+                </div>
+                <div class="border border-slate-200 rounded-xl overflow-hidden">
+                    <div class="px-3 py-2 bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-700 flex items-center justify-between gap-1.5">
+                        <span class="flex items-center gap-1.5"><i data-lucide="users" class="w-3.5 h-3.5 text-brand-600"></i> Kelayakan guru ganti</span>
+                        <button onclick="gtSimpanGuru()" class="px-3 py-1 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-[11px] font-bold">Simpan</button>
+                    </div>
+                    <div class="max-h-[60vh] overflow-y-auto">
+                        <table class="w-full text-xs">
+                            <thead><tr class="bg-slate-50 text-[10px] text-slate-500 text-left sticky top-0">
+                                <th class="px-3 py-1.5 font-bold">Guru</th><th class="px-2 py-1.5 font-bold text-center">Layak</th>
+                                <th class="px-2 py-1.5 font-bold text-center" title="Had tugas ganti sehari">Had/hari</th><th class="px-2 py-1.5 font-bold text-center" title="Minit dibawa dari rekod terdahulu">Minit bawa</th></tr></thead>
+                            <tbody id="gtGuruList" class="divide-y divide-slate-100"></tbody>
+                        </table>
                     </div>
                 </div>
             </div>
@@ -7620,6 +7811,9 @@ window.VJSolver = (function () {
                         else {
                             kos = 1000 + Math.random() * 300 + kosHubunganLembut(u, s, set);
                             for (const x of set) kos += 200 * units[x].len + (iter - placedAt[x] < 25 ? 2000 : 0);
+                            // Sebaran subjek (dari enjin Jadual Guru): elak subjek sama berulang pada hari yang sama walaupun perlu mengusir
+                            const dd = Math.floor(s / W);
+                            units[u].pairs.forEach(([k, sj]) => { kos += 10 * (daySub[k + '|' + sj + '|' + dd] || []).filter(x => !set.has(x)).length; });
                         }
                         if (kos < bestKos) { bestKos = kos; best = s; bestSet = set; }
                     }
@@ -8052,6 +8246,436 @@ window.VJSolver = (function () {
         }
 
         document.getElementById('jdlPecahAuto').addEventListener('change', () => renderJadualView());
+    </script>
+    <script>
+/**
+ * VISIJADUAL PRO V2 — GURU GANTI (ganti.js)
+ * Logik dipindahkan daripada Jadual Guru (relief_plan / eligible / load_stats) dan disesuaikan dengan
+ * grid hari × waktu VisiJadual. Pelajaran diambil daripada jadual tersusun (data/jadual.json).
+ */
+window.VJGanti = (function () {
+    const NAMA_HARI = ['Ahad', 'Isnin', 'Selasa', 'Rabu', 'Khamis', 'Jumaat', 'Sabtu'];
+    const minit = t => { const m = /^(\d{1,2}):(\d{2})$/.exec(String(t || '')); return m ? (+m[1]) * 60 + (+m[2]) : null; };
+    const bertindih = (a, b, c, d) => a < d && c < b;
+    const pad = n => String(n).padStart(2, '0');
+    const isoHari = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    const hariIni = () => isoHari(new Date());
+    const dariIso = s => { const [y, m, d] = String(s).split('-').map(Number); return new Date(y, m - 1, d); };
+
+    // Indeks hari dalam slot.hari (cth "Isnin" = 0) atau -1 jika bukan hari persekolahan
+    function indeksHari(tarikh, hari) {
+        const nama = NAMA_HARI[dariIso(tarikh).getDay()].toLowerCase();
+        return hari.findIndex(h => String(h).trim().toLowerCase() === nama);
+    }
+
+    // Julat minit setiap waktu (fallback 30 minit jika masa tidak diisi)
+    function julatWaktu(slot) {
+        return slot.waktu.map((w, p) => {
+            const a = minit(w.mula), b = minit(w.tamat);
+            return a !== null && b !== null && b > a ? [a, b] : [p * 30, p * 30 + 30];
+        });
+    }
+
+    function konteks(inp) {
+        const g = inp.gantian;
+        const nama = (rows) => Object.fromEntries(rows.map(r => [String(r[0]), String(r[1])]));
+        const kod = Object.fromEntries(inp.subjek.map(r => [String(r[0]), String(r[2] || r[1])]));
+        const trx = Object.fromEntries(inp.transaksi.map(t => [String(t[8]), t]));
+        const J = julatWaktu(inp.slot);
+        // Pelajaran setiap waktu: { hari, waktu, guru, kelas[], subjek, uuid }
+        const pelajaran = [];
+        (inp.jadual.sesi || []).forEach(x => {
+            const t = trx[x.uuid]; if (!t) return;
+            for (let i = 0; i < x.panjang; i++) pelajaran.push({
+                hari: x.hari, waktu: x.waktu + i, uuid: x.uuid, guru: String(t[1] || ''),
+                kelas: String(t[3]).split(',').map(s => s.trim()).filter(Boolean), subjek: String(t[5] || ''), subjekNama: String(t[6] || '')
+            });
+        });
+        return { g, J, pelajaran, guruNama: nama(inp.guru), kelasNama: nama(inp.kelas), subjekNama: nama(inp.subjek), kod, slot: inp.slot, guru: inp.guru };
+    }
+
+    function tidakHadir(K, guru, tarikh, p) {
+        const [a, b] = K.J[p];
+        return K.g.tidakHadir.find(x => x.guru === guru && x.tarikh === tarikh &&
+            bertindih(a, b, minit(x.mula) ?? 0, minit(x.tamat) ?? 24 * 60)) || null;
+    }
+
+    const cuti = (g, tarikh) => g.cuti.find(c => c.tarikh === tarikh) || null;
+
+    // Rekod terkini bagi setiap tarikh (rekod terakhir menang: SAH atau BATAL)
+    function rekodTerkini(g) {
+        const m = {};
+        g.rekod.forEach(r => { m[r.tarikh] = r; });
+        return m;
+    }
+
+    // Statistik beban: hanya rekod SAH dari mulaKira hingga sebelum tarikh sasaran
+    function statistik(inp, sebelum) {
+        const g = inp.gantian, mula = g.tetapan.mulaKira || '2000-01-01';
+        const st = {};
+        inp.guru.forEach(r => { const id = String(r[0]); st[id] = { minit: (g.guru[id] || {}).minitBawa || 0, bil: 0, akhir: '' }; });
+        Object.values(rekodTerkini(g)).filter(r => r.status === 'SAH' && r.tarikh >= mula && r.tarikh < sebelum)
+            .sort((a, b) => a.tarikh.localeCompare(b.tarikh))
+            .forEach(r => r.baris.forEach(x => {
+                const s = st[x.ganti]; if (!s) return;
+                s.minit += parseInt(x.minit) || 0; s.bil++; s.akhir = r.tarikh;
+            }));
+        return st;
+    }
+
+    function layak(K, tarikh, d, p, baris, sudah) {
+        const [a, b] = K.J[p];
+        return K.guru.map(r => String(r[0])).filter(id => {
+            const tg = K.g.guru[id] || {};
+            if (tg.layak === false) return false;
+            if (id === baris.guru) return false;
+            if (tidakHadir(K, id, tarikh, p)) return false;
+            if (((K.slot.guru || {})[id] || {})[`${d}-${p}`]) return false;                 // slot guru diblok
+            if (K.pelajaran.some(x => x.hari === d && x.guru === id && bertindih(a, b, ...K.J[x.waktu]))) return false; // sedang mengajar
+            if (sudah.some(x => x.ganti === id && bertindih(a, b, x.mulaM, x.tamatM))) return false;   // sudah ganti waktu ini
+            const had = tg.maksSehari === undefined ? 2 : tg.maksSehari;
+            if (had > 0 && sudah.filter(x => x.ganti === id).length >= had) return false;
+            return true;
+        });
+    }
+
+    /**
+     * Rancang guru ganti bagi satu tarikh. pilihan = { kunci: guruId } untuk menukar cadangan.
+     * Pulangkan { baris, isu } — setiap baris satu waktu pelajaran guru yang tidak hadir.
+     */
+    function rancang(inp, tarikh, pilihan) {
+        const K = konteks(inp);
+        const d = indeksHari(tarikh, K.slot.hari);
+        if (d < 0) return { baris: [], isu: 'Tarikh ini bukan hari persekolahan.' };
+        const c = cuti(K.g, tarikh);
+        if (c) return { baris: [], isu: `Cuti: ${c.nama || 'tiada persekolahan'}.` };
+        if (!K.pelajaran.length) return { baris: [], isu: 'Jadual belum disusun. Susun jadual di tab "Susun Jadual" dahulu.' };
+        const st = statistik(inp, tarikh);
+        const perlu = [];
+        K.pelajaran.filter(x => x.hari === d && x.guru).forEach(x => {
+            const th = tidakHadir(K, x.guru, tarikh, x.waktu);
+            if (th) perlu.push({ ...x, sebab: th.sebab || 'Tidak hadir' });
+        });
+        perlu.sort((a, b) => a.waktu - b.waktu || (K.kelasNama[a.kelas[0]] || '').localeCompare(K.kelasNama[b.kelas[0]] || '', 'ms', { numeric: true }));
+        const out = [];
+        perlu.forEach(x => {
+            const [mulaM, tamatM] = K.J[x.waktu];
+            const kunci = `${d}|${x.waktu}|${x.uuid}|${x.guru}`;
+            const baris = {
+                kunci, hari: d, waktu: x.waktu, mula: K.slot.waktu[x.waktu].mula, tamat: K.slot.waktu[x.waktu].tamat, mulaM, tamatM, minit: tamatM - mulaM,
+                guru: x.guru, guruNama: K.guruNama[x.guru] || x.guru, kelas: x.kelas.join(', '), kelasNama: x.kelas.map(k => K.kelasNama[k] || k).join(', '),
+                subjek: x.subjek, subjekNama: K.kod[x.subjek] || x.subjekNama, sebab: x.sebab, ganti: '', gantiNama: ''
+            };
+            const calon = layak(K, tarikh, d, x.waktu, baris, out).sort((a, b) => {
+                const sa = st[a] || {}, sb = st[b] || {};
+                return (sa.minit || 0) - (sb.minit || 0) || String(sa.akhir || '').localeCompare(String(sb.akhir || '')) || (K.guruNama[a] || a).localeCompare(K.guruNama[b] || b, 'ms');
+            });
+            let pilih = calon[0] || '';
+            if (pilihan && kunci in pilihan) pilih = pilihan[kunci];
+            if (pilih && !calon.includes(pilih)) pilih = calon[0] || '';
+            baris.ganti = pilih;
+            baris.gantiNama = pilih ? (K.guruNama[pilih] || pilih) : '';
+            baris.calon = calon.map(id => ({ id, nama: K.guruNama[id] || id, minit: (st[id] || {}).minit || 0 }));
+            if (pilih) { st[pilih] = st[pilih] || { minit: 0, bil: 0, akhir: '' }; st[pilih].minit += baris.minit; st[pilih].akhir = tarikh + ' ' + baris.mula; }
+            out.push(baris);
+        });
+        return { baris: out, isu: '' };
+    }
+
+    return { rancang, statistik, rekodTerkini, indeksHari, NAMA_HARI, hariIni, isoHari, dariIso };
+})();
+    </script>
+    <script>
+        // =========================================================================
+        // GURU GANTI — paparan
+        // =========================================================================
+        let gtMode = 'kalendar';
+        let gtBulanAktif = (() => { const n = new Date(); return new Date(n.getFullYear(), n.getMonth(), 1); })();
+        let gtTarikh = VJGanti.hariIni();
+        let gtPilihan = {};     // tukar cadangan: { kunci: guruId }
+        const GT_BULAN = ['Januari', 'Februari', 'Mac', 'April', 'Mei', 'Jun', 'Julai', 'Ogos', 'September', 'Oktober', 'November', 'Disember'];
+
+        function gtInput() {
+            const inp = VJStore.getSolverInput();
+            inp.jadual = VJStore.getJadual();
+            inp.gantian = VJStore.getGantian();
+            return inp;
+        }
+
+        function gtSetMode(m) { gtMode = m; renderGantiView(); }
+        function gtBulan(n) {
+            if (n === 0) { const t = new Date(); gtBulanAktif = new Date(t.getFullYear(), t.getMonth(), 1); gtTarikh = VJGanti.hariIni(); }
+            else gtBulanAktif = new Date(gtBulanAktif.getFullYear(), gtBulanAktif.getMonth() + n, 1);
+            renderGantiView();
+        }
+        function gtPilihTarikh(t) { gtTarikh = t; gtPilihan = {}; renderGantiView(); }
+
+        function gtUbah(fn) {
+            if (!isEditMode) { ensureEditMode(() => gtUbah(fn)); return false; }
+            const g = VJStore.getGantian();
+            if (fn(g) === false) return false;
+            VJStore.setGantian(g);
+            renderGantiView();
+            return true;
+        }
+
+        function renderGantiView() {
+            const view = document.getElementById('view-ganti');
+            if (!view || view.classList.contains('hidden')) return;
+            ['Kalendar', 'Beban', 'Tetapan'].forEach(m => {
+                const on = gtMode === m.toLowerCase();
+                document.getElementById('gtMode' + m).className = 'px-3 py-1 rounded-md transition ' + (on ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-800');
+                document.getElementById('gtPane' + m).classList.toggle('hidden', !on);
+            });
+            const inp = gtInput();
+            const g = inp.gantian;
+            const terkini = VJGanti.rekodTerkini(g);
+            const sah = Object.values(terkini).filter(r => r.status === 'SAH').length;
+            document.getElementById('gtOverview').innerText = `· ${g.tidakHadir.length} rekod tidak hadir · ${sah} hari disahkan`;
+            if (gtMode === 'kalendar') gtRenderKalendar(inp, terkini);
+            if (gtMode === 'beban') gtRenderBeban();
+            if (gtMode === 'tetapan') gtRenderTetapan(inp);
+            lucide.createIcons();
+        }
+
+        function gtRenderKalendar(inp, terkini) {
+            const g = inp.gantian, y = gtBulanAktif.getFullYear(), m = gtBulanAktif.getMonth();
+            document.getElementById('gtBulanLabel').innerText = `${GT_BULAN[m]} ${y}`;
+            const thBil = {};
+            g.tidakHadir.forEach(x => { thBil[x.tarikh] = (thBil[x.tarikh] || 0) + 1; });
+            let html = VJGanti.NAMA_HARI.map(h => `<div class="text-[10px] font-bold text-slate-400 py-1">${h.slice(0, 3)}</div>`).join('');
+            for (let i = 0; i < new Date(y, m, 1).getDay(); i++) html += '<div></div>';
+            const akhir = new Date(y, m + 1, 0).getDate();
+            for (let d = 1; d <= akhir; d++) {
+                const t = VJGanti.isoHari(new Date(y, m, d));
+                const sekolah = VJGanti.indeksHari(t, inp.slot.hari) >= 0;
+                const r = terkini[t];
+                const cuti = g.cuti.some(c => c.tarikh === t);
+                let cls = sekolah ? 'bg-white text-slate-700 hover:bg-brand-50' : 'bg-transparent text-slate-300';
+                if (cuti) cls = 'bg-rose-100 text-rose-800';
+                else if (r && r.status === 'SAH') cls = 'bg-emerald-100 text-emerald-800';
+                else if (thBil[t]) cls = 'bg-amber-100 text-amber-800';
+                const sel = t === gtTarikh ? 'ring-2 ring-brand-600' : 'border border-slate-200';
+                const dot = thBil[t] ? `<span class="block text-[9px] font-bold leading-none">${thBil[t]}✕</span>` : '<span class="block text-[9px] leading-none">&nbsp;</span>';
+                html += `<button onclick="gtPilihTarikh('${t}')" class="rounded-lg py-1.5 text-xs font-bold transition ${cls} ${sel}">${d}${dot}</button>`;
+            }
+            document.getElementById('gtKalendar').innerHTML = html;
+
+            // Butiran tarikh
+            const dt = VJGanti.dariIso(gtTarikh);
+            const di = VJGanti.indeksHari(gtTarikh, inp.slot.hari);
+            document.getElementById('gtTajuk').innerText = `${VJGanti.NAMA_HARI[dt.getDay()]}, ${dt.getDate()} ${GT_BULAN[dt.getMonth()]} ${dt.getFullYear()}`;
+            const guruNama = Object.fromEntries(inp.guru.map(r => [String(r[0]), r[1]]));
+
+            // Borang tidak hadir
+            const selG = document.getElementById('gtThGuru'), prevG = selG.value;
+            selG.innerHTML = inp.guru.slice().sort((a, b) => String(a[1]).localeCompare(String(b[1]), 'ms'))
+                .map(r => `<option value="${escapeHtml(r[0])}">${escapeHtml(r[1])}</option>`).join('');
+            if (prevG) selG.value = prevG;
+            const opsWaktu = inp.slot.waktu.map((w, p) => `<option value="${p}">W${p + 1} · ${escapeHtml(w.mula)}–${escapeHtml(w.tamat)}</option>`).join('');
+            const sM = document.getElementById('gtThMula'), sT = document.getElementById('gtThTamat');
+            const pm = sM.value, pt = sT.value;
+            sM.innerHTML = opsWaktu; sT.innerHTML = opsWaktu;
+            sM.value = pm || '0'; sT.value = pt || String(inp.slot.waktu.length - 1);
+
+            const th = inp.gantian.tidakHadir.filter(x => x.tarikh === gtTarikh);
+            document.getElementById('gtTidakHadir').innerHTML = th.length ? th.map(x => `<li class="px-3 py-2 flex items-center justify-between gap-2">
+                    <span><b class="text-slate-800">${escapeHtml(guruNama[x.guru] || x.guru)}</b>
+                    <span class="text-slate-500"> · ${x.mula || 'awal'}–${x.tamat || 'akhir'} · ${escapeHtml(x.sebab || 'Tidak hadir')}</span></span>
+                    <button onclick="gtPadamTidakHadir('${escapeHtml(x.id)}')" class="p-1 text-rose-500 hover:bg-rose-50 rounded no-print" title="Padam"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button></li>`).join('')
+                : '<li class="px-3 py-4 text-center text-slate-400">Tiada guru tidak hadir direkodkan.</li>';
+
+            // Cadangan / rekod disahkan
+            const r = terkini[gtTarikh];
+            const st = document.getElementById('gtStatus');
+            const disahkan = r && r.status === 'SAH';
+            st.className = 'text-[10px] px-1.5 py-0.5 rounded-full ' + (disahkan ? 'bg-emerald-100 text-emerald-700' : r ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-700');
+            st.innerText = disahkan ? 'DISAHKAN' : r ? 'DIBATALKAN' : 'BELUM DISAHKAN';
+            document.getElementById('gtBtnBatal').classList.toggle('hidden', !disahkan);
+            document.getElementById('gtBtnSahkan').classList.toggle('hidden', !!disahkan);
+            document.getElementById('gtCatatan').classList.toggle('hidden', !!disahkan);
+
+            let baris, isu = '';
+            if (disahkan) baris = r.baris;
+            else ({ baris, isu } = VJGanti.rancang(inp, gtTarikh, gtPilihan));
+            document.getElementById('gtInfo').innerText = di < 0 ? 'Bukan hari persekolahan.' : isu || (disahkan
+                ? `Disahkan ${new Date(r.dicipta).toLocaleString('ms-MY')} oleh ${r.oleh}${r.catatan ? ' · ' + r.catatan : ''}`
+                : `${th.length} guru tidak hadir · ${baris.length} waktu perlu diganti`);
+            const tb = document.getElementById('gtCadangan');
+            if (!baris.length) {
+                tb.innerHTML = `<tr><td colspan="5" class="px-3 py-6 text-center text-slate-400">${escapeHtml(isu || 'Tiada waktu perlu diganti.')}</td></tr>`;
+                return;
+            }
+            tb.innerHTML = baris.map(x => {
+                const sel = disahkan ? `<b class="text-emerald-700">${escapeHtml(x.gantiNama || 'Belum dipilih')}</b>`
+                    : `<select onchange="gtTukar('${escapeHtml(x.kunci)}', this.value)" class="border ${x.ganti ? 'border-slate-300' : 'border-rose-300 bg-rose-50'} rounded-lg px-2 py-1 text-xs bg-white max-w-[260px]">
+                        <option value="">— Belum dipilih —</option>
+                        ${x.calon.map(c => `<option value="${escapeHtml(c.id)}" ${c.id === x.ganti ? 'selected' : ''}>${escapeHtml(c.nama)} · ${c.minit} minit</option>`).join('')}</select>
+                        ${x.calon.length ? '' : '<span class="block text-[10px] text-rose-600">Tiada guru lapang</span>'}`;
+                return `<tr><td class="px-3 py-2 whitespace-nowrap"><b>W${x.waktu + 1}</b> <span class="text-slate-500">${escapeHtml(x.mula)}–${escapeHtml(x.tamat)}</span></td>
+                    <td class="px-3 py-2">${escapeHtml(x.kelasNama)}</td><td class="px-3 py-2"><span class="px-1.5 py-0.5 rounded ${jdlWarna(x.subjek)} font-bold text-[10px]">${escapeHtml(x.subjekNama)}</span></td>
+                    <td class="px-3 py-2">${escapeHtml(x.guruNama)}<span class="block text-[10px] text-slate-400">${escapeHtml(x.sebab)}</span></td><td class="px-3 py-2">${sel}</td></tr>`;
+            }).join('');
+        }
+
+        function gtTukar(kunci, id) { gtPilihan[kunci] = id; renderGantiView(); }
+
+        function gtTambahTidakHadir() {
+            const guru = document.getElementById('gtThGuru').value;
+            if (!guru) { showToast('Tambah guru di "Data Induk" dahulu.', 'warning'); return; }
+            const slot = VJStore.getSlot();
+            const a = parseInt(document.getElementById('gtThMula').value) || 0, b = parseInt(document.getElementById('gtThTamat').value) || 0;
+            if (b < a) { showToast('Waktu tamat mesti selepas waktu mula.', 'warning'); return; }
+            const sebab = document.getElementById('gtThSebab').value.trim();
+            const ok = gtUbah(g => {
+                g.tidakHadir.push({ id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()), tarikh: gtTarikh, guru,
+                    mula: a === 0 ? '' : slot.waktu[a].mula, tamat: b === slot.waktu.length - 1 ? '' : slot.waktu[b].tamat, sebab });
+            });
+            if (ok) { document.getElementById('gtThSebab').value = ''; showToast('Rekod guru tidak hadir ditambah.', 'success'); }
+        }
+
+        function gtPadamTidakHadir(id) {
+            gtUbah(g => { g.tidakHadir = g.tidakHadir.filter(x => x.id !== id); });
+        }
+
+        function gtSahkan() {
+            const inp = gtInput();
+            const { baris, isu } = VJGanti.rancang(inp, gtTarikh, gtPilihan);
+            if (!baris.length) { showToast(isu || 'Tiada waktu perlu diganti pada tarikh ini.', 'warning'); return; }
+            const kosong = baris.filter(x => !x.ganti).length;
+            if (kosong && !confirm(`${kosong} waktu belum ada guru ganti. Sahkan juga?`)) return;
+            const catatan = document.getElementById('gtCatatan').value.trim();
+            const ok = gtUbah(g => {
+                g.rekod.push({ id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()), tarikh: gtTarikh, status: 'SAH', dicipta: new Date().toISOString(),
+                    oleh: g.tetapan.disediakan || 'Pentadbir Sekolah', catatan, baris: baris.map(({ calon, ...x }) => x) });
+            });
+            if (ok) { gtPilihan = {}; document.getElementById('gtCatatan').value = ''; showToast('Guru ganti disahkan. Ingat untuk Simpan fail ZIP.', 'success'); }
+        }
+
+        function gtBatal() {
+            const sebab = prompt('Nyatakan sebab pembatalan:');
+            if (sebab === null) return;
+            gtUbah(g => {
+                g.rekod.push({ id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()), tarikh: gtTarikh, status: 'BATAL', dicipta: new Date().toISOString(),
+                    oleh: g.tetapan.disediakan || 'Pentadbir Sekolah', catatan: sebab.trim(), baris: [] });
+            });
+        }
+
+        function gtSejarah() {
+            const g = VJStore.getGantian();
+            const list = g.rekod.filter(r => r.tarikh === gtTarikh);
+            const teks = list.length ? list.map(r => `${new Date(r.dicipta).toLocaleString('ms-MY')} · ${r.status === 'SAH' ? 'DISAHKAN' : 'DIBATALKAN'} · ${r.oleh}` +
+                (r.catatan ? `\n  ${r.catatan}` : '') + r.baris.map(x => `\n  W${x.waktu + 1} ${x.kelasNama}: ${x.guruNama} → ${x.gantiNama || 'Belum dipilih'}`).join('')).join('\n\n')
+                : 'Tiada rekod sejarah bagi tarikh ini.';
+            alert(`Sejarah guru ganti · ${gtTarikh}\n\n${teks}`);
+        }
+
+        function gtBarisSah() {
+            const r = VJGanti.rekodTerkini(VJStore.getGantian())[gtTarikh];
+            if (!r || r.status !== 'SAH') { showToast('Tiada rekod guru ganti yang DISAHKAN pada tarikh ini.', 'warning'); return null; }
+            return r;
+        }
+
+        function gtCetak() {
+            const r = gtBarisSah(); if (!r) return;
+            const g = VJStore.getGantian();
+            const e = escapeHtml;
+            const rows = r.baris.map((x, i) => `<tr><td>${i + 1}</td><td>${e(x.guruNama)}</td><td>${e(x.sebab)}</td><td>W${x.waktu + 1}</td><td>${e(x.mula)}–${e(x.tamat)}</td><td>${e(x.subjekNama)}</td><td>${e(x.kelasNama)}</td><td><b>${e(x.gantiNama || 'Belum dipilih')}</b></td><td style="width:22mm"></td></tr>`).join('');
+            const w = window.open('', '_blank');
+            if (!w) { showToast('Pop-up disekat. Benarkan pop-up untuk mencetak.', 'error'); return; }
+            w.document.write(`<!doctype html><html lang="ms"><head><meta charset="utf-8"><title>Jadual Guru Ganti ${e(gtTarikh)}</title><style>
+                @page{size:A4 landscape;margin:12mm} body{font-family:Arial,sans-serif;font-size:11px;color:#000}
+                h1,h2,p{text-align:center;margin:2px 0} table{width:100%;border-collapse:collapse;margin-top:10px}
+                th,td{border:1px solid #000;padding:5px;text-align:left} th{background:#eee}</style></head><body>
+                <h1>${e(g.tetapan.namaSekolah || 'SEKOLAH')}</h1><h2>JADUAL GURU GANTI</h2>
+                <p>${e(document.getElementById('gtTajuk').innerText)}</p>
+                <table><thead><tr><th>Bil</th><th>Guru Tidak Hadir</th><th>Sebab</th><th>Waktu</th><th>Masa</th><th>Subjek</th><th>Kelas</th><th>Guru Ganti</th><th>T/tangan</th></tr></thead><tbody>${rows}</tbody></table>
+                <p style="text-align:left;margin-top:14px">Disediakan oleh: ${e(r.oleh)}</p><script>setTimeout(()=>print(),300)<\/script></body></html>`);
+            w.document.close();
+        }
+
+        function gtEksportExcel() {
+            const r = gtBarisSah(); if (!r) return;
+            const g = VJStore.getGantian();
+            const aoa = [[g.tetapan.namaSekolah || 'SEKOLAH'], ['JADUAL GURU GANTI'], [document.getElementById('gtTajuk').innerText], [],
+                ['Bil', 'Guru Tidak Hadir', 'Sebab', 'Waktu', 'Masa', 'Subjek', 'Kelas', 'Guru Ganti'],
+                ...r.baris.map((x, i) => [i + 1, x.guruNama, x.sebab, 'W' + (x.waktu + 1), `${x.mula}–${x.tamat}`, x.subjekNama, x.kelasNama, x.gantiNama || 'Belum dipilih'])];
+            const ws = XLSX.utils.aoa_to_sheet(aoa);
+            ws['!cols'] = [6, 30, 18, 8, 14, 14, 18, 30].map(wch => ({ wch }));
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Guru Ganti');
+            XLSX.writeFile(wb, `Guru_Ganti_${gtTarikh}.xlsx`);
+        }
+
+        function gtRenderBeban() {
+            const el = document.getElementById('gtBebanTarikh');
+            if (!el.value) { const t = new Date(); t.setDate(t.getDate() + 1); el.value = VJGanti.isoHari(t); }
+            const inp = gtInput();
+            const st = VJGanti.statistik(inp, el.value);
+            const rows = inp.guru.map(r => ({ id: String(r[0]), nama: r[1], ...(st[r[0]] || { minit: 0, bil: 0, akhir: '' }) }))
+                .sort((a, b) => b.minit - a.minit || String(a.nama).localeCompare(String(b.nama), 'ms'));
+            const max = Math.max(1, ...rows.map(r => r.minit));
+            const jum = rows.reduce((a, r) => a + r.minit, 0), aktif = rows.filter(r => r.bil).length;
+            document.getElementById('gtBebanInfo').innerText = `Sejak ${inp.gantian.tetapan.mulaKira} · ${jum} minit · ${aktif} guru pernah ganti`;
+            document.getElementById('gtBeban').innerHTML = rows.map(r => `<tr><td class="px-3 py-1.5 font-semibold text-slate-700">${escapeHtml(r.nama)}</td>
+                <td class="px-3 py-1.5 text-right font-bold">${r.minit}</td><td class="px-3 py-1.5 text-right">${r.bil}</td><td class="px-3 py-1.5 text-slate-500">${r.akhir || '—'}</td>
+                <td class="px-3 py-1.5"><div class="h-2 rounded-full bg-slate-100"><div class="h-2 rounded-full bg-brand-600" style="width:${(100 * r.minit / max).toFixed(1)}%"></div></div></td></tr>`).join('')
+                || '<tr><td colspan="5" class="px-3 py-6 text-center text-slate-400">Tiada guru.</td></tr>';
+        }
+
+        function gtRenderTetapan(inp) {
+            const g = inp.gantian;
+            document.getElementById('gtSetSekolah').value = g.tetapan.namaSekolah;
+            document.getElementById('gtSetMula').value = g.tetapan.mulaKira;
+            document.getElementById('gtSetOleh').value = g.tetapan.disediakan;
+            document.getElementById('gtCuti').innerHTML = g.cuti.slice().sort((a, b) => a.tarikh.localeCompare(b.tarikh)).map(c => `<li class="px-3 py-2 flex items-center justify-between">
+                <span><b>${c.tarikh}</b> <span class="text-slate-500">${escapeHtml(c.nama)}</span></span>
+                <button onclick="gtPadamCuti('${escapeHtml(c.id)}')" class="p-1 text-rose-500 hover:bg-rose-50 rounded" title="Padam"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button></li>`).join('')
+                || '<li class="px-3 py-4 text-center text-slate-400">Tiada cuti direkodkan.</li>';
+            document.getElementById('gtGuruList').innerHTML = inp.guru.slice().sort((a, b) => String(a[1]).localeCompare(String(b[1]), 'ms')).map(r => {
+                const t = g.guru[r[0]] || {};
+                return `<tr data-guru="${escapeHtml(r[0])}"><td class="px-3 py-1.5 font-semibold text-slate-700">${escapeHtml(r[1])}</td>
+                    <td class="px-2 py-1.5 text-center"><input type="checkbox" class="gt-layak w-3.5 h-3.5 accent-brand-600" ${t.layak === false ? '' : 'checked'}></td>
+                    <td class="px-2 py-1.5 text-center"><input type="number" min="0" max="10" class="gt-had w-14 border border-slate-300 rounded px-1 py-0.5 text-xs text-center" value="${t.maksSehari ?? 2}"></td>
+                    <td class="px-2 py-1.5 text-center"><input type="number" class="gt-bawa w-16 border border-slate-300 rounded px-1 py-0.5 text-xs text-center" value="${t.minitBawa || 0}"></td></tr>`;
+            }).join('') || '<tr><td colspan="4" class="px-3 py-6 text-center text-slate-400">Tambah guru di "Data Induk" dahulu.</td></tr>';
+        }
+
+        function gtSimpanTetapan() {
+            const mula = document.getElementById('gtSetMula').value;
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(mula)) { showToast('Tarikh mula pengiraan tidak sah.', 'warning'); return; }
+            if (gtUbah(g => { g.tetapan = { namaSekolah: document.getElementById('gtSetSekolah').value.trim(), mulaKira: mula, disediakan: document.getElementById('gtSetOleh').value.trim() || 'Pentadbir Sekolah' }; }))
+                showToast('Tetapan guru ganti disimpan.', 'success');
+        }
+
+        function gtSimpanGuru() {
+            const rows = [...document.querySelectorAll('#gtGuruList tr[data-guru]')];
+            if (gtUbah(g => rows.forEach(tr => {
+                g.guru[tr.dataset.guru] = { layak: tr.querySelector('.gt-layak').checked, maksSehari: parseInt(tr.querySelector('.gt-had').value) || 0, minitBawa: parseInt(tr.querySelector('.gt-bawa').value) || 0 };
+            }))) showToast('Kelayakan guru ganti disimpan.', 'success');
+        }
+
+        function gtTambahCuti() {
+            const t = document.getElementById('gtCutiTarikh').value;
+            if (!t) { showToast('Pilih tarikh cuti.', 'warning'); return; }
+            if (gtUbah(g => { g.cuti.push({ id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()), tarikh: t, nama: document.getElementById('gtCutiNama').value.trim() }); }))
+                document.getElementById('gtCutiNama').value = '';
+        }
+
+        function gtPadamCuti(id) { gtUbah(g => { g.cuti = g.cuti.filter(c => c.id !== id); }); }
+
+        (function () {
+            const origSwitchTab = switchTab;
+            switchTab = function (tabName) {
+                origSwitchTab(tabName);
+                if (tabName === 'ganti') renderGantiView();
+            };
+            const origProcessData = processData;
+            processData = function (data) {
+                origProcessData(data);
+                renderGantiView();
+            };
+        })();
 
         (function () {
             const origSwitchTab = switchTab;

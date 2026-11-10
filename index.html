@@ -1457,7 +1457,13 @@ window.VJSampleData = function () {
  * Pentadbir laman boleh menetapkan DRIVE_DEFAULT di bawah supaya pengguna tidak perlu mengisi apa-apa.
  */
 (function () {
-    const DRIVE_DEFAULT = { clientId: '', apiKey: '', appId: '' };
+    // Projek Google Cloud "VisiJadualPro". Client ID & Kunci API bukan rahsia: Client ID hanya sah untuk asal
+    // https://cikgumie.github.io (dan localhost:8767), Kunci API dihadkan kepada Picker API & laman yang sama.
+    const DRIVE_DEFAULT = {
+        clientId: '340293052933-g8kmgggg6sljcpjkiqgchaia53qfauak.apps.googleusercontent.com',
+        apiKey: 'AIzaSyCOOeQK4IeAB6d33nxJUvAeNgorz9Gmx9U',
+        appId: '340293052933'
+    };
     const CFG_KEY = 'visijadual_drive_cfg_v1';
     const LINK_KEY = 'visijadual_drive_link_v1';
     const SCOPE = 'https://www.googleapis.com/auth/drive.file';
@@ -1534,14 +1540,27 @@ window.VJSampleData = function () {
         await loadGis();
         if (!tokenClient) tokenClient = google.accounts.oauth2.initTokenClient({ client_id: c.clientId, scope: SCOPE, callback: () => {} });
         return new Promise((ok, gagal) => {
+            // Sesetengah pelayar melaporkan "popup_closed" walaupun tetingkap log masuk masih terbuka;
+            // tunggu jawapan sebenar sehingga 3 minit sebelum menganggap log masuk dibatalkan.
+            let pemasa = null;
             tokenClient.callback = r => {
+                clearTimeout(pemasa);
                 if (r.error) { gagal(new Error('Log masuk Google gagal: ' + (r.error_description || r.error))); return; }
                 if (!google.accounts.oauth2.hasGrantedAllScopes(r, SCOPE)) { gagal(new Error('Kebenaran akses Google Drive tidak diberikan.')); return; }
                 token = r.access_token;
                 tokenExpiry = Date.now() + (parseInt(r.expires_in) || 3600) * 1000;
                 ok(token);
             };
-            tokenClient.error_callback = e => gagal(new Error(e && e.type === 'popup_closed' ? 'Tetingkap log masuk Google ditutup.' : 'Log masuk Google gagal (' + (e && e.type) + ').'));
+            tokenClient.error_callback = e => {
+                if (e && e.type === 'popup_closed') {
+                    clearTimeout(pemasa);
+                    pemasa = setTimeout(() => gagal(new Error('Tetingkap log masuk Google ditutup sebelum selesai.')), 180000);
+                    return;
+                }
+                gagal(new Error(e && e.type === 'popup_failed_to_open'
+                    ? 'Tetingkap log masuk Google disekat. Benarkan pop-up untuk laman ini dan cuba lagi.'
+                    : 'Log masuk Google gagal (' + (e && e.type) + ').'));
+            };
             tokenClient.requestAccessToken({ prompt: token ? '' : undefined });
         });
     }

@@ -36,7 +36,11 @@ Butang **Drive** (ikon awan di header) dan **Buka dari Google Drive** (skrin per
   yang pernah dicipta / dibuka oleh VisiJadual.
 - Skop akses hanya `drive.file`: aplikasi **tidak** boleh membaca fail lain dalam Drive pengguna. Tiada data melalui pelayan lain.
 
-### Persediaan (sekali sahaja, oleh pentadbir laman)
+Laman ini sudah dikonfigurasi dengan projek Google Cloud **VisiJadualPro** (nilai dalam `DRIVE_DEFAULT`).
+Semasa aplikasi Google berstatus *Testing*, hanya e-mel dalam senarai **Test users** boleh log masuk
+(Google Auth Platform → Audience). Untuk semua pengguna, lengkapkan *Branding* dan tekan **Publish app**.
+
+### Persediaan (untuk fork / projek Google sendiri)
 
 1. [Google Cloud Console](https://console.cloud.google.com/) → cipta projek → *APIs & Services → Library*:
    hidupkan **Google Drive API** dan **Google Picker API**.

@@ -3242,25 +3242,61 @@ window.VJSampleData = function () {
                 </div>
             </div>
 
-            <div id="jdlProgress" class="hidden px-4 py-2 border-b border-slate-200 bg-brand-50/60 text-xs text-brand-800 font-semibold"></div>
 
             <div class="flex flex-col lg:flex-row min-h-[60vh]">
-                <div class="lg:w-64 shrink-0 border-b lg:border-b-0 lg:border-r border-slate-200 bg-slate-50/50">
-                    <div class="p-2 border-b border-slate-200">
-                        <div class="flex p-0.5 bg-slate-200/70 rounded-lg text-[11px] font-bold">
-                            <button onclick="jdlSetMode('kelas')" id="jdlModeKelas" class="flex-1 px-2.5 py-1 rounded-md transition">Kelas</button>
-                            <button onclick="jdlSetMode('guru')" id="jdlModeGuru" class="flex-1 px-2.5 py-1 rounded-md transition">Guru</button>
-                        </div>
-                    </div>
-                    <div id="jdlList" class="max-h-[30vh] lg:max-h-[70vh] overflow-y-auto p-2 space-y-1"></div>
-                </div>
 
                 <div class="flex-1 min-w-0 p-4 space-y-4">
                     <div id="jdlEmpty" class="hidden text-center text-xs text-slate-400 py-16"></div>
-                    <div id="jdlEditor" class="hidden">
+                    <div id="jdlSemuaBox" class="hidden">
+                        <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+                            <div class="flex items-center gap-2">
+                                <div class="flex p-0.5 bg-slate-200/70 rounded-lg text-[11px] font-bold">
+                                    <button onclick="jdlSetMode('kelas')" id="jdlSemuaKelas" class="px-2.5 py-1 rounded-md transition">Kelas</button>
+                                    <button onclick="jdlSetMode('guru')" id="jdlSemuaGuru" class="px-2.5 py-1 rounded-md transition">Guru</button>
+                                </div>
+                                <h4 id="jdlSemuaTitle" class="font-heading font-bold text-lg text-slate-800"></h4>
+                            </div>
+                            <p id="jdlSemuaStats" class="text-xs text-slate-500"></p>
+                        </div>
+                        <div class="overflow-auto max-h-[75vh] border border-slate-200 rounded-xl">
+                            <table id="jdlSemuaGrid" class="text-[10px] border-separate border-spacing-0"></table>
+                        </div>
+                        <p class="text-[11px] text-slate-400 mt-2">Klik nama untuk lihat jadual penuh. Klik petak sesi untuk <strong>kunci</strong> / buka kunci.</p>
+                    </div>
+                    <div id="jdlIsuBox" class="hidden border border-slate-200 rounded-xl overflow-hidden">
+                        <div class="px-3 py-2 bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                            <i data-lucide="triangle-alert" class="w-3.5 h-3.5 text-amber-600"></i> Isu & sesi belum dijadualkan
+                        </div>
+                        <ul id="jdlIsu" class="max-h-72 overflow-y-auto divide-y divide-slate-100 text-xs"></ul>
+                    </div>
+                </div>
+            </div>
+            <div id="jdlOverlay" class="hidden fixed inset-0 z-[200] bg-slate-900/60 backdrop-blur-sm items-center justify-center p-4 select-none" role="dialog" aria-modal="true" aria-label="Sedang menyusun jadual">
+                <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 text-center">
+                    <div class="jdl-anim mx-auto mb-4"><span style="animation-delay:0ms"></span><span style="animation-delay:137ms"></span><span style="animation-delay:274ms"></span><span style="animation-delay:411ms"></span><span style="animation-delay:548ms"></span><span style="animation-delay:685ms"></span><span style="animation-delay:822ms"></span><span style="animation-delay:959ms"></span><span style="animation-delay:1096ms"></span><span style="animation-delay:1233ms"></span><span style="animation-delay:1370ms"></span><span style="animation-delay:1507ms"></span><span style="animation-delay:1644ms"></span><span style="animation-delay:1781ms"></span><span style="animation-delay:1918ms"></span><span style="animation-delay:2055ms"></span><span style="animation-delay:2192ms"></span><span style="animation-delay:2329ms"></span><span style="animation-delay:66ms"></span><span style="animation-delay:203ms"></span><span style="animation-delay:340ms"></span><span style="animation-delay:477ms"></span><span style="animation-delay:614ms"></span><span style="animation-delay:751ms"></span><span style="animation-delay:888ms"></span><span style="animation-delay:1025ms"></span><span style="animation-delay:1162ms"></span><span style="animation-delay:1299ms"></span><span style="animation-delay:1436ms"></span><span style="animation-delay:1573ms"></span></div>
+                    <p class="font-heading font-bold text-slate-800">Sedang menyusun jadual…</p>
+                    <p id="jdlOverlayFasa" class="text-xs font-semibold text-brand-700 mt-1"></p>
+                    <div class="h-2 bg-slate-100 rounded-full overflow-hidden mt-3"><div id="jdlOverlayBar" class="h-full bg-brand-600 rounded-full transition-all duration-300" style="width:0%"></div></div>
+                    <p id="jdlOverlayTeks" class="text-[11px] text-slate-500 mt-2 tabular-nums min-h-[1rem]"></p>
+                    <button id="jdlOverlayBatal" onclick="jdlBatalSusun()" class="mt-4 px-4 py-2 border border-rose-200 bg-rose-50 hover:bg-rose-100 rounded-lg text-xs font-bold text-rose-700 inline-flex items-center gap-1.5 disabled:opacity-60"></button>
+                    <p class="text-[10px] text-slate-400 mt-2">Jadual sedia ada tidak diubah jika dibatalkan.</p>
+                </div>
+            </div>
+            <style>
+                .jdl-anim { display: grid; grid-template-columns: repeat(6, 22px); grid-template-rows: repeat(5, 14px); gap: 3px; width: max-content; }
+                .jdl-anim span { border-radius: 3px; background: #e2e8f0; animation: jdlIsi 2.4s ease-in-out infinite; }
+                .jdl-anim span:nth-child(3n) { --c: #7dd3fc; } .jdl-anim span:nth-child(3n+1) { --c: #fcd34d; } .jdl-anim span:nth-child(3n+2) { --c: #a5b4fc; }
+                .jdl-anim span:nth-child(5n) { --c: #6ee7b7; } .jdl-anim span:nth-child(7n) { --c: #fda4af; }
+                @keyframes jdlIsi { 0%, 100% { background: #e2e8f0; transform: scale(.85); } 35%, 65% { background: var(--c, #7dd3fc); transform: scale(1); } }
+                @media (prefers-reduced-motion: reduce) { .jdl-anim span { animation-duration: 6s; } }
+            </style>
+            <div id="jdlModal" class="hidden fixed inset-0 z-[60] bg-slate-900/50 items-center justify-center p-4" onclick="if (event.target === this) jdlTutup()">
+                <div class="bg-white rounded-2xl shadow-2xl w-full max-w-[1400px] max-h-[92vh] overflow-auto p-4">
+                    <div id="jdlEditor">
                         <div class="flex flex-wrap items-baseline justify-between gap-2 mb-3">
                             <h4 id="jdlTitle" class="font-heading font-bold text-lg text-slate-800"></h4>
-                            <p id="jdlStats" class="text-xs text-slate-500"></p>
+                            <div class="flex items-center gap-3"><p id="jdlStats" class="text-xs text-slate-500"></p>
+                            <button onclick="jdlTutup()" class="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500" title="Tutup (Esc)"><i data-lucide="x" class="w-4 h-4"></i></button></div>
                         </div>
                         <div class="overflow-x-auto border border-slate-200 rounded-xl">
                             <table id="jdlGrid" class="w-full text-xs"></table>
@@ -3268,12 +3304,6 @@ window.VJSampleData = function () {
                         <p class="text-[11px] text-slate-400 mt-2">Klik petak sesi untuk <strong>kunci</strong> / buka kunci. Sesi berkunci kekal di tempatnya apabila jadual disusun semula.</p>
                     </div>
 
-                    <div id="jdlIsuBox" class="hidden border border-slate-200 rounded-xl overflow-hidden">
-                        <div class="px-3 py-2 bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                            <i data-lucide="triangle-alert" class="w-3.5 h-3.5 text-amber-600"></i> Isu & sesi belum dijadualkan
-                        </div>
-                        <ul id="jdlIsu" class="max-h-72 overflow-y-auto divide-y divide-slate-100 text-xs"></ul>
-                    </div>
                 </div>
             </div>
         </div>
@@ -8384,7 +8414,10 @@ window.VJSolver = (function () {
         }
 
         return new Promise(resolve => {
+            // Pengguna batal: hentikan tanpa hasil (jadual sedia ada tidak diubah)
+            const dibatal = () => { if (opt.isyarat && opt.isyarat.batal) { resolve({ batal: true }); return true; } return false; };
             function langkah() {
+                if (dibatal()) return;
                 const t0 = performance.now();
                 while (pending.length && performance.now() - t0 < 40) {
                     iter++;
@@ -8443,6 +8476,7 @@ window.VJSolver = (function () {
             }
 
             function langkahOptimum() {
+                if (dibatal()) return;
                 const t0 = performance.now(), O = fasa2;
                 while (performance.now() - t0 < 40) {
                     const f = Math.min(1, (performance.now() - O.mula) / hadOptimMs);
@@ -8516,8 +8550,124 @@ window.VJSolver = (function () {
             renderJadualView();
         }
 
+        // Buka pop-up jadual penuh bagi kelas / guru `id`
         function jdlPilih(id) {
             jdlSel = id;
+            renderJadualView();
+        }
+
+        function jdlTutup() {
+            jdlSel = null;
+            renderJadualView();
+        }
+
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Escape' && jdlSel && !document.getElementById('jdlModal').classList.contains('hidden')) jdlTutup();
+        });
+
+        function jdlRenderSemua(ctx) {
+            const { inp, cfg, H, W, jadual, trx, kodSubjek, singGuru, items, tw, pl } = ctx;
+            const isKelas = jdlMode === 'kelas';
+            document.getElementById('jdlSemuaTitle').innerText = isKelas ? 'Semua Kelas' : 'Semua Guru';
+            let jumA = 0, jumB = 0;
+            items.forEach(x => { jumA += tw[x[0]] || 0; jumB += pl[x[0]] || 0; });
+            document.getElementById('jdlSemuaStats').innerText = `${items.length} ${isKelas ? 'kelas' : 'guru'} · ${jumA} daripada ${jumB} waktu telah dijadualkan`;
+            ['kelas', 'guru'].forEach(m => {
+                document.getElementById(m === 'kelas' ? 'jdlSemuaKelas' : 'jdlSemuaGuru').className =
+                    'px-2.5 py-1 rounded-md transition ' + (jdlMode === m ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-800');
+            });
+
+            // Petak bagi setiap baris
+            const grid = {};
+            items.forEach(x => { grid[x[0]] = Array.from({ length: H * W }, () => []); });
+            jadual.sesi.forEach(x => {
+                const t = trx[x.uuid]; if (!t) return;
+                const ids = isKelas ? String(t[3]).split(',').map(s => s.trim()) : [String(t[1])];
+                ids.forEach(id => {
+                    const g = grid[id]; if (!g) return;
+                    for (let i = 0; i < x.panjang && x.waktu + i < W; i++) g[x.hari * W + x.waktu + i].push({ x, t, mula: i === 0, kunci: x.uuid + '#' + x.ke });
+                });
+            });
+
+            const bL = d => d > 0 ? 'border-l-2 border-l-slate-400' : 'border-l border-l-slate-200';
+            const stickyTh = 'sticky left-0 z-20 bg-slate-50 border-r border-slate-300';
+            let html = `<thead><tr><th rowspan="2" class="${stickyTh} top-0 z-30 px-2 py-1 text-left text-[11px] font-bold text-slate-500 border-b border-slate-300 min-w-[64px]">${isKelas ? 'Kelas' : 'Guru'}</th>`;
+            cfg.hari.forEach((h, d) => {
+                html += `<th colspan="${W}" class="sticky top-0 z-10 bg-slate-100 px-1 py-1 text-[11px] font-bold text-slate-700 border-b border-slate-200 ${bL(d)}">${escapeHtml(h)}</th>`;
+            });
+            html += `</tr><tr>`;
+            cfg.hari.forEach((h, d) => {
+                cfg.waktu.forEach((w, p) => {
+                    html += `<th class="sticky top-[25px] z-10 bg-slate-50 px-0.5 py-0.5 text-[9px] font-bold text-slate-500 border-b border-slate-300 ${p === 0 ? bL(d) : 'border-l border-l-slate-200'}" title="${escapeHtml(w.mula)}${w.tamat ? '–' + escapeHtml(w.tamat) : ''}">${p + 1}</th>`;
+                });
+            });
+            html += `</tr></thead><tbody>`;
+
+            const kunciSama = (a, b) => a.length === b.length && a.every(e => b.some(f => f.kunci === e.kunci));
+            items.forEach(item => {
+                const id = item[0], g = grid[id];
+                const blok = (cfg[jdlMode] || {})[id] || {};
+                const a = tw[id] || 0, b = pl[id] || 0;
+                const warnaBil = !b ? 'text-slate-400' : a >= b ? 'text-emerald-600' : 'text-amber-600';
+                html += `<tr><th class="${stickyTh} px-2 py-0.5 text-left border-b border-slate-200 whitespace-nowrap">
+                    <button onclick="jdlPilih('${escapeHtml(id)}')" class="text-[11px] font-bold text-slate-800 hover:text-brand-700 hover:underline max-w-[140px] truncate block" title="${escapeHtml(item[1])} — buka jadual penuh">${escapeHtml(item[1])}</button>
+                    <span class="text-[9px] font-bold ${warnaBil}">${a}/${b}</span></th>`;
+                for (let d = 0; d < H; d++) {
+                    for (let p = 0; p < W; p++) {
+                        const list = g[d * W + p];
+                        const bd = p === 0 ? bL(d) : 'border-l border-l-slate-200';
+                        // Gabung petak bagi sesi berganda (seperti aSc)
+                        let span = 1;
+                        if (list.length && list.every(e => e.mula)) {
+                            const L = list[0].x.panjang;
+                            if (L > 1 && list.every(e => e.x.panjang === L) && p + L <= W) {
+                                let ok = true;
+                                for (let i = 1; i < L; i++) if (!kunciSama(list, g[d * W + p + i])) { ok = false; break; }
+                                if (ok) span = L;
+                            }
+                        }
+                        let inner;
+                        if (list.length) {
+                            const kunci = list.some(e => e.x.kunci);
+                            const bentrok = list.length > 1 && !isKelas;
+                            const tip = list.map(e => `${kodSubjek[e.t[5]] || e.t[6]}${e.t[9] ? ' ' + e.t[9] : ''} · ${isKelas ? (singGuru[e.t[1]] || e.t[2] || '-') : e.t[4]}`).join('\n');
+                            const tunjuk = list.slice(0, 3);
+                            inner = tunjuk.map(e => {
+                                const teks = isKelas ? (kodSubjek[e.t[5]] || e.t[6]) : (e.t[4] || kodSubjek[e.t[5]] || '');
+                                const lbl = isKelas ? (e.t[9] || '') : (kodSubjek[e.t[5]] || '');
+                                return `<div class="rounded-sm px-0.5 ${jdlWarna(e.t[5])} ${e.mula ? '' : 'opacity-70'} flex-1 flex items-center justify-center gap-0.5 min-h-0 overflow-hidden whitespace-nowrap leading-none font-bold text-[9px]">${escapeHtml(teks)}${lbl ? `<span class="font-medium opacity-70 text-[8px]">${escapeHtml(lbl)}</span>` : ''}</div>`;
+                            }).join('') + (list.length > 3 ? `<div class="text-[8px] text-slate-500 text-center leading-none">+${list.length - 3}</div>` : '');
+                            inner = `<div data-jdl="${d}-${p}" data-id="${escapeHtml(id)}" class="jdl-cell relative h-[34px] flex flex-col gap-px cursor-pointer ${bentrok ? 'ring-2 ring-rose-500 rounded' : ''}" title="${escapeHtml(tip)}">${inner}${kunci ? '<span class="absolute -top-0.5 right-0 text-[8px]">🔒</span>' : ''}</div>`;
+                        } else if (blok[`${d}-${p}`]) {
+                            const lb = blok[`${d}-${p}`];
+                            inner = `<div class="h-[34px] rounded-sm border flex items-center justify-center text-center text-[8px] font-bold overflow-hidden ${slotLabelClass(lb, cfg)}" title="${escapeHtml(lb)}">${escapeHtml(lb.length > 5 ? lb.slice(0, 4) + '…' : lb)}</div>`;
+                        } else {
+                            inner = `<div class="h-[34px]"></div>`;
+                        }
+                        html += `<td ${span > 1 ? `colspan="${span}"` : ''} class="p-px border-b border-slate-200 ${bd} min-w-[30px] max-w-[60px] align-top bg-white">${inner}</td>`;
+                        p += span - 1;
+                    }
+                }
+                html += `</tr>`;
+            });
+            document.getElementById('jdlSemuaGrid').innerHTML = html + `</tbody>`;
+        }
+
+        // Kunci / buka kunci semua sesi bagi kelas/guru `id` di petak (d, p)
+        function jdlTogolKunci(id, d, p) {
+            if (!isEditMode) { ensureEditMode(() => renderJadualView()); return; }
+            const inp = VJStore.getSolverInput();
+            const trx = {}; inp.transaksi.forEach(t => { trx[String(t[8])] = t; });
+            const j = VJStore.getJadual();
+            const kena = j.sesi.filter(x => {
+                const t = trx[x.uuid]; if (!t || x.hari !== d || p < x.waktu || p >= x.waktu + x.panjang) return false;
+                return jdlMode === 'kelas' ? String(t[3]).split(',').map(s => s.trim()).includes(id) : String(t[1]) === id;
+            });
+            if (!kena.length) return;
+            // Penyusun mengunci seluruh kumpulan serentak jika salah satu ahlinya berkunci
+            const on = !kena.every(x => x.kunci);
+            kena.forEach(x => { x.kunci = on; });
+            VJStore.setJadual(j);
             renderJadualView();
         }
 
@@ -8534,10 +8684,6 @@ window.VJSolver = (function () {
             const kodSubjek = {}; inp.subjek.forEach(r => { kodSubjek[r[0]] = r[2] || r[1]; });
             const singGuru = {}; inp.guru.forEach(g => { singGuru[g[0]] = g[2] || g[1]; });
 
-            ['kelas', 'guru'].forEach(m => {
-                document.getElementById(m === 'kelas' ? 'jdlModeKelas' : 'jdlModeGuru').className =
-                    'flex-1 px-2.5 py-1 rounded-md transition ' + (jdlMode === m ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-800');
-            });
 
             // Waktu terjadual bagi setiap kelas / guru
             const waktuK = {}, waktuG = {}, perluK = {}, perluG = {};
@@ -8555,16 +8701,8 @@ window.VJSolver = (function () {
             const items = jdlMode === 'guru'
                 ? inp.guru.slice().sort((a, b) => String(a[1]).localeCompare(String(b[1]), 'ms'))
                 : inp.kelas.slice().sort((a, b) => (parseInt(a[2]) || 0) - (parseInt(b[2]) || 0) || String(a[1]).localeCompare(String(b[1]), 'ms', { numeric: true }));
-            if (!items.some(x => x[0] === jdlSel)) jdlSel = items.length ? items[0][0] : null;
+            if (!items.some(x => x[0] === jdlSel)) jdlSel = null;
             const tw = jdlMode === 'guru' ? waktuG : waktuK, pl = jdlMode === 'guru' ? perluG : perluK;
-            document.getElementById('jdlList').innerHTML = items.map(x => {
-                const a = tw[x[0]] || 0, b = pl[x[0]] || 0;
-                const active = x[0] === jdlSel;
-                const cls = !b ? 'bg-slate-100 text-slate-500' : a >= b ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700';
-                return `<button onclick="jdlPilih('${escapeHtml(x[0])}')" class="w-full flex items-center justify-between gap-2 px-2.5 py-2 rounded-lg text-left transition ${active ? 'bg-brand-600 text-white shadow' : 'hover:bg-white text-slate-700'}">
-                    <span class="text-xs font-bold truncate" title="${escapeHtml(x[1])}">${escapeHtml(x[1])}</span>
-                    <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${cls}">${a}/${b}</span></button>`;
-            }).join('');
 
             const totalSesi = new Set(jadual.sesi.map(x => x.uuid + '#' + x.ke)).size;
             const dikunci = jadual.sesi.filter(x => x.kunci).length;
@@ -8573,11 +8711,15 @@ window.VJSolver = (function () {
                 ? `· disusun ${escapeHtml(new Date(jadual.dijana).toLocaleString('ms-MY'))} · ${totalSesi} sesi${dikunci ? ` · ${dikunci} dikunci` : ''}`
                 : '· belum disusun';
 
-            const editor = document.getElementById('jdlEditor'), empty = document.getElementById('jdlEmpty');
+            const empty = document.getElementById('jdlEmpty'), modal = document.getElementById('jdlModal');
+            const semuaBox = document.getElementById('jdlSemuaBox');
             empty.innerText = jdlMode === 'guru' ? 'Tiada guru.' : 'Tiada kelas. Tambah kelas di "Data Induk" dahulu.';
-            empty.classList.toggle('hidden', !!jdlSel);
-            editor.classList.toggle('hidden', !jdlSel);
+            empty.classList.toggle('hidden', items.length > 0);
+            semuaBox.classList.toggle('hidden', !items.length);
+            modal.classList.toggle('hidden', !jdlSel);
+            modal.classList.toggle('flex', !!jdlSel);
 
+            if (items.length) jdlRenderSemua({ inp, cfg, H, W, jadual, trx, kodSubjek, singGuru, items, tw, pl });
             if (jdlSel) {
                 const item = items.find(x => x[0] === jdlSel);
                 document.getElementById('jdlTitle').innerText = item[1];
@@ -8646,19 +8788,28 @@ window.VJSolver = (function () {
             if (!inp.transaksi.length) { showToast('Tiada agihan untuk dijadualkan.', 'warning'); return; }
             if (inp.jadual.sesi.some(x => !x.kunci) && !confirm('Susun semula jadual? Semua sesi yang tidak dikunci akan disusun semula.')) return;
             jdlSedang = true;
-            const btn = document.getElementById('jdlBtnSusun'), prog = document.getElementById('jdlProgress');
+            const btn = document.getElementById('jdlBtnSusun');
             btn.disabled = true; btn.classList.add('opacity-60');
-            prog.classList.remove('hidden');
+            const hadOpt = parseInt(document.getElementById('jdlOptimum').value) || 0;
+            const isyarat = { batal: false };
+            jdlOverlay(true, isyarat);
+            let msMulaOpt = null;
             try {
                 const res = await VJSolver.susun(inp, {
                     pecahAuto: document.getElementById('jdlPecahAuto').checked,
                     hadSaat: parseInt(document.getElementById('jdlMasaHad').value) || 30,
-                    hadOptimumSaat: parseInt(document.getElementById('jdlOptimum').value) || 0
+                    hadOptimumSaat: hadOpt,
+                    isyarat
                 }, st => {
-                    prog.innerText = st.fasa === 'optimum'
-                        ? `Mengoptimum kualiti… kos ${Math.round(st.kosAwal)} → ${Math.round(st.kos)} · ${(st.ms / 1000).toFixed(1)} s`
-                        : `Menyusun… ${st.terbaik}/${st.jumlah} sesi diletak · ${(st.ms / 1000).toFixed(1)} s`;
+                    if (st.fasa === 'optimum') {
+                        if (msMulaOpt === null) msMulaOpt = st.ms;
+                        const f = hadOpt ? Math.min(1, (st.ms - msMulaOpt) / (hadOpt * 1000)) : 1;
+                        jdlOverlayKemas('Fasa 2/2 · Mengoptimum kualiti', `Kos ${Math.round(st.kosAwal)} → ${Math.round(st.kos)} · ${(st.ms / 1000).toFixed(1)} s`, f);
+                    } else {
+                        jdlOverlayKemas(hadOpt ? 'Fasa 1/2 · Meletak sesi' : 'Meletak sesi', `${st.terbaik} / ${st.jumlah} sesi diletak · ${(st.ms / 1000).toFixed(1)} s`, st.jumlah ? st.terbaik / st.jumlah : 0);
+                    }
                 });
+                if (res.batal) { showToast('Penyusunan dibatalkan. Jadual sedia ada tidak diubah.', 'info'); return; }
                 VJStore.setJadual({ dijana: new Date().toISOString(), sesi: res.sesi });
                 jdlTidakMuat = res.tidakMuat;
                 const s = res.stat, o = s.optimum;
@@ -8671,10 +8822,46 @@ window.VJSolver = (function () {
             } finally {
                 jdlSedang = false;
                 btn.disabled = false; btn.classList.remove('opacity-60');
-                prog.classList.add('hidden');
+                jdlOverlay(false);
                 renderJadualView();
             }
         }
+
+        // ---- Tindanan semasa menyusun: sekat semua klik/kekunci kecuali Batal ----
+        let jdlIsyaratAktif = null;
+        function jdlOverlay(on, isyarat) {
+            const ov = document.getElementById('jdlOverlay');
+            jdlIsyaratAktif = on ? isyarat : null;
+            ov.classList.toggle('hidden', !on);
+            ov.classList.toggle('flex', on);
+            document.body.classList.toggle('overflow-hidden', on);
+            if (on) {
+                const btn = document.getElementById('jdlOverlayBatal');
+                btn.disabled = false; btn.innerHTML = '<i data-lucide="x-circle" class="w-4 h-4"></i> Batal Penyusunan';
+                jdlOverlayKemas('Menyediakan…', '', 0);
+                lucide.createIcons();
+                btn.focus();
+            }
+        }
+        function jdlOverlayKemas(fasa, teks, f) {
+            document.getElementById('jdlOverlayFasa').innerText = fasa;
+            document.getElementById('jdlOverlayTeks').innerText = teks;
+            document.getElementById('jdlOverlayBar').style.width = Math.round(Math.max(0, Math.min(1, f)) * 100) + '%';
+        }
+        function jdlBatalSusun() {
+            if (!jdlIsyaratAktif) return;
+            jdlIsyaratAktif.batal = true;
+            const btn = document.getElementById('jdlOverlayBatal');
+            btn.disabled = true; btn.innerText = 'Membatalkan…';
+        }
+        // Sekat pintasan papan kekunci (Ctrl+Z, Ctrl+S, Tab, dll.) semasa menyusun; Esc = batal
+        window.addEventListener('keydown', e => {
+            if (!jdlSedang) return;
+            if (e.key === 'Escape') jdlBatalSusun();
+            if (e.target && e.target.id === 'jdlOverlayBatal' && (e.key === 'Enter' || e.key === ' ')) return;
+            e.preventDefault(); e.stopImmediatePropagation();
+        }, true);
+        window.addEventListener('beforeunload', e => { if (jdlSedang) { e.preventDefault(); e.returnValue = ''; } });
 
         function jdlKosongkan() {
             if (!isEditMode) { ensureEditMode(() => jdlKosongkan()); return; }
@@ -8691,21 +8878,14 @@ window.VJSolver = (function () {
         document.getElementById('jdlGrid').addEventListener('click', e => {
             const cell = e.target.closest('.jdl-cell');
             if (!cell) return;
-            if (!isEditMode) { ensureEditMode(() => renderJadualView()); return; }
             const [d, p] = cell.dataset.jdl.split('-').map(Number);
-            const inp = VJStore.getSolverInput();
-            const trx = {}; inp.transaksi.forEach(t => { trx[String(t[8])] = t; });
-            const j = VJStore.getJadual();
-            const kena = j.sesi.filter(x => {
-                const t = trx[x.uuid]; if (!t || x.hari !== d || p < x.waktu || p >= x.waktu + x.panjang) return false;
-                return jdlMode === 'kelas' ? String(t[3]).split(',').map(s => s.trim()).includes(jdlSel) : String(t[1]) === jdlSel;
-            });
-            if (!kena.length) return;
-            // Penyusun mengunci seluruh kumpulan serentak jika salah satu ahlinya berkunci
-            const on = !kena.every(x => x.kunci);
-            kena.forEach(x => { x.kunci = on; });
-            VJStore.setJadual(j);
-            renderJadualView();
+            jdlTogolKunci(jdlSel, d, p);
+        });
+        document.getElementById('jdlSemuaGrid').addEventListener('click', e => {
+            const cell = e.target.closest('.jdl-cell');
+            if (!cell) return;
+            const [d, p] = cell.dataset.jdl.split('-').map(Number);
+            jdlTogolKunci(cell.dataset.id, d, p);
         });
 
         // ---- Hubungan antara sesi ----

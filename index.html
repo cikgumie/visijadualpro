@@ -1438,12 +1438,268 @@ window.VJSampleData = function () {
     }
 
     window.VJFile = {
-        init, saveZip, openZip, newFile, loadSample, openWelcome, closeWelcome,
+        init, saveZip, openZip, newFile, loadSample, openWelcome, closeWelcome, loadZipFile, confirmDiscard, showLoading, hideLoading,
         openDataInduk, closeDataInduk, diSwitch, diAdd, diDelete, diTogglePaste, diApplyPaste, diSave,
         supportsFsApi
     };
 })();
 
+    </script>
+    <script>
+/**
+ * VISIJADUAL PRO V2 — GOOGLE DRIVE (drive.js)
+ * Simpan / buka fail ZIP terus di Google Drive pengguna, sepenuhnya dari pelayar (tiada pelayan).
+ * - Log masuk: Google Identity Services (token OAuth, skop drive.file sahaja —
+ *   aplikasi hanya boleh mengakses fail yang ia cipta atau yang dipilih oleh pengguna).
+ * - Simpan: muat naik multipart (fail baharu) atau kemas kini kandungan fail yang sama.
+ * - Buka: Google Picker (jika Kunci API ditetapkan) atau senarai fail ZIP yang boleh diakses aplikasi.
+ *
+ * Pentadbir laman boleh menetapkan DRIVE_DEFAULT di bawah supaya pengguna tidak perlu mengisi apa-apa.
+ */
+(function () {
+    const DRIVE_DEFAULT = { clientId: '', apiKey: '', appId: '' };
+    const CFG_KEY = 'visijadual_drive_cfg_v1';
+    const LINK_KEY = 'visijadual_drive_link_v1';
+    const SCOPE = 'https://www.googleapis.com/auth/drive.file';
+    const ZIP_MIME = 'application/zip';
+    const $ = id => document.getElementById(id);
+    const toast = (m, t, d) => (typeof showToast === 'function' ? showToast(m, t, d) : alert(m));
+    const icons = () => { if (window.lucide) lucide.createIcons(); };
+
+    let token = null, tokenExpiry = 0, tokenClient = null;
+
+    // ---------- tetapan ----------
+    function cfg() {
+        let saved = {};
+        try { saved = JSON.parse(localStorage.getItem(CFG_KEY) || '{}'); } catch (e) {}
+        return {
+            clientId: String(saved.clientId || DRIVE_DEFAULT.clientId || '').trim(),
+            apiKey: String(saved.apiKey || DRIVE_DEFAULT.apiKey || '').trim(),
+            appId: String(saved.appId || DRIVE_DEFAULT.appId || '').trim()
+        };
+    }
+    function saveSettings() {
+        const c = { clientId: $('driveClientId').value.trim(), apiKey: $('driveApiKey').value.trim(), appId: $('driveAppId').value.trim() };
+        if (c.clientId && !/\.apps\.googleusercontent\.com$/.test(c.clientId)) { toast('Client ID mesti berakhir dengan ".apps.googleusercontent.com".', 'warning', 5000); return; }
+        try { localStorage.setItem(CFG_KEY, JSON.stringify(c)); } catch (e) {}
+        token = null; tokenClient = null;
+        toast('Tetapan Google Drive disimpan.', 'success');
+        preload();
+        renderMenu();
+    }
+
+    // Pautan fail Drive semasa: sah hanya jika nama fail semasa sama dengan fail Drive yang dipaut
+    function getLink() {
+        try {
+            const l = JSON.parse(localStorage.getItem(LINK_KEY) || 'null');
+            const st = VJStore.getStatus();
+            return l && l.id && st.fileName === l.name ? l : null;
+        } catch (e) { return null; }
+    }
+    function setLink(l) { try { l ? localStorage.setItem(LINK_KEY, JSON.stringify(l)) : localStorage.removeItem(LINK_KEY); } catch (e) {} }
+
+    // ---------- skrip Google (dimuat sekali sahaja) ----------
+    const muat = {};
+    function loadScript(src) {
+        if (!muat[src]) muat[src] = new Promise((ok, gagal) => {
+            const s = document.createElement('script');
+            s.src = src; s.async = true; s.onload = ok;
+            s.onerror = () => { delete muat[src]; gagal(new Error('Gagal memuatkan skrip Google. Semak sambungan Internet.')); };
+            document.head.appendChild(s);
+        });
+        return muat[src];
+    }
+    const loadGis = () => loadScript('https://accounts.google.com/gsi/client');
+    const loadGapi = () => loadScript('https://apis.google.com/js/api.js');
+
+    // Muat awal supaya tetingkap log masuk dibuka terus daripada klik (tidak disekat pop-up)
+    function preload() {
+        const c = cfg();
+        if (!c.clientId) return;
+        loadGis().then(() => {
+            tokenClient = google.accounts.oauth2.initTokenClient({ client_id: c.clientId, scope: SCOPE, callback: () => {} });
+        }).catch(() => {});
+        if (c.apiKey) loadGapi().then(() => gapi.load('picker', () => {})).catch(() => {});
+    }
+
+    // ---------- token OAuth ----------
+    async function getToken(paksa) {
+        const c = cfg();
+        if (!c.clientId) {
+            openMenu();
+            $('driveSettings').open = true;
+            throw new Error('Tetapkan OAuth Client ID Google dahulu (Tetapan sambungan Google).');
+        }
+        if (!paksa && token && Date.now() < tokenExpiry - 60000) return token;
+        await loadGis();
+        if (!tokenClient) tokenClient = google.accounts.oauth2.initTokenClient({ client_id: c.clientId, scope: SCOPE, callback: () => {} });
+        return new Promise((ok, gagal) => {
+            tokenClient.callback = r => {
+                if (r.error) { gagal(new Error('Log masuk Google gagal: ' + (r.error_description || r.error))); return; }
+                if (!google.accounts.oauth2.hasGrantedAllScopes(r, SCOPE)) { gagal(new Error('Kebenaran akses Google Drive tidak diberikan.')); return; }
+                token = r.access_token;
+                tokenExpiry = Date.now() + (parseInt(r.expires_in) || 3600) * 1000;
+                ok(token);
+            };
+            tokenClient.error_callback = e => gagal(new Error(e && e.type === 'popup_closed' ? 'Tetingkap log masuk Google ditutup.' : 'Log masuk Google gagal (' + (e && e.type) + ').'));
+            tokenClient.requestAccessToken({ prompt: token ? '' : undefined });
+        });
+    }
+
+    async function api(url, opt, ulang) {
+        const t = await getToken(false);
+        const res = await fetch(url, Object.assign({}, opt, { headers: Object.assign({ Authorization: 'Bearer ' + t }, (opt && opt.headers) || {}) }));
+        if (res.status === 401 && !ulang) { token = null; await getToken(true); return api(url, opt, true); }
+        if (!res.ok) {
+            let msg = res.status + ' ' + res.statusText;
+            try { const j = await res.json(); if (j.error && j.error.message) msg = j.error.message; } catch (e) {}
+            const err = new Error(msg); err.status = res.status; throw err;
+        }
+        return res;
+    }
+
+    // ---------- SIMPAN ----------
+    async function saveToDrive(sebagai) {
+        let link = sebagai ? null : getLink();
+        let nama = (link && link.name) || VJStore.getStatus().fileName || VJStore.defaultZipName();
+        if (!link) {
+            const input = prompt('Nama fail di Google Drive:', nama);
+            if (input === null) return;
+            nama = input.trim() || VJStore.defaultZipName();
+            if (!/\.zip$/i.test(nama)) nama += '.zip';
+        }
+        try {
+            await getToken(false);   // log masuk dahulu (masih dalam tindakan klik)
+            VJFile.showLoading('Menyimpan ke Google Drive...');
+            const blob = await VJStore.buildZipBlob();
+            let fail;
+            if (link) {
+                try {
+                    fail = await (await api(`https://www.googleapis.com/upload/drive/v3/files/${encodeURIComponent(link.id)}?uploadType=media&fields=id,name,webViewLink,modifiedTime`,
+                        { method: 'PATCH', headers: { 'Content-Type': ZIP_MIME }, body: blob })).json();
+                } catch (e) {
+                    if (e.status !== 404 && e.status !== 403) throw e;
+                    link = null;  // fail telah dipadam / tiada akses → cipta baharu
+                }
+            }
+            if (!link) {
+                const meta = { name: nama, mimeType: ZIP_MIME, description: 'Fail data VisiJadual Pro v2' };
+                const form = new FormData();
+                form.append('metadata', new Blob([JSON.stringify(meta)], { type: 'application/json' }));
+                form.append('file', blob, nama);
+                fail = await (await api('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink,modifiedTime',
+                    { method: 'POST', body: form })).json();
+            }
+            setLink({ id: fail.id, name: fail.name, url: fail.webViewLink || '' });
+            VJStore.markSaved(fail.name);
+            VJFile.hideLoading();
+            closeMenu();
+            toast(`Disimpan ke Google Drive: "${fail.name}".`, 'success', 5000);
+        } catch (e) {
+            VJFile.hideLoading();
+            console.error(e);
+            toast('Gagal menyimpan ke Google Drive: ' + e.message, 'error', 7000);
+        }
+    }
+
+    // ---------- BUKA ----------
+    async function openFromDrive() {
+        if (!VJFile.confirmDiscard()) return;
+        const c = cfg();
+        try {
+            await getToken(false);
+            if (c.apiKey) await bukaPicker(c);
+            else await senaraiFail();
+        } catch (e) {
+            VJFile.hideLoading();
+            console.error(e);
+            toast(e.message, 'error', 7000);
+        }
+    }
+
+    async function bukaPicker(c) {
+        await loadGapi();
+        await new Promise(ok => gapi.load('picker', ok));
+        const view = new google.picker.DocsView(google.picker.ViewId.DOCS)
+            .setMimeTypes('application/zip,application/x-zip-compressed,application/octet-stream')
+            .setMode(google.picker.DocsViewMode.LIST).setIncludeFolders(true);
+        const b = new google.picker.PickerBuilder()
+            .addView(view).setOAuthToken(token).setDeveloperKey(c.apiKey).setLocale('ms').setTitle('Pilih fail ZIP VisiJadual')
+            .setCallback(d => {
+                if (d.action !== google.picker.Action.PICKED) return;
+                const f = d.docs && d.docs[0];
+                if (f) muatTurun(f.id, f.name);
+            });
+        if (c.appId) b.setAppId(c.appId);
+        closeMenu();
+        b.build().setVisible(true);
+    }
+
+    async function senaraiFail() {
+        openMenu();
+        $('driveActions').classList.add('hidden');
+        $('driveSettings').classList.add('hidden');
+        $('driveFileListBox').classList.remove('hidden');
+        const ul = $('driveFileList');
+        ul.innerHTML = '<li class="px-3 py-4 text-center text-slate-400">Memuatkan senarai fail...</li>';
+        const q = encodeURIComponent("trashed=false and (mimeType='application/zip' or mimeType='application/x-zip-compressed' or name contains '.zip')");
+        const j = await (await api(`https://www.googleapis.com/drive/v3/files?q=${q}&orderBy=modifiedTime desc&pageSize=50&fields=files(id,name,modifiedTime,size)`)).json();
+        const files = j.files || [];
+        ul.innerHTML = files.length ? files.map(f => `<li><button data-id="${escapeHtml(f.id)}" data-name="${escapeHtml(f.name)}" class="drive-file w-full text-left px-3 py-2 hover:bg-sky-50 flex items-center justify-between gap-2">
+                <span class="font-semibold text-slate-700 truncate">${escapeHtml(f.name)}</span>
+                <span class="text-[10px] text-slate-400 shrink-0">${new Date(f.modifiedTime).toLocaleString('ms-MY')}${f.size ? ' · ' + Math.round(f.size / 1024) + ' KB' : ''}</span></button></li>`).join('')
+            : '<li class="px-3 py-4 text-center text-slate-400">Tiada fail ZIP VisiJadual ditemui. Simpan ke Drive dahulu.</li>';
+        ul.querySelectorAll('.drive-file').forEach(b => b.onclick = () => muatTurun(b.dataset.id, b.dataset.name));
+    }
+
+    async function muatTurun(id, nama) {
+        try {
+            closeMenu();
+            VJFile.showLoading(`Memuat turun "${nama}" dari Google Drive...`);
+            const blob = await (await api(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(id)}?alt=media`)).blob();
+            const file = new File([blob], nama, { type: ZIP_MIME });
+            await VJFile.loadZipFile(file, null);
+            if (VJStore.getStatus().fileName === nama) setLink({ id, name: nama });
+            renderMenu();
+        } catch (e) {
+            VJFile.hideLoading();
+            console.error(e);
+            toast('Gagal membuka fail dari Google Drive: ' + e.message, 'error', 7000);
+        }
+    }
+
+    function signOut() {
+        if (token && window.google && google.accounts) google.accounts.oauth2.revoke(token, () => {});
+        token = null; tokenExpiry = 0;
+        setLink(null);
+        renderMenu();
+        toast('Log keluar daripada Google Drive.', 'info');
+    }
+
+    // ---------- menu ----------
+    function renderMenu() {
+        const c = cfg(), link = getLink();
+        $('driveClientId').value = c.clientId;
+        $('driveApiKey').value = c.apiKey;
+        $('driveAppId').value = c.appId;
+        $('driveSettings').open = !c.clientId;
+        $('driveLinked').classList.toggle('hidden', !link);
+        $('driveLinked').innerHTML = link ? `Dipaut ke fail Drive: <b>${escapeHtml(link.name)}</b>${link.url ? ` · <a href="${escapeHtml(link.url)}" target="_blank" rel="noopener" class="underline">buka di Drive</a>` : ''}` : '';
+        $('driveSaveHint').innerText = link ? `Kemas kini "${link.name}" di Drive` : 'Cipta fail baharu di Drive';
+        $('driveSubtitle').innerText = token ? 'Telah log masuk ke Google' : 'Simpan & buka fail ZIP di Drive anda';
+        icons();
+    }
+    function backToMenu() {
+        $('driveActions').classList.remove('hidden');
+        $('driveSettings').classList.remove('hidden');
+        $('driveFileListBox').classList.add('hidden');
+    }
+    function openMenu() { backToMenu(); renderMenu(); $('driveModal').style.display = 'flex'; }
+    function closeMenu() { $('driveModal').style.display = 'none'; }
+
+    window.addEventListener('DOMContentLoaded', preload);
+    window.VJDrive = { openMenu, closeMenu, backToMenu, saveToDrive, openFromDrive, saveSettings, signOut, _cfg: cfg };
+})();
     </script>
 
     <style>
@@ -1783,6 +2039,14 @@ window.VJSampleData = function () {
                     </div>
                 </button>
 
+                <button onclick="VJDrive.openFromDrive()" class="w-full flex items-center gap-3 p-3.5 rounded-xl border border-sky-200 bg-sky-50 hover:bg-sky-100 text-left transition">
+                    <div class="p-2 bg-sky-600 text-white rounded-lg shrink-0"><i data-lucide="cloud-download" class="w-5 h-5"></i></div>
+                    <div>
+                        <div class="text-sm font-bold text-slate-800">Buka dari Google Drive</div>
+                        <div class="text-[11px] text-slate-500">Pilih fail ZIP VisiJadual yang disimpan di Drive</div>
+                    </div>
+                </button>
+
                 <button onclick="VJFile.newFile()" class="w-full flex items-center gap-3 p-3.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-left transition">
                     <div class="p-2 bg-slate-100 text-slate-700 rounded-lg shrink-0"><i data-lucide="file-plus" class="w-5 h-5"></i></div>
                     <div>
@@ -1800,6 +2064,75 @@ window.VJSampleData = function () {
                 </button>
 
                 <p class="text-[10px] text-slate-400 text-center pt-1">Petua: seret & lepas fail ZIP ke halaman ini untuk membukanya.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================== -->
+    <!-- MODAL: GOOGLE DRIVE                                            -->
+    <!-- ============================================================== -->
+    <div id="driveModal" class="modal" style="z-index: 75;">
+        <div class="modal-content max-w-md">
+            <div class="bg-premium-header p-4 flex justify-between items-center text-white shrink-0">
+                <div class="flex items-center gap-2">
+                    <div class="p-1.5 bg-white/10 rounded-lg"><i data-lucide="cloud" class="w-4 h-4 text-white"></i></div>
+                    <div>
+                        <h2 class="font-heading font-bold text-sm">Google Drive</h2>
+                        <p id="driveSubtitle" class="text-[10px] text-white/80">Simpan & buka fail ZIP di Drive anda</p>
+                    </div>
+                </div>
+                <button type="button" onclick="VJDrive.closeMenu()" class="hover:bg-white/20 rounded-full p-1 text-white/80 hover:text-white transition"><i data-lucide="x" class="w-4 h-4"></i></button>
+            </div>
+            <div class="bg-white p-5 space-y-2.5">
+                <div id="driveLinked" class="hidden text-[11px] bg-sky-50 border border-sky-200 text-sky-800 rounded-lg px-3 py-2"></div>
+
+                <div id="driveActions" class="space-y-2">
+                    <button onclick="VJDrive.saveToDrive(false)" class="w-full flex items-center gap-3 p-3 rounded-xl border-2 border-brand-200 bg-brand-50 hover:bg-brand-100 text-left transition">
+                        <div class="p-2 bg-brand-600 text-white rounded-lg shrink-0"><i data-lucide="cloud-upload" class="w-4 h-4"></i></div>
+                        <div><div class="text-sm font-bold text-slate-800">Simpan ke Drive</div>
+                            <div id="driveSaveHint" class="text-[11px] text-slate-500">Kemas kini fail Drive yang sama, atau cipta fail baharu</div></div>
+                    </button>
+                    <button onclick="VJDrive.saveToDrive(true)" class="w-full flex items-center gap-3 p-3 rounded-xl border border-slate-200 hover:bg-slate-50 text-left transition">
+                        <div class="p-2 bg-slate-100 text-slate-700 rounded-lg shrink-0"><i data-lucide="copy-plus" class="w-4 h-4"></i></div>
+                        <div><div class="text-sm font-bold text-slate-800">Simpan Sebagai fail baharu di Drive</div>
+                            <div class="text-[11px] text-slate-500">Cipta salinan baharu (fail lama tidak diubah)</div></div>
+                    </button>
+                    <button onclick="VJDrive.openFromDrive()" class="w-full flex items-center gap-3 p-3 rounded-xl border border-slate-200 hover:bg-slate-50 text-left transition">
+                        <div class="p-2 bg-sky-100 text-sky-700 rounded-lg shrink-0"><i data-lucide="cloud-download" class="w-4 h-4"></i></div>
+                        <div><div class="text-sm font-bold text-slate-800">Buka dari Drive</div>
+                            <div class="text-[11px] text-slate-500">Pilih fail ZIP VisiJadual di Google Drive</div></div>
+                    </button>
+                </div>
+
+                <!-- Senarai fail (jika Google Picker tidak dikonfigurasi) -->
+                <div id="driveFileListBox" class="hidden">
+                    <div class="flex items-center justify-between mb-1.5">
+                        <p class="text-xs font-bold text-slate-700">Fail VisiJadual di Drive</p>
+                        <button onclick="VJDrive.backToMenu()" class="text-[11px] font-bold text-brand-700 hover:underline">← Kembali</button>
+                    </div>
+                    <ul id="driveFileList" class="max-h-72 overflow-y-auto divide-y divide-slate-100 border border-slate-200 rounded-xl text-xs"></ul>
+                    <p class="text-[10px] text-slate-400 mt-1.5">Hanya fail yang dicipta atau pernah dibuka oleh VisiJadual dipaparkan. Untuk memilih fail lain, pentadbir laman perlu menetapkan Kunci API (Google Picker).</p>
+                </div>
+
+                <!-- Tetapan -->
+                <details id="driveSettings" class="border border-slate-200 rounded-xl">
+                    <summary class="px-3 py-2 text-xs font-bold text-slate-700 cursor-pointer select-none">Tetapan sambungan Google</summary>
+                    <div class="px-3 pb-3 space-y-2">
+                        <label class="block"><span class="block text-[10px] font-bold text-slate-500 mb-0.5">OAuth Client ID (wajib)</span>
+                            <input id="driveClientId" type="text" placeholder="xxxxxxxx.apps.googleusercontent.com" class="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-xs font-mono"></label>
+                        <div class="grid grid-cols-2 gap-2">
+                            <label class="block"><span class="block text-[10px] font-bold text-slate-500 mb-0.5">Kunci API (Picker, pilihan)</span>
+                                <input id="driveApiKey" type="text" placeholder="AIza..." class="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-xs font-mono"></label>
+                            <label class="block"><span class="block text-[10px] font-bold text-slate-500 mb-0.5">Nombor Projek (Picker)</span>
+                                <input id="driveAppId" type="text" placeholder="123456789012" class="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-xs font-mono"></label>
+                        </div>
+                        <p class="text-[10px] text-slate-400">Dicipta di Google Cloud Console (Drive API + Picker API). Asal JavaScript dibenarkan mesti termasuk alamat laman ini. Tetapan disimpan dalam pelayar ini sahaja.</p>
+                        <div class="flex justify-between gap-2">
+                            <button onclick="VJDrive.signOut()" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-xs font-bold">Log keluar Google</button>
+                            <button onclick="VJDrive.saveSettings()" class="px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-xs font-bold">Simpan Tetapan</button>
+                        </div>
+                    </div>
+                </details>
             </div>
         </div>
     </div>
@@ -2277,6 +2610,10 @@ window.VJSampleData = function () {
                 </button>
                 <button onclick="VJFile.saveZip(true)" class="p-2 hover:bg-white/15 rounded-xl text-white transition" title="Simpan Sebagai fail ZIP baharu (Ctrl+Shift+S)">
                     <i data-lucide="save-all" class="w-4 h-4"></i>
+                </button>
+                <button onclick="VJDrive.openMenu()" id="btnDrive" class="p-2 hover:bg-white/15 rounded-xl text-white transition flex items-center gap-1.5 text-xs font-semibold" title="Simpan / Buka di Google Drive">
+                    <i data-lucide="cloud" class="w-4 h-4"></i>
+                    <span class="hidden xl:inline">Drive</span>
                 </button>
             </div>
 

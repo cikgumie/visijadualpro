@@ -11,6 +11,7 @@ Semua data berada dalam memori pelayar, dan disimpan/dibuka sebagai **fail ZIP**
 | Simpan ke fail ZIP | **Simpan** | Ctrl+S |
 | Simpan sebagai fail baharu | ikon di sebelah Simpan | Ctrl+Shift+S |
 | Mula fail kosong | **Baru** | |
+| Simpan / buka di Google Drive | **Drive** (ikon awan) | |
 | Urus senarai Guru / Kelas / Subjek | **Data Induk** | |
 | Tetapkan slot boleh isi / blok bagi setiap kelas | tab **Slot Masa** → Kelas | |
 | Tetapkan slot guru tidak boleh mengajar | tab **Slot Masa** → Guru | |
@@ -24,6 +25,32 @@ Semua data berada dalam memori pelayar, dan disimpan/dibuka sebagai **fail ZIP**
   Tetapi **fail ZIP ialah salinan rasmi** — simpan selalu.
 - Kata laluan Mod Edit lalai: `admin123` (tukar di Tetapan). Kata laluan disimpan dalam fail ZIP.
   Ini hanya penghalang daripada tersalah edit, bukan keselamatan sebenar.
+
+## Google Drive
+
+Butang **Drive** (ikon awan di header) dan **Buka dari Google Drive** (skrin permulaan):
+
+- **Simpan ke Drive** — fail pertama kali dicipta di Drive; simpanan seterusnya mengemas kini fail yang sama.
+- **Simpan Sebagai fail baharu di Drive** — cipta salinan baharu.
+- **Buka dari Drive** — pilih fail ZIP melalui Google Picker (jika Kunci API ditetapkan), atau daripada senarai fail ZIP
+  yang pernah dicipta / dibuka oleh VisiJadual.
+- Skop akses hanya `drive.file`: aplikasi **tidak** boleh membaca fail lain dalam Drive pengguna. Tiada data melalui pelayan lain.
+
+### Persediaan (sekali sahaja, oleh pentadbir laman)
+
+1. [Google Cloud Console](https://console.cloud.google.com/) → cipta projek → *APIs & Services → Library*:
+   hidupkan **Google Drive API** dan **Google Picker API**.
+2. *OAuth consent screen*: jenis **External**, isi nama aplikasi & e-mel, tambah skop `.../auth/drive.file`.
+   Semasa status *Testing*, tambah e-mel pengguna di **Test users** (atau *Publish app* untuk semua pengguna —
+   skop `drive.file` tidak memerlukan semakan Google).
+3. *Credentials → Create credentials → OAuth client ID* → **Web application** →
+   *Authorized JavaScript origins*: `https://cikgumie.github.io` (dan `http://localhost:8765` untuk ujian).
+4. *(Pilihan, untuk Google Picker)* *Create credentials → API key*, hadkan kepada Picker API & laman di atas.
+   **Nombor Projek** ada di *Project settings* (diperlukan supaya fail yang dipilih boleh dibuka dengan skop `drive.file`).
+5. Isi nilai dalam `DRIVE_DEFAULT` di `index.html` (cari `DRIVE_DEFAULT`) supaya semua pengguna terus boleh guna,
+   atau setiap pengguna isi sendiri di **Drive → Tetapan sambungan Google** (disimpan dalam pelayar).
+
+> Client ID & Kunci API bukan rahsia (ia dihantar ke pelayar), tetapi hadkan Kunci API kepada laman anda.
 
 ## Susun jadual automatik
 

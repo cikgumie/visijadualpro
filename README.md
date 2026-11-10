@@ -132,3 +132,11 @@ Uji di komputer sendiri:
 ```bash
 python3 -m http.server 8765 --directory .
 ```
+
+## Hak cipta & lesen
+
+© 2026 cikgumie. Hak cipta terpelihara.
+
+Kod ini boleh **dilihat** kerana repositori ini awam, tetapi **tidak boleh disalin, diubah suai, dihos semula
+atau diedarkan** tanpa kebenaran bertulis. Penggunaan sistem melalui laman rasmi untuk urusan sekolah sendiri
+dibenarkan. Lihat [LICENSE](LICENSE) untuk syarat penuh.

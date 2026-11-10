@@ -2749,6 +2749,12 @@ window.VJSampleData = function () {
                         <option value="30" selected>30 saat</option>
                         <option value="90">90 saat</option>
                     </select>
+                    <select id="jdlOptimum" class="border border-slate-200 bg-white rounded-lg px-2 py-1.5 text-xs font-bold text-slate-700" title="Fasa pengoptimuman selepas semua sesi diletak: kurangkan lompong kelas & guru, subjek berulang sehari dan beban harian tidak seimbang">
+                        <option value="0">Tanpa optimum</option>
+                        <option value="10">Optimum 10 s</option>
+                        <option value="30" selected>Optimum 30 s</option>
+                        <option value="90">Optimum 90 s</option>
+                    </select>
                     <button onclick="hubTogglePanel()" class="px-3 py-1.5 border border-slate-200 bg-white hover:bg-slate-100 rounded-lg text-xs font-bold text-slate-700 flex items-center gap-1.5">
                         <i data-lucide="link-2" class="w-3.5 h-3.5"></i> Hubungan <span id="hubCount" class="text-[10px] px-1.5 rounded-full bg-slate-100 text-slate-500"></span>
                     </button>
@@ -7544,6 +7550,7 @@ window.VJSolver = (function () {
         const { H, W, N, units, blokK, blokG } = B;
         const P = Object.assign({ sesiSehariSubjek: 1, maxGuruSehari: 0, maxGuruBerturut: 0 }, inp.peraturan || {});
         const hadMs = (opt.hadSaat || 30) * 1000;
+        const hadOptimMs = Math.max(0, parseFloat(opt.hadOptimumSaat) || 0) * 1000;
         const U = units.length;
 
         const occK = B.kelas.map(() => new Int32Array(N).fill(-1));
@@ -7794,6 +7801,99 @@ window.VJSolver = (function () {
         const saluran = new MessageChannel();
         const seterusnya = fn => { saluran.port1.onmessage = fn; saluran.port2.postMessage(0); };
 
+        // ---------- kos kualiti (lebih rendah = lebih baik) ----------
+        function lompong(occ, blok, d) {
+            let a = -1, b = -1;
+            for (let p = 0; p < W; p++) if (occ[d * W + p] >= 0) { if (a < 0) a = p; b = p; }
+            if (a < 0) return 0;
+            let n = 0;
+            for (let p = a; p <= b; p++) if (occ[d * W + p] < 0 && !blok[d * W + p]) n++;
+            return n;
+        }
+        const subjekKelas = B.kelas.map(() => new Set());
+        units.forEach(T => T.pairs.forEach(([k, sj]) => subjekKelas[k].add(sj)));
+        function ulang(k, d) {
+            let n = 0;
+            for (const sj of subjekKelas[k]) { const a = daySub[k + '|' + sj + '|' + d]; if (a && a.length > 1) n += a.length - 1; }
+            return n;
+        }
+        const BERAT = { kelas: 8, guru: 3, ulang: 6, beban: 0.2, hub: 40 };
+        function kosBahagian(gs, ks, ds, rs) {
+            let c = 0;
+            for (const d of ds) {
+                for (const g of gs) c += BERAT.guru * lompong(occG[g], blokG[g], d);
+                for (const k of ks) c += BERAT.kelas * lompong(occK[k], blokK[k], d) + BERAT.ulang * ulang(k, d) + BERAT.beban * dayLoadK[k][d] * dayLoadK[k][d];
+            }
+            for (const ri of rs) if (relLembut[ri]) c += BERAT.hub * ukurLembut(B.hubUnit[ri].h.jenis, B.hubUnit[ri].h.nilai, gridHubungan(ri, -1, 0, null), H, W);
+            return c;
+        }
+        function kosSemua() {
+            const semuaHari = Array.from({ length: H }, (_, d) => d);
+            return kosBahagian(B.guru.map((_, g) => g), B.kelas.map((_, k) => k), semuaHari, B.hubUnit.map((_, ri) => ri));
+        }
+        function kawasan(list) {
+            const gs = new Set(), ks = new Set(), ds = new Set(), rs = new Set();
+            list.forEach(([u, s]) => { units[u].guru.forEach(g => gs.add(g)); units[u].kelas.forEach(k => ks.add(k)); ds.add(Math.floor(s / W)); relU[u].forEach(ri => rs.add(ri)); });
+            return [gs, ks, ds, rs];
+        }
+        const terima = (delta, T) => delta <= 0 || Math.random() < Math.exp(-delta / T);
+        const domainSet = domain.map(a => new Set(a));
+
+        // Alih satu sesi ke kedudukan lain yang sah. Pulangkan delta kos jika diterima, null jika ditolak.
+        function cubaAlih(u, T) {
+            const lama = pos[u], baru = domain[u][Math.floor(Math.random() * domain[u].length)];
+            if (baru === lama) return null;
+            const kw = kawasan([[u, lama], [u, baru]]);
+            const sebelum = kosBahagian(...kw);
+            angkat(u);
+            const set = konflik(u, baru);
+            if (!set || set.size) { letak(u, lama); return null; }
+            letak(u, baru);
+            const delta = kosBahagian(...kw) - sebelum;
+            if (terima(delta, T)) return delta;
+            angkat(u); letak(u, lama);
+            return null;
+        }
+
+        // Tukar kedudukan dua sesi sama panjang yang berkongsi kelas atau guru
+        function cubaTukar(T, boleh) {
+            const u = boleh[Math.floor(Math.random() * boleh.length)];
+            const Tu = units[u];
+            const k = Tu.kelas[Math.floor(Math.random() * Tu.kelas.length)];
+            const d = Math.floor(Math.random() * H), p = Math.floor(Math.random() * W);
+            const v = occK[k][d * W + p];
+            if (v < 0 || v === u || kunci[v] || units[v].len !== Tu.len || pos[v] !== d * W + p) return null;
+            const su = pos[u], sv = pos[v];
+            if (!domainSet[u].has(sv) || !domainSet[v].has(su)) return null;
+            const kw = kawasan([[u, su], [u, sv], [v, su], [v, sv]]);
+            const sebelum = kosBahagian(...kw);
+            angkat(u); angkat(v);
+            const pulih = () => { if (pos[u] >= 0) angkat(u); if (pos[v] >= 0) angkat(v); letak(u, su); letak(v, sv); return null; };
+            let set = konflik(u, sv);
+            if (!set || set.size) return pulih();
+            letak(u, sv);
+            set = konflik(v, su);
+            if (!set || set.size) return pulih();
+            letak(v, su);
+            const delta = kosBahagian(...kw) - sebelum;
+            if (terima(delta, T)) return delta;
+            return pulih();
+        }
+
+        function tetapkanKedudukan(akhir) {
+            units.forEach((_, u) => { if (pos[u] >= 0) angkat(u); });
+            units.forEach((_, u) => { if (akhir[u] >= 0) letak(u, akhir[u]); });
+        }
+
+        function ukurKualiti() {
+            let lompongKelas = 0, lompongGuru = 0, subjekBerulang = 0;
+            for (let d = 0; d < H; d++) {
+                B.kelas.forEach((_, k) => { lompongKelas += lompong(occK[k], blokK[k], d); subjekBerulang += ulang(k, d); });
+                B.guru.forEach((_, g) => { lompongGuru += lompong(occG[g], blokG[g], d); });
+            }
+            return { lompongKelas, lompongGuru, subjekBerulang };
+        }
+
         return new Promise(resolve => {
             function langkah() {
                 const t0 = performance.now();
@@ -7829,10 +7929,56 @@ window.VJSolver = (function () {
                 if (onProgress) onProgress({ iter, diletak, terbaik: Math.max(terbaik, diletak), jumlah: U, ms });
                 if (pending.length && ms < hadMs && iter < maxIter) { seterusnya(langkah); return; }
                 if (diletak >= terbaik) posTerbaik = pos.slice();
+                // Fasa 2: optimum kualiti. Mulakan daripada susunan terbaik (paling banyak sesi diletak);
+                // langkah optimum tidak pernah mengeluarkan sesi, jadi bilangan sesi diletak kekal.
+                if (hadOptimMs > 0) {
+                    if (posTerbaik && diletak < terbaik) tetapkanKedudukan(posTerbaik);
+                    mulaOptimum(ms);
+                    return;
+                }
                 resolve(hasil(posTerbaik || pos, ms));
             }
+
+            // =================================================================
+            // FASA 2: OPTIMUM (simulated annealing) — kurangkan lompong kelas & guru,
+            // subjek berulang sehari, beban harian tidak seimbang dan hubungan lembut.
+            // Hanya langkah yang tidak melanggar kekangan keras diterima; sesi berkunci tidak dialih.
+            // =================================================================
+            let fasa2 = null;
+            function mulaOptimum(msFasa1) {
+                const boleh = units.map((_, u) => u).filter(u => pos[u] >= 0 && !kunci[u] && domain[u].length > 1);
+                if (!boleh.length) { resolve(hasil(pos, msFasa1)); return; }
+                const awal = kosSemua();
+                fasa2 = { boleh, kini: awal, awal, terbaik: awal, posTerbaik: pos.slice(), mula: performance.now(), msFasa1, langkah: 0, diterima: 0, T0: 4, T1: 0.05, kualitiAwal: ukurKualiti() };
+                seterusnya(langkahOptimum);
+            }
+
+            function langkahOptimum() {
+                const t0 = performance.now(), O = fasa2;
+                while (performance.now() - t0 < 40) {
+                    const f = Math.min(1, (performance.now() - O.mula) / hadOptimMs);
+                    if (f >= 1) break;
+                    const T = O.T0 * Math.pow(O.T1 / O.T0, f);
+                    O.langkah++;
+                    const d = Math.random() < 0.6 ? cubaAlih(O.boleh[Math.floor(Math.random() * O.boleh.length)], T) : cubaTukar(T, O.boleh);
+                    if (d === null) continue;
+                    O.diterima++;
+                    O.kini += d;
+                    if (O.kini < O.terbaik - 1e-9) { O.terbaik = O.kini; O.posTerbaik = pos.slice(); }
+                }
+                const msOpt = performance.now() - O.mula;
+                if (onProgress) onProgress({ fasa: 'optimum', iter, diletak, terbaik: diletak, jumlah: U, ms: O.msFasa1 + msOpt, kosAwal: O.awal, kos: O.terbaik });
+                if (msOpt < hadOptimMs) { seterusnya(langkahOptimum); return; }
+                const r = hasil(O.posTerbaik, O.msFasa1 + msOpt);
+                // Ukur kualiti akhir pada kedudukan terbaik
+                tetapkanKedudukan(O.posTerbaik);
+                r.stat.optimum = { awal: O.kualitiAwal, kosAwal: Math.round(O.awal), kosAkhir: Math.round(O.terbaik), langkah: O.langkah, diterima: O.diterima, ms: Math.round(msOpt), ...ukurKualiti() };
+                resolve(r);
+            }
+
             seterusnya(langkah);
         });
+
 
         function hasil(akhir, ms) {
             const sesi = [], tidakMuat = [];
@@ -8017,15 +8163,19 @@ window.VJSolver = (function () {
             try {
                 const res = await VJSolver.susun(inp, {
                     pecahAuto: document.getElementById('jdlPecahAuto').checked,
-                    hadSaat: parseInt(document.getElementById('jdlMasaHad').value) || 30
+                    hadSaat: parseInt(document.getElementById('jdlMasaHad').value) || 30,
+                    hadOptimumSaat: parseInt(document.getElementById('jdlOptimum').value) || 0
                 }, st => {
-                    prog.innerText = `Menyusun… ${st.terbaik}/${st.jumlah} sesi diletak · ${(st.ms / 1000).toFixed(1)} s`;
+                    prog.innerText = st.fasa === 'optimum'
+                        ? `Mengoptimum kualiti… kos ${Math.round(st.kosAwal)} → ${Math.round(st.kos)} · ${(st.ms / 1000).toFixed(1)} s`
+                        : `Menyusun… ${st.terbaik}/${st.jumlah} sesi diletak · ${(st.ms / 1000).toFixed(1)} s`;
                 });
                 VJStore.setJadual({ dijana: new Date().toISOString(), sesi: res.sesi });
                 jdlTidakMuat = res.tidakMuat;
-                const s = res.stat;
-                showToast(s.diletak === s.unit ? `Jadual lengkap: semua ${s.unit} sesi diletak (${(s.ms / 1000).toFixed(1)} s).`
-                    : `${s.diletak}/${s.unit} sesi diletak. ${s.unit - s.diletak} sesi belum muat — lihat senarai di bawah jadual.`, s.diletak === s.unit ? 'success' : 'warning', 6000);
+                const s = res.stat, o = s.optimum;
+                const teksOpt = o ? ` Optimum: lompong kelas ${o.awal.lompongKelas}→${o.lompongKelas}, lompong guru ${o.awal.lompongGuru}→${o.lompongGuru}, subjek berulang ${o.awal.subjekBerulang}→${o.subjekBerulang}.` : '';
+                showToast(s.diletak === s.unit ? `Jadual lengkap: semua ${s.unit} sesi diletak (${(s.ms / 1000).toFixed(1)} s).${teksOpt}`
+                    : `${s.diletak}/${s.unit} sesi diletak. ${s.unit - s.diletak} sesi belum muat — lihat senarai di bawah jadual.${teksOpt}`, s.diletak === s.unit ? 'success' : 'warning', o ? 10000 : 6000);
             } catch (e) {
                 console.error(e);
                 showToast('Ralat semasa menyusun: ' + e.message, 'error');

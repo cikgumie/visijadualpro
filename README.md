@@ -43,6 +43,9 @@ Semua data berada dalam memori pelayar, dan disimpan/dibuka sebagai **fail ZIP**
   - *Susunan A & B:* A tidak diikuti terus oleh B · tidak bersebelahan · A sebelum B (sehari / seminggu) ·
     hari A sebelum hari B · A mesti bersebelahan B
   - Jenis bertanda **lembut** (min, lompong, hari berturut / lapang) diusahakan tetapi tidak dijamin; pelanggaran dilaporkan.
+- **Fasa pengoptimuman** (pilihan *Optimum 10/30/90 s*): selepas sesi diletak, penyusun terus mengalih & menukar sesi
+  (simulated annealing) untuk mengurangkan lompong kelas, lompong guru, subjek berulang sehari dan beban harian tidak seimbang.
+  Kekangan keras, slot diblok, hubungan dan sesi berkunci sentiasa dipatuhi; bilangan sesi diletak tidak berkurang.
 - Klik sesi untuk **kunci** — sesi berkunci kekal di tempatnya apabila jadual disusun semula.
 
 ## Guru ganti

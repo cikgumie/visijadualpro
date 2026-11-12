@@ -1908,6 +1908,14 @@ window.VJSampleData = function () {
             border-left-color: #4F46E5;
         }
 
+        .nav-sub { padding-left: 1.9rem; font-size: 0.8rem; }
+        .nav-group-has { color: #4F46E5 !important; }
+        #navTetapanSub { display: none; }
+        #navTetapanSub.open { display: block; }
+        #navTetapanChev { transition: transform 0.15s ease; margin-left: auto; }
+        #navTetapanBtn.open #navTetapanChev { transform: rotate(90deg); }
+        .side-nav.collapsed #navTetapanChev { display: none; }
+
         /* Bar alat */
         .tb-btn {
             display: flex;
@@ -2745,6 +2753,23 @@ window.VJSampleData = function () {
                 <button onclick="switchTab('ganti')" id="nav-ganti" class="nav-tab" title="Guru Ganti">
                     <i data-lucide="user-check" class="w-4 h-4 shrink-0"></i><span class="nav-label">Guru Ganti</span>
                 </button>
+                <button onclick="toggleNavTetapan()" id="navTetapanBtn" class="nav-tab" title="Tetapan" aria-expanded="false" aria-controls="navTetapanSub">
+                    <i data-lucide="settings" class="w-4 h-4 shrink-0"></i><span class="nav-label">Tetapan</span><i data-lucide="chevron-right" id="navTetapanChev" class="w-3.5 h-3.5 shrink-0 nav-label"></i>
+                </button>
+                <div id="navTetapanSub" class="space-y-0.5">
+                    <button onclick="switchTab('guru')" id="nav-guru" class="nav-tab nav-sub" title="Jadual Guru">
+                        <i data-lucide="users" class="w-4 h-4 shrink-0"></i><span class="nav-label">Jadual Guru</span>
+                    </button>
+                    <button onclick="switchTab('kelas')" id="nav-kelas" class="nav-tab nav-sub" title="Rumusan Kelas">
+                        <i data-lucide="school" class="w-4 h-4 shrink-0"></i><span class="nav-label">Rumusan Kelas</span>
+                    </button>
+                    <button onclick="switchTab('banding')" id="nav-banding" class="nav-tab nav-sub" title="Banding Jadual">
+                        <i data-lucide="git-compare" class="w-4 h-4 shrink-0"></i><span class="nav-label">Banding Jadual</span>
+                    </button>
+                    <button onclick="switchTab('arkib')" id="nav-arkib" class="nav-tab nav-sub" title="Arkib Data">
+                        <i data-lucide="archive" class="w-4 h-4 shrink-0"></i><span class="nav-label">Arkib Data</span>
+                    </button>
+                </div>
             </nav>
             <div class="p-2 border-t border-slate-200 space-y-0.5">
                 <button onclick="VJFile.openDataInduk()" class="side-act text-slate-700 hover:bg-slate-100" title="Urus senarai Guru, Kelas & Subjek">
@@ -5786,6 +5811,19 @@ window.VJSampleData = function () {
             if (nav) nav.classList.toggle('collapsed', kecil);
         })();
 
+        function setNavTetapanOpen(open) {
+            document.getElementById('navTetapanSub')?.classList.toggle('open', open);
+            const b = document.getElementById('navTetapanBtn');
+            if (b) { b.classList.toggle('open', open); b.setAttribute('aria-expanded', open ? 'true' : 'false'); }
+        }
+        function toggleNavTetapan() {
+            setNavTetapanOpen(!document.getElementById('navTetapanSub').classList.contains('open'));
+        }
+        function syncNavTetapan(subActive) {
+            document.getElementById('navTetapanBtn')?.classList.toggle('nav-group-has', subActive);
+            if (subActive) setNavTetapanOpen(true);
+        }
+
         function switchTab(tabName) {
             if (window.innerWidth < 768) document.getElementById('sideNav')?.classList.add('collapsed');
             document.querySelectorAll('.view-section').forEach(el => el.classList.add('hidden'));
@@ -5796,6 +5834,7 @@ window.VJSampleData = function () {
             document.querySelectorAll('.nav-tab').forEach(btn => btn.classList.remove('active'));
             const activeNav = document.getElementById(`nav-${tabName}`);
             if (activeNav) activeNav.classList.add('active');
+            syncNavTetapan(!!(activeNav && activeNav.classList.contains('nav-sub')));
 
             if (tabName === 'arkib') loadArkibData();
             if (tabName === 'banding') populateSystemDropdowns();

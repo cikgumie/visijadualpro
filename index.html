@@ -808,9 +808,22 @@
     function slotSummary() {
         const total = db.slot.hari.length * db.slot.waktu.length;
         const agihan = {};
+        // Agihan berlabel dengan huruf sama + masa sama dalam satu kelas berjalan serentak (cth G1/G2 = kumpulan G),
+        // jadi dikira sekali sahaja — sama seperti JUM WAKTU di Matriks dan kumpulan serentak dalam penyusun.
+        const kumpDikira = {};
         db.transaksi.forEach(t => {
+            const masa = parseInt(t[7]) || 0;
+            const m = /^[A-Za-z]+/.exec(String(t[9] || '').trim());
+            const huruf = m ? m[0].toUpperCase() : '';
             String(t[3]).split(',').map(s => s.trim()).filter(Boolean)
-                .forEach(id => { agihan[id] = (agihan[id] || 0) + (parseInt(t[7]) || 0); });
+                .forEach(id => {
+                    if (huruf) {
+                        const key = id + '|' + huruf + '|' + masa;
+                        if (kumpDikira[key]) return;
+                        kumpDikira[key] = true;
+                    }
+                    agihan[id] = (agihan[id] || 0) + masa;
+                });
         });
         const out = {};
         db.kelas.forEach(k => {

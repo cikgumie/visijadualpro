@@ -1756,6 +1756,11 @@ window.VJSampleData = function () {
         }
 
         /* High-Density Grid Table */
+        /* Matriks: panel rapat ke atas, tanpa bingkai dalaman, panel kekal semasa scroll */
+        main.matrix-flush { padding: 0 !important; overflow: hidden !important; display: flex; flex-direction: column; }
+        main.matrix-flush > #view-matrix { flex: 1 1 auto; min-height: 0; border: 0; border-radius: 0; box-shadow: none; }
+        main.matrix-flush > #view-matrix #matrixScroll { max-height: none; flex: 1 1 auto; min-height: 0; }
+        main.matrix-flush > #view-matrix #matrixActionBar { border-radius: 0; }
         .grid-table th,
         .grid-table td {
             border: 1px solid #E2E8F0;
@@ -2758,7 +2763,7 @@ window.VJSampleData = function () {
     <!-- ============================================================== -->
     <!-- MAIN CONTENT VIEW AREA                                         -->
     <!-- ============================================================== -->
-    <main class="flex-1 min-w-0 overflow-y-auto p-4 sm:p-6 bg-slate-50/50">
+    <main class="flex-1 min-w-0 overflow-y-auto p-4 sm:p-6 bg-slate-50/50 matrix-flush">
 
 
 
@@ -2917,7 +2922,7 @@ window.VJSampleData = function () {
             </div>
 
             <!-- Matrix Table -->
-            <div class="overflow-auto flex-grow max-h-[78vh]">
+            <div id="matrixScroll" class="overflow-auto flex-grow max-h-[78vh]">
                 <table class="w-full grid-table text-xs border-none">
                     <thead id="matrixHead" class="text-slate-700 select-none"></thead>
                     <tbody id="matrixBody" class="bg-white"></tbody>
@@ -3150,7 +3155,7 @@ window.VJSampleData = function () {
         <!-- VIEW 8: SUSUN JADUAL AUTOMATIK                                 -->
         <!-- ============================================================== -->
         <div id="view-jadual" class="view-section hidden bg-white border border-slate-200 rounded-2xl shadow-card overflow-hidden">
-            <div class="p-3.5 bg-slate-50/80 border-b border-slate-200 flex flex-wrap justify-between items-center gap-2 no-print">
+            <div class="px-3 py-2 bg-slate-50/80 border-b border-slate-200 flex flex-wrap justify-between items-center gap-2 no-print">
                 <div class="flex flex-wrap items-center gap-2">
                     <i data-lucide="wand-sparkles" class="w-4 h-4 text-brand-600"></i>
                     <h3 class="text-sm font-heading font-bold text-slate-800">Susun Jadual</h3>
@@ -3178,7 +3183,7 @@ window.VJSampleData = function () {
                         <i data-lucide="eraser" class="w-3.5 h-3.5"></i> Kosongkan
                     </button>
                     <button id="jdlBtnSusun" onclick="jdlSusun()" class="px-3.5 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-xs font-bold shadow flex items-center gap-1.5">
-                        <i data-lucide="wand-sparkles" class="w-3.5 h-3.5"></i> Susun Automatik
+                        <i data-lucide="wand-sparkles" class="w-3.5 h-3.5"></i> <span id="jdlBtnSusunTeks">Susun Automatik</span>
                     </button>
                 </div>
             </div>
@@ -3243,25 +3248,41 @@ window.VJSampleData = function () {
             </div>
 
 
-            <div class="flex flex-col lg:flex-row min-h-[60vh]">
+            <div class="flex flex-col lg:flex-row">
 
-                <div class="flex-1 min-w-0 p-4 space-y-4">
+                <div class="flex-1 min-w-0 px-2 py-2 space-y-2">
                     <div id="jdlEmpty" class="hidden text-center text-xs text-slate-400 py-16"></div>
                     <div id="jdlSemuaBox" class="hidden">
-                        <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
-                            <div class="flex items-center gap-2">
-                                <div class="flex p-0.5 bg-slate-200/70 rounded-lg text-[11px] font-bold">
-                                    <button onclick="jdlSetMode('kelas')" id="jdlSemuaKelas" class="px-2.5 py-1 rounded-md transition">Kelas</button>
-                                    <button onclick="jdlSetMode('guru')" id="jdlSemuaGuru" class="px-2.5 py-1 rounded-md transition">Guru</button>
-                                </div>
-                                <h4 id="jdlSemuaTitle" class="font-heading font-bold text-lg text-slate-800"></h4>
+                        <div class="flex flex-wrap items-center gap-1.5 mb-1.5">
+                            <div class="flex p-0.5 bg-slate-200/70 rounded-lg text-[11px] font-bold">
+                                <button onclick="jdlSetMode('kelas')" id="jdlSemuaKelas" class="px-2.5 py-1 rounded-md transition">Kelas</button>
+                                <button onclick="jdlSetMode('guru')" id="jdlSemuaGuru" class="px-2.5 py-1 rounded-md transition">Guru</button>
                             </div>
-                            <p id="jdlSemuaStats" class="text-xs text-slate-500"></p>
+                            <h4 id="jdlSemuaTitle" class="hidden"></h4>
+                            <div class="flex p-0.5 bg-slate-200/70 rounded-lg text-[11px] font-bold">
+                                <button onclick="jdlSetAlat('alih')" id="jdlAlatAlih" class="px-2.5 py-1 rounded-md transition flex items-center gap-1" title="Seret sesi untuk alih; klik sesi untuk kunci / buka kunci"><i data-lucide="move" class="w-3 h-3"></i> Alih / Kunci</button>
+                                <button onclick="jdlSetAlat('blok')" id="jdlAlatBlok" class="px-2.5 py-1 rounded-md transition flex items-center gap-1" title="Klik / seret pada petak kosong untuk blok slot"><i data-lucide="ban" class="w-3 h-3"></i> Blok Slot</button>
+                            </div>
+                            <select id="jdlBlokLabel" class="hidden border border-slate-200 bg-white rounded-lg px-2 py-1 text-[11px] font-bold text-slate-700" title="Label blok"></select>
+                            <div id="jdlPilihBar" class="flex items-center gap-1.5 text-[11px]">
+                                <span id="jdlPilihTeks" class="font-bold"></span>
+                                <span id="jdlPilihNota" class="hidden"></span>
+                                <button id="jdlPilihBatal" onclick="jdlPilihKosong()" class="px-1.5 py-0.5 rounded-md bg-white border border-brand-200 font-bold hover:bg-brand-100" title="Batal pilihan">✕</button>
+                            </div>
+                            <p id="jdlSemuaStats" class="ml-auto text-[11px] text-slate-500"></p>
+                            <span class="text-slate-400 cursor-help" title="Klik nama untuk lihat jadual penuh.&#10;Seret sesi ke petak lain untuk alih (lepas atas sesi sama panjang untuk tukar tempat).&#10;Seret sesi ke kotak di bawah untuk keluarkan; seret dari kotak bawah ke jadual untuk letak.&#10;Klik petak sesi untuk kunci / buka kunci.&#10;Mod Blok Slot: klik / seret petak kosong untuk blok, klik petak berblok untuk buka.&#10;Tandakan kotak kelas untuk susun kelas itu sahaja (Shift + klik untuk pilih julat)."><i data-lucide="circle-help" class="w-4 h-4"></i></span>
                         </div>
-                        <div class="overflow-auto max-h-[75vh] border border-slate-200 rounded-xl">
+                        <div class="overflow-auto max-h-[calc(100vh-260px)] min-h-[240px] border border-slate-200 rounded-xl">
                             <table id="jdlSemuaGrid" class="text-[10px] border-separate border-spacing-0"></table>
                         </div>
-                        <p class="text-[11px] text-slate-400 mt-2">Klik nama untuk lihat jadual penuh. Klik petak sesi untuk <strong>kunci</strong> / buka kunci.</p>
+                        <!-- Tray: sesi belum diletak / dikeluarkan -->
+                        <div id="jdlTray" class="mt-2 border-2 border-dashed border-slate-300 rounded-xl bg-slate-50/70 px-2 py-1.5 transition">
+                            <div class="flex flex-wrap items-center gap-2 text-[11px] font-bold text-slate-600 mb-1">
+                                <i data-lucide="inbox" class="w-3.5 h-3.5"></i> Sesi belum diletak <span id="jdlTrayBil" class="px-1.5 rounded-full bg-slate-200 text-slate-700"></span>
+                                <span class="font-normal text-slate-400">· seret ke jadual untuk letak · seret sesi dari jadual ke sini untuk keluarkan</span>
+                            </div>
+                            <div id="jdlTrayList" class="flex flex-wrap gap-1 max-h-32 overflow-y-auto"></div>
+                        </div>
                     </div>
                     <div id="jdlIsuBox" class="hidden border border-slate-200 rounded-xl overflow-hidden">
                         <div class="px-3 py-2 bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-700 flex items-center gap-1.5">
@@ -3301,7 +3322,7 @@ window.VJSampleData = function () {
                         <div class="overflow-x-auto border border-slate-200 rounded-xl">
                             <table id="jdlGrid" class="w-full text-xs"></table>
                         </div>
-                        <p class="text-[11px] text-slate-400 mt-2">Klik petak sesi untuk <strong>kunci</strong> / buka kunci. Sesi berkunci kekal di tempatnya apabila jadual disusun semula.</p>
+                        <p class="text-[11px] text-slate-400 mt-2"><strong>Seret</strong> sesi ke petak lain untuk alih. Klik petak sesi untuk <strong>kunci</strong> / buka kunci. Sesi berkunci kekal di tempatnya apabila jadual disusun semula.</p>
                     </div>
 
                 </div>
@@ -3509,9 +3530,15 @@ window.VJSampleData = function () {
                 </div>
             </div>
 
-            <!-- Tetapan hari & waktu -->
-            <div id="slotSettings" class="hidden p-4 border-b border-slate-200 bg-indigo-50/40">
-                <div class="grid md:grid-cols-2 gap-4">
+            <!-- Tetapan hari & waktu (popup) -->
+            <div id="slotSettings" class="hidden fixed inset-0 z-[60] bg-slate-900/50 items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="slotSettingsTitle" onclick="if (event.target === this) slotToggleSettings()">
+              <div class="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[92vh] overflow-auto">
+                <div class="flex items-center justify-between gap-2 px-5 py-3.5 border-b border-slate-200 sticky top-0 bg-white z-10">
+                    <h4 id="slotSettingsTitle" class="font-heading font-bold text-sm text-slate-800 flex items-center gap-2"><i data-lucide="settings-2" class="w-4 h-4 text-brand-600"></i> Tetapan Hari & Waktu</h4>
+                    <button onclick="slotToggleSettings()" class="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500" title="Tutup (Esc)"><i data-lucide="x" class="w-4 h-4"></i></button>
+                </div>
+                <div class="p-5">
+                <div class="grid md:grid-cols-[2fr_3fr] gap-5">
                     <div class="space-y-3">
                         <div>
                             <label class="block text-xs font-bold text-slate-700 mb-1">Hari persekolahan <span class="font-normal text-slate-400">(asingkan dengan koma)</span></label>
@@ -3533,13 +3560,15 @@ window.VJSampleData = function () {
                     </div>
                     <div>
                         <label class="block text-xs font-bold text-slate-700 mb-1">Senarai waktu <span class="font-normal text-slate-400">(boleh ubah masa setiap waktu)</span></label>
-                        <div id="slotCfgWaktu" class="grid grid-cols-2 sm:grid-cols-3 gap-1.5 max-h-48 overflow-y-auto p-1"></div>
+                        <div id="slotCfgWaktu" class="grid grid-cols-1 sm:grid-cols-2 gap-1.5 max-h-[50vh] overflow-y-auto p-1"></div>
                     </div>
                 </div>
-                <div class="flex justify-end gap-2 mt-3">
+                </div>
+                <div class="flex justify-end gap-2 px-5 py-3 border-t border-slate-200 bg-slate-50/80 sticky bottom-0">
                     <button onclick="slotToggleSettings()" class="px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600">Batal</button>
                     <button onclick="slotSaveSettings()" class="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-bold shadow flex items-center gap-1.5"><i data-lucide="check" class="w-3.5 h-3.5"></i> Simpan Tetapan</button>
                 </div>
+              </div>
             </div>
 
             <div class="flex flex-col lg:flex-row min-h-[60vh]">
@@ -5563,6 +5592,7 @@ window.VJSampleData = function () {
             document.querySelectorAll('.view-section').forEach(el => el.classList.add('hidden'));
             const target = document.getElementById(`view-${tabName}`);
             if (target) target.classList.remove('hidden');
+            document.querySelector('main')?.classList.toggle('matrix-flush', tabName === 'matrix');
 
             document.querySelectorAll('.nav-tab').forEach(btn => btn.classList.remove('active'));
             const activeNav = document.getElementById(`nav-${tabName}`);
@@ -7750,9 +7780,15 @@ window.VJSampleData = function () {
                 if (cfg.waktu[0] && cfg.waktu[0].mula) document.getElementById('slotGenMula').value = cfg.waktu[0].mula;
                 slotCfgWaktuDraft = cfg.waktu;
                 slotRenderWaktuDraft();
+                box.classList.remove('hidden'); box.classList.add('flex');
+                document.addEventListener('keydown', slotSettingsEsc);
+                setTimeout(() => document.getElementById('slotCfgHari').focus(), 0);
+            } else {
+                box.classList.add('hidden'); box.classList.remove('flex');
+                document.removeEventListener('keydown', slotSettingsEsc);
             }
-            box.classList.toggle('hidden');
         }
+        function slotSettingsEsc(e) { if (e.key === 'Escape') slotToggleSettings(); }
 
         function slotPresetHari(txt) { document.getElementById('slotCfgHari').value = txt; }
 
@@ -7783,7 +7819,7 @@ window.VJSampleData = function () {
             if (lost && !confirm(`${lost} slot diblok berada di luar hari/waktu baharu dan akan dibuang. Teruskan?`)) return;
             try {
                 VJStore.setSlotConfig({ hari, waktu: slotCfgWaktuDraft });
-                document.getElementById('slotSettings').classList.add('hidden');
+                slotToggleSettings();
                 showToast('Tetapan hari & waktu disimpan.', 'success');
                 renderSlotView();
             } catch (e) { showToast(e.message, 'error'); }
@@ -8288,9 +8324,22 @@ window.VJSolver = (function () {
             return c;
         }
 
+        // Bil. slot kelas yang masih kosong (tidak diblok) antara slot kosong pertama hari itu dan s.
+        // Meletak sesi jauh ke belakang meninggalkan slot depan kosong — dielakkan sekuat mungkin.
+        function lompatDepan(T, s) {
+            const d = Math.floor(s / W), p0 = s - d * W;
+            let n = 0;
+            for (const k of T.kelas) {
+                const occ = occK[k], blok = blokK[k];
+                for (let p = 0; p < p0; p++) { const x = d * W + p; if (occ[x] < 0 && !blok[x]) n++; }
+            }
+            return n;
+        }
+        const BERAT_DEPAN = 25;
+
         function kosLembut(u, s) {
             const T = units[u], d = Math.floor(s / W);
-            let c = kosHubunganLembut(u, s, null);
+            let c = kosHubunganLembut(u, s, null) + BERAT_DEPAN * lompatDepan(T, s);
             T.pairs.forEach(([k, sj]) => { c += 10 * ((daySub[k + '|' + sj + '|' + d] || []).length); });
             T.kelas.forEach(k => { c += 0.3 * dayLoadK[k][d]; });
             return c + Math.random();
@@ -8329,6 +8378,14 @@ window.VJSolver = (function () {
             for (let p = a; p <= b; p++) if (occ[d * W + p] < 0 && !blok[d * W + p]) n++;
             return n;
         }
+        // Slot kosong (tidak diblok) sebelum sesi terakhir hari itu: kosong di depan + lompong di tengah
+        function kosongDepan(occ, blok, d) {
+            let b = -1;
+            for (let p = 0; p < W; p++) if (occ[d * W + p] >= 0) b = p;
+            let n = 0;
+            for (let p = 0; p < b; p++) if (occ[d * W + p] < 0 && !blok[d * W + p]) n++;
+            return n;
+        }
         const subjekKelas = B.kelas.map(() => new Set());
         units.forEach(T => T.pairs.forEach(([k, sj]) => subjekKelas[k].add(sj)));
         function ulang(k, d) {
@@ -8336,12 +8393,12 @@ window.VJSolver = (function () {
             for (const sj of subjekKelas[k]) { const a = daySub[k + '|' + sj + '|' + d]; if (a && a.length > 1) n += a.length - 1; }
             return n;
         }
-        const BERAT = { kelas: 8, guru: 3, ulang: 6, beban: 0.2, hub: 40 };
+        const BERAT = { kelas: 40, guru: 3, ulang: 6, beban: 0.2, hub: 40 };
         function kosBahagian(gs, ks, ds, rs) {
             let c = 0;
             for (const d of ds) {
                 for (const g of gs) c += BERAT.guru * lompong(occG[g], blokG[g], d);
-                for (const k of ks) c += BERAT.kelas * lompong(occK[k], blokK[k], d) + BERAT.ulang * ulang(k, d) + BERAT.beban * dayLoadK[k][d] * dayLoadK[k][d];
+                for (const k of ks) c += BERAT.kelas * kosongDepan(occK[k], blokK[k], d) + BERAT.ulang * ulang(k, d) + BERAT.beban * dayLoadK[k][d] * dayLoadK[k][d];
             }
             for (const ri of rs) if (relLembut[ri]) c += BERAT.hub * ukurLembut(B.hubUnit[ri].h.jenis, B.hubUnit[ri].h.nilai, gridHubungan(ri, -1, 0, null), H, W);
             return c;
@@ -8359,8 +8416,8 @@ window.VJSolver = (function () {
         const domainSet = domain.map(a => new Set(a));
 
         // Alih satu sesi ke kedudukan lain yang sah. Pulangkan delta kos jika diterima, null jika ditolak.
-        function cubaAlih(u, T) {
-            const lama = pos[u], baru = domain[u][Math.floor(Math.random() * domain[u].length)];
+        function cubaAlih(u, T, sasaran) {
+            const lama = pos[u], baru = sasaran !== undefined ? sasaran : domain[u][Math.floor(Math.random() * domain[u].length)];
             if (baru === lama) return null;
             const kw = kawasan([[u, lama], [u, baru]]);
             const sebelum = kosBahagian(...kw);
@@ -8372,6 +8429,67 @@ window.VJSolver = (function () {
             if (terima(delta, T)) return delta;
             angkat(u); letak(u, lama);
             return null;
+        }
+
+        // Isi slot kosong di depan: cari kelas/hari yang ada slot kosong sebelum sesi terakhir,
+        // kemudian cuba alih salah satu sesi kelas itu (yang terletak lebih ke belakang) ke dalam lubang tersebut.
+        const unitKelas = B.kelas.map(() => []);
+        units.forEach((Tu, u) => Tu.kelas.forEach(k => unitKelas[k].push(u)));
+        function cubaIsiLubang(T) {
+            for (let cuba = 0; cuba < 12; cuba++) {
+                const k = Math.floor(Math.random() * B.kelas.length), d = Math.floor(Math.random() * H);
+                const occ = occK[k], blok = blokK[k];
+                let akhir = -1, lubang = -1;
+                for (let p = 0; p < W; p++) if (occ[d * W + p] >= 0) akhir = p;
+                for (let p = 0; p < akhir; p++) if (occ[d * W + p] < 0 && !blok[d * W + p]) { lubang = p; break; }
+                if (lubang < 0) continue;
+                const s0 = d * W + lubang;
+                // Calon: sesi kelas ini yang lebih ke belakang (hari sama selepas lubang, atau hari kemudian)
+                const calon = unitKelas[k].filter(u => {
+                    if (pos[u] < 0 || kunci[u] || !domainSet[u].has(s0)) return false;
+                    if (s0 + units[u].len > (d + 1) * W) return false;
+                    return pos[u] > s0;
+                });
+                if (!calon.length) continue;
+                return rantaiIsi(calon[Math.floor(Math.random() * calon.length)], s0, T);
+            }
+            return null;
+        }
+
+        // Letak u di s0; sesi yang bertembung (maks 2, tidak berkunci) dialih ke kedudukan sah terbaik lain.
+        function rantaiIsi(u, s0, T) {
+            const lama = pos[u];
+            angkat(u);
+            const set = konflik(u, s0);
+            if (!set || set.size > 2) { letak(u, lama); return null; }
+            const usir = [...set], lamaX = usir.map(x => pos[x]), baruX = [];
+            usir.forEach(x => angkat(x));
+            letak(u, s0);
+            const pulih = () => {
+                usir.forEach(x => { if (pos[x] >= 0) angkat(x); });
+                angkat(u); letak(u, lama);
+                usir.forEach((x, i) => letak(x, lamaX[i]));
+                return null;
+            };
+            for (const x of usir) {
+                let best = -1, bk = Infinity;
+                for (const s of domain[x]) {
+                    const c = konflik(x, s);
+                    if (!c || c.size) continue;
+                    const kk = kosLembut(x, s);
+                    if (kk < bk) { bk = kk; best = s; }
+                }
+                if (best < 0) return pulih();
+                letak(x, best); baruX.push(best);
+            }
+            const kw = kawasan([[u, lama], [u, s0], ...usir.flatMap((x, i) => [[x, lamaX[i]], [x, baruX[i]]])]);
+            const selepas = kosBahagian(...kw);
+            pulih();
+            const delta = selepas - kosBahagian(...kw);
+            if (!terima(delta, T)) return null;
+            angkat(u); usir.forEach(x => angkat(x));
+            letak(u, s0); usir.forEach((x, i) => letak(x, baruX[i]));
+            return delta;
         }
 
         // Tukar kedudukan dua sesi sama panjang yang berkongsi kelas atau guru
@@ -8405,12 +8523,12 @@ window.VJSolver = (function () {
         }
 
         function ukurKualiti() {
-            let lompongKelas = 0, lompongGuru = 0, subjekBerulang = 0;
+            let lompongKelas = 0, lompongGuru = 0, subjekBerulang = 0, kosongDepanKelas = 0;
             for (let d = 0; d < H; d++) {
-                B.kelas.forEach((_, k) => { lompongKelas += lompong(occK[k], blokK[k], d); subjekBerulang += ulang(k, d); });
+                B.kelas.forEach((_, k) => { lompongKelas += lompong(occK[k], blokK[k], d); kosongDepanKelas += kosongDepan(occK[k], blokK[k], d); subjekBerulang += ulang(k, d); });
                 B.guru.forEach((_, g) => { lompongGuru += lompong(occG[g], blokG[g], d); });
             }
-            return { lompongKelas, lompongGuru, subjekBerulang };
+            return { lompongKelas, lompongGuru, subjekBerulang, kosongDepanKelas };
         }
 
         return new Promise(resolve => {
@@ -8431,7 +8549,7 @@ window.VJSolver = (function () {
                         let kos;
                         if (set.size === 0) kos = kosLembut(u, s);
                         else {
-                            kos = 1000 + Math.random() * 300 + kosHubunganLembut(u, s, set);
+                            kos = 1000 + Math.random() * 300 + kosHubunganLembut(u, s, set) + BERAT_DEPAN * lompatDepan(units[u], s);
                             for (const x of set) kos += 200 * units[x].len + (iter - placedAt[x] < 25 ? 2000 : 0);
                             // Sebaran subjek (dari enjin Jadual Guru): elak subjek sama berulang pada hari yang sama walaupun perlu mengusir
                             const dd = Math.floor(s / W);
@@ -8483,7 +8601,8 @@ window.VJSolver = (function () {
                     if (f >= 1) break;
                     const T = O.T0 * Math.pow(O.T1 / O.T0, f);
                     O.langkah++;
-                    const d = Math.random() < 0.6 ? cubaAlih(O.boleh[Math.floor(Math.random() * O.boleh.length)], T) : cubaTukar(T, O.boleh);
+                    const r = Math.random();
+                    const d = r < 0.3 ? cubaIsiLubang(T) : r < 0.7 ? cubaAlih(O.boleh[Math.floor(Math.random() * O.boleh.length)], T) : cubaTukar(T, O.boleh);
                     if (d === null) continue;
                     O.diterima++;
                     O.kini += d;
@@ -8518,7 +8637,9 @@ window.VJSolver = (function () {
                 const langgar = ukurLembut(R.h.jenis, R.h.nilai, grid, H, W);
                 if (langgar > 0) isu.push({ jenis: 'amaran', teks: `Hubungan lembut "${namaHub(R.h)}" tidak dipenuhi sepenuhnya (kekurangan/lebihan ${langgar}).` });
             });
-            return { sesi, tidakMuat, isu, stat: { unit: U, diletak: U - tidakMuat.length, iter, ms: Math.round(ms), bilAuto: B.bilAuto } };
+            tetapkanKedudukan(akhir);
+            const kualiti = ukurKualiti();
+            return { sesi, tidakMuat, isu, stat: { unit: U, diletak: U - tidakMuat.length, iter, ms: Math.round(ms), bilAuto: B.bilAuto, kosongDepan: kualiti.kosongDepanKelas } };
         }
     }
 
@@ -8533,6 +8654,28 @@ window.VJSolver = (function () {
         let jdlSel = null;
         let jdlSedang = false;
         let jdlTidakMuat = null;   // hasil susunan terakhir (sesi yang tidak muat)
+        const jdlPilihan = new Set(); // kelas dipilih untuk disusun / dikosongkan sahaja
+        let jdlPilihSusunan = [];     // susunan id kelas seperti dipapar (untuk Shift + klik)
+        let jdlPilihSauh = null;      // kelas terakhir diklik
+        let jdlAlat = 'alih';         // 'alih' (seret/kunci sesi) atau 'blok' (blok slot)
+        let jdlBlokLabel = null;
+        function jdlSetAlat(a) { jdlAlat = a; renderJadualView(); }
+
+        function jdlTandaKelas(ev, id) {
+            ev.stopPropagation();
+            const on = ev.target.checked;
+            const i = jdlPilihSusunan.indexOf(id), j = jdlPilihSusunan.indexOf(jdlPilihSauh);
+            if (ev.shiftKey && i >= 0 && j >= 0) {
+                for (let k = Math.min(i, j); k <= Math.max(i, j); k++) on ? jdlPilihan.add(jdlPilihSusunan[k]) : jdlPilihan.delete(jdlPilihSusunan[k]);
+            } else {
+                on ? jdlPilihan.add(id) : jdlPilihan.delete(id);
+            }
+            jdlPilihSauh = id;
+            renderJadualView();
+        }
+        function jdlPilihKosong() { jdlPilihan.clear(); jdlPilihSauh = null; renderJadualView(); }
+        // Adakah transaksi t melibatkan mana-mana kelas dipilih
+        const jdlTrxDipilih = t => String(t[3]).split(',').some(k => jdlPilihan.has(k.trim()));
 
         const JDL_WARNA = ['bg-sky-100 text-sky-900', 'bg-emerald-100 text-emerald-900', 'bg-amber-100 text-amber-900', 'bg-violet-100 text-violet-900',
             'bg-rose-100 text-rose-900', 'bg-teal-100 text-teal-900', 'bg-orange-100 text-orange-900', 'bg-lime-100 text-lime-900',
@@ -8609,9 +8752,15 @@ window.VJSolver = (function () {
                 const blok = (cfg[jdlMode] || {})[id] || {};
                 const a = tw[id] || 0, b = pl[id] || 0;
                 const warnaBil = !b ? 'text-slate-400' : a >= b ? 'text-emerald-600' : 'text-amber-600';
-                html += `<tr><th class="${stickyTh} px-2 py-0.5 text-left border-b border-slate-200 whitespace-nowrap">
-                    <button onclick="jdlPilih('${escapeHtml(id)}')" class="text-[11px] font-bold text-slate-800 hover:text-brand-700 hover:underline max-w-[140px] truncate block" title="${escapeHtml(item[1])} — buka jadual penuh">${escapeHtml(item[1])}</button>
-                    <span class="text-[9px] font-bold ${warnaBil}">${a}/${b}</span></th>`;
+                // Waktu terakhir bersesi setiap hari (kelas): slot kosong sebelum itu ditanda merah
+                const akhirHari = [];
+                for (let d = 0; d < H; d++) { let z = -1; for (let p = 0; p < W; p++) if (g[d * W + p].length) z = p; akhirHari.push(z); }
+                const dipilih = isKelas && jdlPilihan.has(id);
+                html += `<tr class="${dipilih ? 'jdl-dipilih' : ''}"><th class="${stickyTh} ${dipilih ? '!bg-brand-50' : ''} px-2 py-0.5 text-left border-b border-slate-200 whitespace-nowrap">
+                    <div class="flex items-center gap-1.5">
+                    ${isKelas ? `<input type="checkbox" ${dipilih ? 'checked' : ''} onclick="jdlTandaKelas(event, '${escapeHtml(id)}')" class="w-3.5 h-3.5 accent-brand-600 cursor-pointer shrink-0" title="Pilih kelas ini untuk disusun (Shift + klik: pilih julat)">` : ''}
+                    <div class="min-w-0"><button onclick="jdlPilih('${escapeHtml(id)}')" class="text-[11px] font-bold text-slate-800 hover:text-brand-700 hover:underline max-w-[140px] truncate block" title="${escapeHtml(item[1])} — buka jadual penuh">${escapeHtml(item[1])}</button>
+                    <span class="text-[9px] font-bold ${warnaBil}">${a}/${b}</span></div></div></th>`;
                 for (let d = 0; d < H; d++) {
                     for (let p = 0; p < W; p++) {
                         const list = g[d * W + p];
@@ -8637,14 +8786,16 @@ window.VJSolver = (function () {
                                 const lbl = isKelas ? (e.t[9] || '') : (kodSubjek[e.t[5]] || '');
                                 return `<div class="rounded-sm px-0.5 ${jdlWarna(e.t[5])} ${e.mula ? '' : 'opacity-70'} flex-1 flex items-center justify-center gap-0.5 min-h-0 overflow-hidden whitespace-nowrap leading-none font-bold text-[9px]">${escapeHtml(teks)}${lbl ? `<span class="font-medium opacity-70 text-[8px]">${escapeHtml(lbl)}</span>` : ''}</div>`;
                             }).join('') + (list.length > 3 ? `<div class="text-[8px] text-slate-500 text-center leading-none">+${list.length - 3}</div>` : '');
-                            inner = `<div data-jdl="${d}-${p}" data-id="${escapeHtml(id)}" class="jdl-cell relative h-[34px] flex flex-col gap-px cursor-pointer ${bentrok ? 'ring-2 ring-rose-500 rounded' : ''}" title="${escapeHtml(tip)}">${inner}${kunci ? '<span class="absolute -top-0.5 right-0 text-[8px]">🔒</span>' : ''}</div>`;
+                            inner = `<div data-jdl="${d}-${p}" data-id="${escapeHtml(id)}" ${jdlAlat === 'alih' ? 'draggable="true"' : ''} class="jdl-cell relative h-[34px] flex flex-col gap-px ${jdlAlat === 'alih' ? 'cursor-grab active:cursor-grabbing' : 'cursor-not-allowed opacity-80'} ${bentrok ? 'ring-2 ring-rose-500 rounded' : ''}" title="${escapeHtml(tip)}">${inner}${kunci ? '<span class="absolute -top-0.5 right-0 text-[8px]">🔒</span>' : ''}</div>`;
                         } else if (blok[`${d}-${p}`]) {
                             const lb = blok[`${d}-${p}`];
-                            inner = `<div class="h-[34px] rounded-sm border flex items-center justify-center text-center text-[8px] font-bold overflow-hidden ${slotLabelClass(lb, cfg)}" title="${escapeHtml(lb)}">${escapeHtml(lb.length > 5 ? lb.slice(0, 4) + '…' : lb)}</div>`;
+                            inner = `<div class="h-[34px] rounded-sm border flex items-center justify-center text-center text-[8px] font-bold overflow-hidden ${slotLabelClass(lb, cfg)} ${jdlAlat === 'blok' ? 'cursor-pointer hover:ring-2 hover:ring-rose-400' : ''}" title="${escapeHtml(lb)}${jdlAlat === 'blok' ? ' — klik untuk buka' : ''}">${escapeHtml(lb.length > 5 ? lb.slice(0, 4) + '…' : lb)}</div>`;
+                        } else if (isKelas && p < akhirHari[d]) {
+                            inner = `<div class="h-[34px] rounded-sm border border-dashed border-rose-400 bg-rose-50 ${jdlAlat === 'blok' ? 'cursor-cell hover:bg-rose-100' : ''}" title="Slot kosong di depan — sepatutnya diisi"></div>`;
                         } else {
-                            inner = `<div class="h-[34px]"></div>`;
+                            inner = `<div class="h-[34px] ${jdlAlat === 'blok' ? 'cursor-cell hover:bg-slate-100 rounded-sm' : ''}"></div>`;
                         }
-                        html += `<td ${span > 1 ? `colspan="${span}"` : ''} class="p-px border-b border-slate-200 ${bd} min-w-[30px] max-w-[60px] align-top bg-white">${inner}</td>`;
+                        html += `<td data-sl="${d}-${p}" data-id="${escapeHtml(id)}" ${span > 1 ? `colspan="${span}"` : ''} class="jdl-td p-px border-b border-slate-200 ${bd} min-w-[30px] max-w-[60px] align-top bg-white">${inner}</td>`;
                         p += span - 1;
                     }
                 }
@@ -8702,6 +8853,32 @@ window.VJSolver = (function () {
                 ? inp.guru.slice().sort((a, b) => String(a[1]).localeCompare(String(b[1]), 'ms'))
                 : inp.kelas.slice().sort((a, b) => (parseInt(a[2]) || 0) - (parseInt(b[2]) || 0) || String(a[1]).localeCompare(String(b[1]), 'ms', { numeric: true }));
             if (!items.some(x => x[0] === jdlSel)) jdlSel = null;
+            // Buang pilihan kelas yang sudah tiada
+            const idKelas = new Set(inp.kelas.map(k => k[0]));
+            [...jdlPilihan].forEach(id => { if (!idKelas.has(id)) jdlPilihan.delete(id); });
+            if (jdlMode === 'kelas') jdlPilihSusunan = items.map(x => x[0]);
+            const nPilih = jdlPilihan.size;
+            const bar = document.getElementById('jdlPilihBar');
+            bar.className = 'flex items-center gap-1.5 text-[11px] px-2 py-0.5 rounded-lg border ' +
+                (nPilih ? 'bg-brand-50 border-brand-200 text-brand-800' : 'border-transparent text-slate-400');
+            bar.title = nPilih ? 'Susun Automatik & Kosongkan hanya untuk kelas ini; kelas lain tidak diubah.' : 'Tandakan kotak kelas untuk susun kelas tertentu sahaja (Shift + klik untuk pilih julat).';
+            bar.classList.toggle('hidden', jdlMode !== 'kelas' && !nPilih);
+            document.getElementById('jdlPilihBatal').classList.toggle('hidden', !nPilih);
+            document.getElementById('jdlPilihTeks').innerText = !nPilih ? 'Semua kelas · tanda kotak untuk pilih'
+                : nPilih === 1 ? `Susun 1 kelas sahaja: ${(inp.kelas.find(k => jdlPilihan.has(k[0])) || [])[1] || ''}`
+                : `${nPilih} kelas dipilih`;
+            document.getElementById('jdlPilihNota').innerHTML = nPilih
+                ? '· Susun Automatik &amp; Kosongkan hanya untuk kelas ini; kelas lain tidak diubah.'
+                : '· Tandakan kotak kelas untuk susun kelas tertentu sahaja (<strong>Shift + klik</strong> untuk pilih julat).';
+            document.getElementById('jdlBtnSusunTeks').innerText = nPilih ? `Susun ${nPilih} Kelas` : 'Susun Automatik';
+            ['alih', 'blok'].forEach(a => {
+                document.getElementById(a === 'alih' ? 'jdlAlatAlih' : 'jdlAlatBlok').className = 'px-2.5 py-1 rounded-md transition flex items-center gap-1 ' +
+                    (jdlAlat === a ? (a === 'blok' ? 'bg-rose-600 text-white shadow-sm' : 'bg-white text-slate-800 shadow-sm') : 'text-slate-500 hover:text-slate-800');
+            });
+            const selLabel = document.getElementById('jdlBlokLabel');
+            selLabel.classList.toggle('hidden', jdlAlat !== 'blok');
+            if (!cfg.label.some(l => l.nama === jdlBlokLabel)) jdlBlokLabel = cfg.label.length ? cfg.label[0].nama : 'Blok';
+            selLabel.innerHTML = (cfg.label.length ? cfg.label : [{ nama: 'Blok' }]).map(l => `<option ${l.nama === jdlBlokLabel ? 'selected' : ''}>${escapeHtml(l.nama)}</option>`).join('');
             const tw = jdlMode === 'guru' ? waktuG : waktuK, pl = jdlMode === 'guru' ? perluG : perluK;
 
             const totalSesi = new Set(jadual.sesi.map(x => x.uuid + '#' + x.ke)).size;
@@ -8755,13 +8932,13 @@ window.VJSolver = (function () {
                                     <div class="font-bold text-[10px] leading-tight truncate">${escapeHtml(kodSubjek[e.t[5]] || e.t[6])}${e.t[9] ? ` <span class="font-medium opacity-70">${escapeHtml(e.t[9])}</span>` : ''}</div>
                                     <div class="text-[9px] leading-tight truncate opacity-80">${escapeHtml(sub)}</div></div>`;
                             }).join('') + (list.length > 3 ? `<div class="text-[9px] text-slate-500 text-center">+${list.length - 3}</div>` : '');
-                            inner = `<div data-jdl="${d}-${p}" class="jdl-cell relative h-full min-h-[44px] space-y-0.5 cursor-pointer ${bentrok ? 'ring-2 ring-rose-500 rounded' : ''}" title="Klik untuk kunci / buka kunci">${inner}${kunci ? '<span class="absolute -top-1 -right-1 text-[10px]">🔒</span>' : ''}</div>`;
+                            inner = `<div data-jdl="${d}-${p}" data-id="${escapeHtml(jdlSel)}" draggable="true" class="jdl-cell relative h-full min-h-[44px] space-y-0.5 cursor-grab active:cursor-grabbing ${bentrok ? 'ring-2 ring-rose-500 rounded' : ''}" title="Klik untuk kunci / buka kunci">${inner}${kunci ? '<span class="absolute -top-1 -right-1 text-[10px]">🔒</span>' : ''}</div>`;
                         } else if (lb) {
                             inner = `<div class="h-full min-h-[44px] rounded-md border flex items-center justify-center text-center text-[10px] font-bold ${slotLabelClass(lb, cfg)}">${escapeHtml(lb)}</div>`;
                         } else {
                             inner = `<div class="min-h-[44px]"></div>`;
                         }
-                        html += `<td class="border-t border-l border-slate-200 p-0.5 align-top">${inner}</td>`;
+                        html += `<td data-sl="${d}-${p}" data-id="${escapeHtml(jdlSel)}" class="jdl-td border-t border-l border-slate-200 p-0.5 align-top">${inner}</td>`;
                     }
                     html += `</tr>`;
                 });
@@ -8775,9 +8952,20 @@ window.VJSolver = (function () {
             (jdlTidakMuat || []).forEach(t => { sebab[t.desc + '#' + t.len] = t.sebab; });
             const isuHtml = B.isu.map(i => `<li class="px-3 py-2 flex gap-2"><span class="shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-full h-fit ${i.jenis === 'ralat' ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-700'}">${i.jenis === 'ralat' ? 'RALAT' : 'AMARAN'}</span><span class="text-slate-700">${escapeHtml(i.teks)}</span></li>`);
             const belumHtml = (jadual.dijana ? belum : []).map(u => `<li class="px-3 py-2 flex gap-2"><span class="shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-full h-fit bg-slate-200 text-slate-700">${u.len} WAKTU</span><span class="text-slate-700">${escapeHtml(u.desc)}${sebab[u.desc + '#' + u.len] ? `<span class="block text-[10px] text-slate-400">${escapeHtml(sebab[u.desc + '#' + u.len])}</span>` : ''}</span></li>`);
-            const semua = isuHtml.concat(belumHtml);
-            document.getElementById('jdlIsuBox').classList.toggle('hidden', !semua.length);
-            document.getElementById('jdlIsu').innerHTML = (belumHtml.length ? `<li class="px-3 py-1.5 bg-slate-50 text-[11px] font-bold text-slate-500">${belumHtml.length} sesi belum dijadualkan (daripada ${B.units.length})</li>` : '') + semua.join('');
+            void belumHtml;
+            document.getElementById('jdlIsuBox').classList.toggle('hidden', !isuHtml.length);
+            document.getElementById('jdlIsu').innerHTML = isuHtml.join('');
+            // Tray: sesi belum diletak (ditapis ikut kelas dipilih)
+            const idBaris = T => jdlMode === 'guru' ? T.guru.map(g => B.guru[g].id) : T.kelas.map(k => B.kelas[k].id);
+            const trayUnits = belum.filter(T => !jdlPilihan.size || T.kelas.some(k => jdlPilihan.has(B.kelas[k].id)));
+            document.getElementById('jdlTrayBil').innerText = trayUnits.length + (trayUnits.length !== belum.length ? ' / ' + belum.length : '');
+            document.getElementById('jdlTrayList').innerHTML = trayUnits.length ? trayUnits.map(T => {
+                const r0 = T.ahliRows[0];
+                const kod = [...new Set(T.ahliRows.map(r => r.kod + (r.label ? ' ' + r.label : '')))].join('/');
+                const siapa = jdlMode === 'guru' ? [...new Set(T.ahliRows.map(r => r.kelasNama))].join(', ') : [...new Set(T.ahliRows.map(r => r.kelasNama))].join(', ');
+                const tip = T.desc + (sebab[T.desc + '#' + T.len] ? '\n' + sebab[T.desc + '#' + T.len] : '');
+                return `<div draggable="true" data-k="${escapeHtml(T.ahli[0] + '#' + T.ke)}" data-ids="${escapeHtml(idBaris(T).join(','))}" class="jdl-chip ${jdlWarna(r0.subjek)} rounded-md px-1.5 py-0.5 text-[10px] font-bold cursor-grab active:cursor-grabbing border border-black/5 flex items-center gap-1" title="${escapeHtml(tip)}">${escapeHtml(kod)} <span class="font-medium opacity-70">${escapeHtml(siapa)}</span> <span class="text-[9px] px-1 rounded bg-white/70">${T.len}w</span></div>`;
+            }).join('') : '<span class="text-[11px] text-slate-400 py-1">Tiada — semua sesi telah diletak.</span>';
             lucide.createIcons();
         }
 
@@ -8786,7 +8974,20 @@ window.VJSolver = (function () {
             if (!isEditMode) { ensureEditMode(() => jdlSusun()); return; }
             const inp = VJStore.getSolverInput();
             if (!inp.transaksi.length) { showToast('Tiada agihan untuk dijadualkan.', 'warning'); return; }
-            if (inp.jadual.sesi.some(x => !x.kunci) && !confirm('Susun semula jadual? Semua sesi yang tidak dikunci akan disusun semula.')) return;
+            // Mod kelas dipilih: hanya agihan kelas dipilih disusun; sesi lain dikunci sementara & dipulihkan selepas itu
+            const separa = jdlPilihan.size > 0;
+            const asal = inp.jadual.sesi.slice();
+            const trxDipilih = new Set();
+            if (separa) {
+                inp.transaksi.forEach(t => { if (jdlTrxDipilih(t)) trxDipilih.add(String(t[8])); });
+                if (!trxDipilih.size) { showToast('Tiada agihan bagi kelas yang dipilih.', 'warning'); return; }
+                const adaSesi = new Set(asal.map(x => x.uuid));
+                inp.transaksi = inp.transaksi.filter(t => trxDipilih.has(String(t[8])) || adaSesi.has(String(t[8])));
+                inp.jadual = Object.assign({}, inp.jadual, { sesi: asal.map(x => trxDipilih.has(x.uuid) ? x : Object.assign({}, x, { kunci: true })) });
+                const nama = inp.kelas.filter(k => jdlPilihan.has(k[0])).map(k => k[1]);
+                const kongsi = inp.transaksi.filter(t => trxDipilih.has(String(t[8])) && String(t[3]).split(',').some(k => !jdlPilihan.has(k.trim()))).length;
+                if (asal.some(x => trxDipilih.has(x.uuid) && !x.kunci) && !confirm(`Susun semula ${nama.length > 3 ? nama.length + ' kelas' : nama.join(', ')}? Sesi tidak berkunci bagi kelas ini akan disusun semula. Kelas lain tidak diubah.${kongsi ? `\n\n${kongsi} agihan dikongsi dengan kelas lain (gabung) turut akan dialih.` : ''}`)) return;
+            } else if (inp.jadual.sesi.some(x => !x.kunci) && !confirm('Susun semula jadual? Semua sesi yang tidak dikunci akan disusun semula.')) return;
             jdlSedang = true;
             const btn = document.getElementById('jdlBtnSusun');
             btn.disabled = true; btn.classList.add('opacity-60');
@@ -8810,12 +9011,27 @@ window.VJSolver = (function () {
                     }
                 });
                 if (res.batal) { showToast('Penyusunan dibatalkan. Jadual sedia ada tidak diubah.', 'info'); return; }
+                if (separa) {
+                    // Kekalkan sesi kelas lain tepat seperti asal; ambil hasil baharu bagi agihan kelas dipilih sahaja
+                    const baru = res.sesi.filter(x => trxDipilih.has(x.uuid));
+                    const kekal = asal.filter(x => !trxDipilih.has(x.uuid));
+                    VJStore.setJadual({ dijana: new Date().toISOString(), sesi: kekal.concat(baru) });
+                    const perlu = new Set(), ada = new Set(baru.map(x => x.uuid + '#' + x.ke));
+                    VJSolver.bina(VJStore.getSolverInput(), { pecahAuto: document.getElementById('jdlPecahAuto').checked }).units
+                        .forEach(u => { if (u.ahli.some(id => trxDipilih.has(id))) perlu.add(u); });
+                    const muat = [...perlu].filter(u => u.ahli.every(id => ada.has(id + '#' + u.ke))).length;
+                    jdlTidakMuat = res.tidakMuat;
+                    showToast(muat === perlu.size ? `${jdlPilihan.size} kelas disusun: semua ${perlu.size} sesi diletak (${(res.stat.ms / 1000).toFixed(1)} s).`
+                        : `${jdlPilihan.size} kelas disusun: ${muat}/${perlu.size} sesi diletak — lihat senarai di bawah jadual.`, muat === perlu.size ? 'success' : 'warning', 6000);
+                    return;
+                }
                 VJStore.setJadual({ dijana: new Date().toISOString(), sesi: res.sesi });
                 jdlTidakMuat = res.tidakMuat;
                 const s = res.stat, o = s.optimum;
-                const teksOpt = o ? ` Optimum: lompong kelas ${o.awal.lompongKelas}→${o.lompongKelas}, lompong guru ${o.awal.lompongGuru}→${o.lompongGuru}, subjek berulang ${o.awal.subjekBerulang}→${o.subjekBerulang}.` : '';
-                showToast(s.diletak === s.unit ? `Jadual lengkap: semua ${s.unit} sesi diletak (${(s.ms / 1000).toFixed(1)} s).${teksOpt}`
-                    : `${s.diletak}/${s.unit} sesi diletak. ${s.unit - s.diletak} sesi belum muat — lihat senarai di bawah jadual.${teksOpt}`, s.diletak === s.unit ? 'success' : 'warning', o ? 10000 : 6000);
+                const teksDepan = s.kosongDepan ? ` ⚠ ${s.kosongDepan} slot kelas kosong sebelum waktu terakhir (tidak dapat dielak — cuba tambah masa optimum).` : '';
+                const teksOpt = o ? ` Optimum: slot kosong di depan kelas ${o.awal.kosongDepanKelas}→${o.kosongDepanKelas}, lompong guru ${o.awal.lompongGuru}→${o.lompongGuru}, subjek berulang ${o.awal.subjekBerulang}→${o.subjekBerulang}.` : '';
+                showToast((s.diletak === s.unit ? `Jadual lengkap: semua ${s.unit} sesi diletak (${(s.ms / 1000).toFixed(1)} s).${teksOpt}`
+                    : `${s.diletak}/${s.unit} sesi diletak. ${s.unit - s.diletak} sesi belum muat — lihat senarai di bawah jadual.${teksOpt}`) + teksDepan, s.diletak === s.unit && !s.kosongDepan ? 'success' : 'warning', o ? 10000 : 6000);
             } catch (e) {
                 console.error(e);
                 showToast('Ralat semasa menyusun: ' + e.message, 'error');
@@ -8866,8 +9082,17 @@ window.VJSolver = (function () {
         function jdlKosongkan() {
             if (!isEditMode) { ensureEditMode(() => jdlKosongkan()); return; }
             const j = VJStore.getJadual();
-            const kekal = j.sesi.filter(x => x.kunci);
             if (!j.sesi.length) return;
+            if (jdlPilihan.size) {
+                const trxDipilih = new Set(VJStore.getSolverInput().transaksi.filter(jdlTrxDipilih).map(t => String(t[8])));
+                const buang = j.sesi.filter(x => trxDipilih.has(x.uuid) && !x.kunci);
+                if (!buang.length) { showToast('Tiada sesi tidak berkunci bagi kelas dipilih.', 'info'); return; }
+                if (!confirm(`Kosongkan jadual ${jdlPilihan.size} kelas dipilih? ${buang.length} sesi akan dibuang. Kelas lain tidak diubah.`)) return;
+                VJStore.setJadual({ dijana: j.dijana, sesi: j.sesi.filter(x => !buang.includes(x)) });
+                renderJadualView();
+                return;
+            }
+            const kekal = j.sesi.filter(x => x.kunci);
             if (!confirm(`Kosongkan jadual?${kekal.length ? ` ${kekal.length} sesi berkunci akan dikekalkan.` : ''}`)) return;
             VJStore.setJadual({ dijana: kekal.length ? j.dijana : null, sesi: kekal });
             jdlTidakMuat = null;
@@ -8882,10 +9107,273 @@ window.VJSolver = (function () {
             jdlTogolKunci(jdlSel, d, p);
         });
         document.getElementById('jdlSemuaGrid').addEventListener('click', e => {
+            if (jdlAlat !== 'alih') return;
             const cell = e.target.closest('.jdl-cell');
             if (!cell) return;
             const [d, p] = cell.dataset.jdl.split('-').map(Number);
             jdlTogolKunci(cell.dataset.id, d, p);
+        });
+
+        // =====================================================================
+        // ALIH SESI (drag & drop) — semak pertembungan kelas/guru & slot diblok
+        // =====================================================================
+        function jdlKonteks() {
+            const inp = VJStore.getSolverInput();
+            const B = VJSolver.bina(inp, { pecahAuto: document.getElementById('jdlPecahAuto').checked });
+            const unitOf = {};
+            B.units.forEach((T, u) => T.ahli.forEach(id => { unitOf[id + '#' + T.ke] = u; }));
+            const trx = {}; inp.transaksi.forEach(t => { trx[String(t[8])] = t; });
+            return { inp, cfg: inp.slot, B, unitOf, trx, W: inp.slot.waktu.length, H: inp.slot.hari.length, j: VJStore.getJadual() };
+        }
+
+        // Sesi (dalam baris `id`) yang meliputi petak (d, p)
+        function jdlSesiDiPetak(K, id, d, p) {
+            return K.j.sesi.filter(x => {
+                const t = K.trx[x.uuid];
+                if (!t || x.hari !== d || p < x.waktu || p >= x.waktu + x.panjang) return false;
+                return jdlMode === 'kelas' ? String(t[3]).split(',').map(s => s.trim()).includes(id) : String(t[1]) === id;
+            });
+        }
+
+        // Semak unit u di (hari, waktu); `abai` = set unit yang tidak dikira. Pulang { sebab } atau { lawan: Set }
+        function jdlSemakLetak(K, u, hari, waktu, abai) {
+            const T = K.B.units[u], nm = s => s;
+            if (waktu < 0 || waktu + T.len > K.W) return { sebab: 'Sesi melepasi hujung hari.' };
+            const kIds = T.kelas.map(k => K.B.kelas[k].id), gIds = T.guru.map(g => K.B.guru[g].id);
+            for (let i = 0; i < T.len; i++) {
+                const key = `${hari}-${waktu + i}`;
+                for (const k of T.kelas) { const lb = (K.cfg.kelas[K.B.kelas[k].id] || {})[key]; if (lb) return { sebab: `Slot ${K.cfg.hari[hari]} waktu ${waktu + i + 1} diblok (${lb}) bagi kelas ${K.B.kelas[k].nama}.` }; }
+                for (const g of T.guru) { const lb = (K.cfg.guru[K.B.guru[g].id] || {})[key]; if (lb) return { sebab: `Slot ${K.cfg.hari[hari]} waktu ${waktu + i + 1} diblok (${lb}) bagi guru ${K.B.guru[g].nama}.` }; }
+            }
+            const lawan = new Set();
+            K.j.sesi.forEach(x => {
+                const v = K.unitOf[x.uuid + '#' + x.ke];
+                if (v === undefined || abai.has(v) || x.hari !== hari) return;
+                if (x.waktu > waktu + T.len - 1 || x.waktu + x.panjang - 1 < waktu) return;
+                const t = K.trx[x.uuid];
+                const kongsiK = String(t[3]).split(',').some(k => kIds.includes(k.trim()));
+                const kongsiG = t[1] && gIds.includes(String(t[1]));
+                if (kongsiK || kongsiG) lawan.add(v);
+            });
+            return { lawan };
+        }
+
+        function jdlLetakUnit(K, u, hari, waktu) {
+            const T = K.B.units[u];
+            K.j.sesi.forEach(x => { if (x.ke === T.ke && T.ahli.includes(x.uuid)) { x.hari = hari; x.waktu = waktu; x.kunci = true; } });
+        }
+
+        function jdlAlih(id, d, p, d2, p2) {
+            if (!isEditMode) { ensureEditMode(() => jdlAlih(id, d, p, d2, p2)); return; }
+            const K = jdlKonteks();
+            const list = jdlSesiDiPetak(K, id, d, p);
+            if (!list.length) return;
+            const x0 = list[0], u = K.unitOf[x0.uuid + '#' + x0.ke];
+            if (u === undefined) { showToast('Sesi ini tidak lagi sepadan dengan agihan semasa.', 'warning'); return; }
+            const hari = d2, waktu = x0.waktu + (p2 - p);
+            if (hari === x0.hari && waktu === x0.waktu) return;
+            const r = jdlSemakLetak(K, u, hari, waktu, new Set([u]));
+            if (r.sebab) { showToast('Tidak boleh alih: ' + r.sebab, 'warning'); return; }
+            if (r.lawan.size === 0) {
+                jdlLetakUnit(K, u, hari, waktu);
+            } else {
+                // Tukar tempat jika bertembung dengan tepat satu sesi sama panjang
+                const v = [...r.lawan][0], Tv = K.B.units[v];
+                const xv = K.j.sesi.find(x => x.ke === Tv.ke && Tv.ahli.includes(x.uuid));
+                const desc = [...r.lawan].map(w => K.B.units[w].desc.split('  |  ')[0]).join('; ');
+                if (r.lawan.size > 1 || Tv.len !== K.B.units[u].len || xv.kunci || xv.hari !== hari || xv.waktu !== waktu) {
+                    if (!jdlTolakKeTray(K, r.lawan, id)) {
+                        showToast(`Tidak boleh alih: bertembung dengan ${desc}${xv && xv.kunci ? ' (berkunci)' : ''} — sesi itu di baris lain atau berkunci.`, 'warning', 6000);
+                        return;
+                    }
+                    jdlLetakUnit(K, u, hari, waktu);
+                    showToast(`Dialih. ${r.lawan.size} sesi yang bertembung (${desc}) dipindah ke kotak bawah.`, 'info', 6000);
+                    VJStore.setJadual(K.j);
+                    renderJadualView();
+                    return;
+                }
+                const abai = new Set([u, v]);
+                const rv = jdlSemakLetak(K, v, x0.hari, x0.waktu, abai);
+                if (rv.sebab || rv.lawan.size) { showToast(`Tidak boleh tukar dengan ${desc}: ${rv.sebab || 'sesi itu bertembung di kedudukan asal.'}`, 'warning', 6000); return; }
+                jdlLetakUnit(K, v, x0.hari, x0.waktu);
+                jdlLetakUnit(K, u, hari, waktu);
+                showToast(`Ditukar dengan ${desc}. Kedua-dua sesi dikunci.`, 'success');
+            }
+            VJStore.setJadual(K.j);
+            renderJadualView();
+        }
+
+        // ID baris (kelas / guru ikut mod) bagi unit u
+        function jdlBarisUnit(K, u) {
+            const T = K.B.units[u];
+            return jdlMode === 'guru' ? T.guru.map(g => K.B.guru[g].id) : T.kelas.map(k => K.B.kelas[k].id);
+        }
+        function jdlBuangUnit(K, u) {
+            const T = K.B.units[u];
+            K.j.sesi = K.j.sesi.filter(x => !(x.ke === T.ke && T.ahli.includes(x.uuid)));
+        }
+        // Keluarkan unit yang bertembung ke tray jika semuanya tidak berkunci & dalam baris `id`
+        function jdlTolakKeTray(K, lawan, id) {
+            const ok = [...lawan].every(v => jdlBarisUnit(K, v).includes(id) &&
+                !K.j.sesi.some(x => x.kunci && x.ke === K.B.units[v].ke && K.B.units[v].ahli.includes(x.uuid)));
+            if (ok) lawan.forEach(v => jdlBuangUnit(K, v));
+            return ok;
+        }
+
+        // Letak sesi dari tray ke (d, p)
+        function jdlLetakBaru(kunci, id, d, p) {
+            if (!isEditMode) { ensureEditMode(() => jdlLetakBaru(kunci, id, d, p)); return; }
+            const K = jdlKonteks();
+            const u = K.unitOf[kunci];
+            if (u === undefined) { renderJadualView(); return; }
+            const T = K.B.units[u];
+            const r = jdlSemakLetak(K, u, d, p, new Set([u]));
+            if (r.sebab) { showToast('Tidak boleh letak: ' + r.sebab, 'warning', 6000); return; }
+            let nota = '';
+            if (r.lawan.size) {
+                const desc = [...r.lawan].map(w => K.B.units[w].desc.split('  |  ')[0]).join('; ');
+                if (!jdlTolakKeTray(K, r.lawan, id)) { showToast(`Tidak boleh letak: bertembung dengan ${desc} (baris lain atau berkunci).`, 'warning', 6000); return; }
+                nota = ` ${r.lawan.size} sesi (${desc}) dipindah ke kotak bawah.`;
+            }
+            jdlBuangUnit(K, u);
+            T.ahli.forEach(uuid => K.j.sesi.push({ uuid, ke: T.ke, hari: d, waktu: p, panjang: T.len, kunci: true }));
+            if (!K.j.dijana) K.j.dijana = new Date().toISOString();
+            VJStore.setJadual(K.j);
+            if (nota) showToast('Sesi diletak & dikunci.' + nota, 'info', 6000);
+            renderJadualView();
+        }
+
+        // Keluarkan sesi di petak (d, p) baris id ke tray
+        function jdlKeluar(id, d, p) {
+            if (!isEditMode) { ensureEditMode(() => jdlKeluar(id, d, p)); return; }
+            const K = jdlKonteks();
+            const list = jdlSesiDiPetak(K, id, d, p);
+            if (!list.length) return;
+            const u = K.unitOf[list[0].uuid + '#' + list[0].ke];
+            if (u === undefined) K.j.sesi = K.j.sesi.filter(x => !list.includes(x));
+            else jdlBuangUnit(K, u);
+            VJStore.setJadual(K.j);
+            renderJadualView();
+        }
+
+        let jdlSeret = null;
+        (function () {
+            const tray = document.getElementById('jdlTray');
+            const hi = on => { tray.classList.toggle('border-brand-500', on); tray.classList.toggle('bg-brand-50', on); };
+            tray.addEventListener('dragstart', e => {
+                const chip = e.target.closest('.jdl-chip');
+                if (!chip) return;
+                jdlSeret = { kunci: chip.dataset.k, ids: chip.dataset.ids.split(',') };
+                e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer.setData('text/plain', chip.dataset.k);
+                // Serlahkan baris yang boleh menerima sesi ini
+                document.querySelectorAll('#jdlSemuaGrid .jdl-td').forEach(td => { if (jdlSeret.ids.includes(td.dataset.id)) td.classList.add('bg-brand-50/60'); });
+            });
+            tray.addEventListener('dragend', () => {
+                jdlSeret = null;
+                document.querySelectorAll('#jdlSemuaGrid .bg-brand-50\\/60').forEach(td => td.classList.remove('bg-brand-50/60'));
+            });
+            tray.addEventListener('dragover', e => {
+                if (!jdlSeret || jdlSeret.kunci) return;
+                e.preventDefault(); e.dataTransfer.dropEffect = 'move'; hi(true);
+            });
+            tray.addEventListener('dragleave', e => { if (!tray.contains(e.relatedTarget)) hi(false); });
+            tray.addEventListener('drop', e => {
+                hi(false);
+                const src = jdlSeret; jdlSeret = null;
+                if (!src || src.kunci) return;
+                e.preventDefault();
+                jdlKeluar(src.id, src.d, src.p);
+            });
+        })();
+        ['jdlSemuaGrid', 'jdlGrid'].forEach(gid => {
+            const grid = document.getElementById(gid);
+            grid.addEventListener('dragstart', e => {
+                const cell = e.target.closest('.jdl-cell');
+                if (!cell || jdlAlat !== 'alih') { e.preventDefault(); return; }
+                const [d, p] = cell.dataset.jdl.split('-').map(Number);
+                jdlSeret = { id: cell.dataset.id, d, p };
+                e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer.setData('text/plain', cell.dataset.jdl);
+            });
+            grid.addEventListener('dragover', e => {
+                if (!jdlSeret) return;
+                const td = e.target.closest('.jdl-td');
+                if (!td || !(jdlSeret.ids ? jdlSeret.ids.includes(td.dataset.id) : td.dataset.id === jdlSeret.id)) return;
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+                grid.querySelectorAll('.jdl-sasaran').forEach(x => x !== td && x.classList.remove('jdl-sasaran', 'outline', 'outline-2', 'outline-brand-500'));
+                td.classList.add('jdl-sasaran', 'outline', 'outline-2', 'outline-brand-500');
+            });
+            grid.addEventListener('drop', e => {
+                const td = e.target.closest('.jdl-td');
+                const src = jdlSeret;
+                jdlSeret = null;
+                grid.querySelectorAll('.jdl-sasaran').forEach(x => x.classList.remove('jdl-sasaran', 'outline', 'outline-2', 'outline-brand-500'));
+                if (!src || !td) return;
+                const [d2, p2] = td.dataset.sl.split('-').map(Number);
+                if (src.kunci) {
+                    if (!src.ids.includes(td.dataset.id)) return;
+                    e.preventDefault();
+                    jdlLetakBaru(src.kunci, td.dataset.id, d2, p2);
+                    return;
+                }
+                if (td.dataset.id !== src.id) return;
+                e.preventDefault();
+                jdlAlih(src.id, src.d, src.p, d2, p2);
+            });
+            grid.addEventListener('dragend', () => {
+                jdlSeret = null;
+                grid.querySelectorAll('.jdl-sasaran').forEach(x => x.classList.remove('jdl-sasaran', 'outline', 'outline-2', 'outline-brand-500'));
+            });
+        });
+
+        // =====================================================================
+        // BLOK SLOT terus dari grid (klik / seret)
+        // =====================================================================
+        let jdlCat = null;   // { nilai, ubah: { id: blokMap }, sesi: Set('id|d-p') }
+        document.getElementById('jdlBlokLabel').addEventListener('change', e => { jdlBlokLabel = e.target.value; });
+        function jdlCatPetak(td) {
+            const id = td.dataset.id, key = td.dataset.sl;
+            if (jdlCat.sesi.has(id + '|' + key)) { jdlCat.adaSesi = true; return; }
+            const peta = jdlCat.ubah[id] = jdlCat.ubah[id] || Object.assign({}, (VJStore.getSlot()[jdlMode] || {})[id] || {});
+            if (jdlCat.nilai) peta[key] = jdlCat.nilai; else delete peta[key];
+            const box = td.firstElementChild;
+            if (box) box.className = 'h-[34px] rounded-sm border flex items-center justify-center text-[8px] font-bold ' +
+                (jdlCat.nilai ? slotLabelClass(jdlCat.nilai) : 'border-transparent');
+            if (box) box.textContent = jdlCat.nilai ? (jdlCat.nilai.length > 5 ? jdlCat.nilai.slice(0, 4) + '…' : jdlCat.nilai) : '';
+        }
+        document.getElementById('jdlSemuaGrid').addEventListener('pointerdown', e => {
+            if (jdlAlat !== 'blok') return;
+            const td = e.target.closest('.jdl-td');
+            if (!td) return;
+            e.preventDefault();
+            if (!isEditMode) { ensureEditMode(() => renderJadualView()); return; }
+            const K = jdlKonteks();
+            const sesi = new Set();
+            K.j.sesi.forEach(x => {
+                const t = K.trx[x.uuid]; if (!t) return;
+                const ids = jdlMode === 'kelas' ? String(t[3]).split(',').map(s => s.trim()) : [String(t[1])];
+                ids.forEach(id => { for (let i = 0; i < x.panjang; i++) sesi.add(`${id}|${x.hari}-${x.waktu + i}`); });
+            });
+            const kini = ((K.cfg[jdlMode] || {})[td.dataset.id] || {})[td.dataset.sl];
+            jdlCat = { nilai: kini && kini === jdlBlokLabel ? '' : (kini ? '' : jdlBlokLabel), ubah: {}, sesi, adaSesi: false };
+            jdlCatPetak(td);
+        });
+        document.addEventListener('pointermove', e => {
+            if (!jdlCat) return;
+            const el = document.elementFromPoint(e.clientX, e.clientY);
+            const td = el && el.closest('#jdlSemuaGrid .jdl-td');
+            if (td) jdlCatPetak(td);
+        });
+        document.addEventListener('pointerup', () => {
+            if (!jdlCat) return;
+            const c = jdlCat; jdlCat = null;
+            try {
+                Object.entries(c.ubah).forEach(([id, peta]) => (jdlMode === 'guru' ? VJStore.setGuruBlok : VJStore.setKelasBlok)(id, peta));
+            } catch (err) { showToast(err.message, 'error'); }
+            if (c.adaSesi) showToast('Petak yang ada sesi tidak diblok. Alih atau kosongkan sesi itu dahulu.', 'info');
+            renderJadualView();
         });
 
         // ---- Hubungan antara sesi ----

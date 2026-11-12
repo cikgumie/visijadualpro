@@ -2717,25 +2717,24 @@ window.VJSampleData = function () {
     <!-- MENU SISI (KIRI) + KANDUNGAN                                    -->
     <!-- ============================================================== -->
     <div class="flex-1 flex min-h-0">
+    <!-- Menu Tetapan (dropdown) -->
+    <div id="tetapanMenu" class="hidden fixed z-[90] w-56 bg-white border border-slate-200 rounded-xl shadow-2xl py-1.5 no-print" onclick="event.stopPropagation()">
+        <p class="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">Paparan & Data</p>
+        <button onclick="tetapanGo('guru')" class="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 text-left"><i data-lucide="users" class="w-4 h-4 text-slate-500"></i> Jadual Guru</button>
+        <button onclick="tetapanGo('kelas')" class="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 text-left"><i data-lucide="school" class="w-4 h-4 text-slate-500"></i> Rumusan Kelas</button>
+        <button onclick="tetapanGo('banding')" class="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 text-left"><i data-lucide="git-compare" class="w-4 h-4 text-slate-500"></i> Banding Jadual</button>
+        <button onclick="tetapanGo('arkib')" class="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 text-left"><i data-lucide="archive" class="w-4 h-4 text-slate-500"></i> Arkib Data</button>
+        <div class="my-1 border-t border-slate-200"></div>
+        <button onclick="closeTetapanMenu(); openTetapanModal()" class="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 text-left"><i data-lucide="key-round" class="w-4 h-4 text-slate-500"></i> Tukar Kata Laluan</button>
+    </div>
+
         <aside id="sideNav" class="side-nav no-print">
             <nav class="flex-1 overflow-y-auto p-2 space-y-0.5">
-                <button onclick="switchTab('guru')" id="nav-guru" class="nav-tab" title="Jadual Guru">
-                    <i data-lucide="users" class="w-4 h-4 shrink-0"></i><span class="nav-label">Jadual Guru</span>
-                </button>
                 <button onclick="switchTab('matrix')" id="nav-matrix" class="nav-tab active" title="Matriks Kelas">
                     <i data-lucide="grid" class="w-4 h-4 shrink-0"></i><span class="nav-label">Matriks Kelas</span>
                 </button>
-                <button onclick="switchTab('kelas')" id="nav-kelas" class="nav-tab" title="Rumusan Kelas">
-                    <i data-lucide="school" class="w-4 h-4 shrink-0"></i><span class="nav-label">Rumusan Kelas</span>
-                </button>
                 <button onclick="switchTab('subjek')" id="nav-subjek" class="nav-tab" title="Analisis Subjek">
                     <i data-lucide="book-open" class="w-4 h-4 shrink-0"></i><span class="nav-label">Analisis Subjek</span>
-                </button>
-                <button onclick="switchTab('banding')" id="nav-banding" class="nav-tab" title="Banding Jadual">
-                    <i data-lucide="git-compare" class="w-4 h-4 shrink-0"></i><span class="nav-label">Banding Jadual</span>
-                </button>
-                <button onclick="switchTab('arkib')" id="nav-arkib" class="nav-tab" title="Arkib Data">
-                    <i data-lucide="archive" class="w-4 h-4 shrink-0"></i><span class="nav-label">Arkib Data</span>
                 </button>
                 <button onclick="switchTab('slot')" id="nav-slot" class="nav-tab" title="Slot Masa">
                     <i data-lucide="calendar-clock" class="w-4 h-4 shrink-0"></i><span class="nav-label">Slot Masa</span>
@@ -3767,7 +3766,7 @@ window.VJSampleData = function () {
                             <span class="hidden sm:inline">Mod Edit Aktif</span>
                             <span class="sm:hidden">Edit</span>
                         </div>
-                        <button onclick="openTetapanModal()" class="p-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg transition" title="Tetapan Sistem (Tukar Kata Laluan)">
+                        <button id="btnTetapanMenu" onclick="toggleTetapanMenu(event)" class="p-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg transition" title="Tetapan">
                             <i data-lucide="settings" class="w-4 h-4"></i>
                         </button>
                         <button onclick="lockEditMode()" class="px-2.5 py-1 bg-rose-500/20 hover:bg-rose-500/30 text-rose-200 border border-rose-400/30 rounded-xl text-xs font-bold transition flex items-center gap-1" title="Kunci semula mod paparan sahaja">
@@ -3782,6 +3781,9 @@ window.VJSampleData = function () {
                         <span class="hidden md:inline-block text-[11px] font-medium text-white/70 bg-white/10 px-2.5 py-0.5 rounded-full border border-white/15">
                             Paparan Sahaja
                         </span>
+                        <button id="btnTetapanMenu" onclick="toggleTetapanMenu(event)" class="p-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg transition" title="Tetapan">
+                            <i data-lucide="settings" class="w-4 h-4"></i>
+                        </button>
                         <button onclick="promptUnlockEditMode()" class="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border border-amber-400/40 rounded-xl text-xs font-bold transition shadow-sm" title="Buka Mod Edit untuk mengubah data jadual">
                             <i data-lucide="lock" class="w-3.5 h-3.5 text-amber-300"></i>
                             <span>Aktifkan Mod Edit</span>
@@ -3871,6 +3873,21 @@ window.VJSampleData = function () {
             promptUnlockEditMode(callback);
             return false;
         }
+
+        function toggleTetapanMenu(e) {
+            if (e) e.stopPropagation();
+            const m = document.getElementById('tetapanMenu');
+            if (!m.classList.contains('hidden')) { closeTetapanMenu(); return; }
+            const r = e.currentTarget.getBoundingClientRect();
+            m.style.top = (r.bottom + 6) + 'px';
+            m.style.right = Math.max(8, window.innerWidth - r.right) + 'px';
+            m.classList.remove('hidden');
+            lucide.createIcons();
+        }
+        function closeTetapanMenu() { document.getElementById('tetapanMenu')?.classList.add('hidden'); }
+        function tetapanGo(tab) { closeTetapanMenu(); switchTab(tab); }
+        document.addEventListener('click', closeTetapanMenu);
+        document.addEventListener('keydown', e => { if (e.key === 'Escape') closeTetapanMenu(); });
 
         function openTetapanModal() {
             if (!isEditMode) {

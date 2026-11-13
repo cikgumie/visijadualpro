@@ -8584,6 +8584,7 @@ window.VJSolver = (function () {
         const pos = new Int32Array(U).fill(-1);
         const kunci = new Uint8Array(U);
         const daySub = {};                 // "kelas|subjek|hari" -> [unit]
+        const ulangKD = new Int32Array(B.kelas.length * H);   // bil. sesi subjek berulang bagi (kelas, hari) — dikemas kini secara tokokan
         const dayLoadK = B.kelas.map(() => new Int32Array(H));
         const placedAt = new Int32Array(U).fill(-1000);
         const sebabMati = {};
@@ -8643,7 +8644,11 @@ window.VJSolver = (function () {
                 T.kelas.forEach(k => { occK[k][s + i] = u; });
                 T.guru.forEach(g => { occG[g][s + i] = u; });
             }
-            T.pairs.forEach(([k, sj]) => { const key = k + '|' + sj + '|' + d; (daySub[key] = daySub[key] || []).push(u); });
+            T.pairs.forEach(([k, sj]) => {
+                const key = k + '|' + sj + '|' + d, arr = daySub[key] || (daySub[key] = []);
+                arr.push(u);
+                if (arr.length > 1) ulangKD[k * H + d]++;
+            });
             T.kelas.forEach(k => { dayLoadK[k][d] += T.len; });
             relU[u].forEach(ri => {
                 dayR[ri][d].push(u);
@@ -8662,7 +8667,11 @@ window.VJSolver = (function () {
                 T.kelas.forEach(k => { occK[k][s + i] = -1; });
                 T.guru.forEach(g => { occG[g][s + i] = -1; });
             }
-            T.pairs.forEach(([k, sj]) => { const arr = daySub[k + '|' + sj + '|' + d]; arr.splice(arr.indexOf(u), 1); });
+            T.pairs.forEach(([k, sj]) => {
+                const arr = daySub[k + '|' + sj + '|' + d];
+                if (arr.length > 1) ulangKD[k * H + d]--;
+                arr.splice(arr.indexOf(u), 1);
+            });
             T.kelas.forEach(k => { dayLoadK[k][d] -= T.len; });
             const buang = arr => arr.splice(arr.indexOf(u), 1);
             relU[u].forEach(ri => {
@@ -8909,6 +8918,9 @@ window.VJSolver = (function () {
         const pending = units.map((_, u) => u).filter(u => !kunci[u]).sort((a, b) => sukar(a) - sukar(b));
 
         let iter = 0, terbaik = -1, posTerbaik = null;
+        // Henti awal fasa 1 jika bilangan sesi diletak tidak bertambah dalam tempoh ini
+        const hadBuntuMs = Math.max(5000, hadMs * 0.25);
+        let tKemajuan = performance.now(), hentiBuntu = false;
         let diletak = units.filter((_, u) => pos[u] >= 0).length;
         const mula = performance.now();
         const maxIter = 50000000;
@@ -8936,11 +8948,7 @@ window.VJSolver = (function () {
         }
         const subjekKelas = B.kelas.map(() => new Set());
         units.forEach(T => T.pairs.forEach(([k, sj]) => subjekKelas[k].add(sj)));
-        function ulang(k, d) {
-            let n = 0;
-            for (const sj of subjekKelas[k]) { const a = daySub[k + '|' + sj + '|' + d]; if (a && a.length > 1) n += a.length - 1; }
-            return n;
-        }
+        function ulang(k, d) { return ulangKD[k * H + d]; }
         const BERAT = { kelas: 40, guru: 3, ulang: 6, beban: 0.2, hub: 40 };
         function kosBahagian(gs, ks, ds, rs) {
             let c = 0;
@@ -9113,11 +9121,12 @@ window.VJSolver = (function () {
                     letak(u, best);
                     placedAt[u] = iter;
                     diletak++;
-                    if (diletak > terbaik) { terbaik = diletak; posTerbaik = salinPos(); }
+                    if (diletak > terbaik) { terbaik = diletak; posTerbaik = salinPos(); tKemajuan = performance.now(); }
                 }
                 const ms = performance.now() - mula;
                 if (onProgress) onProgress({ iter, diletak, terbaik: Math.max(terbaik, diletak), jumlah: U, ms });
-                if (pending.length && ms < hadMs && iter < maxIter) { seterusnya(langkah); return; }
+                hentiBuntu = pending.length > 0 && performance.now() - tKemajuan > hadBuntuMs;
+                if (pending.length && ms < hadMs && iter < maxIter && !hentiBuntu) { seterusnya(langkah); return; }
                 if (diletak >= terbaik) posTerbaik = salinPos();
                 // Fasa 2: optimum kualiti. Mulakan daripada susunan terbaik (paling banyak sesi diletak);
                 // langkah optimum tidak pernah mengeluarkan sesi, jadi bilangan sesi diletak kekal.
@@ -9146,17 +9155,22 @@ window.VJSolver = (function () {
             function langkahOptimum() {
                 if (dibatal()) return;
                 const t0 = performance.now(), O = fasa2;
-                while (performance.now() - t0 < 40) {
-                    const f = Math.min(1, (performance.now() - O.mula) / hadOptimMs);
+                for (;;) {
+                    // Semak jam sekali bagi setiap 256 langkah (performance.now() agak mahal jika dipanggil setiap langkah)
+                    const kini = performance.now();
+                    if (kini - t0 >= 40) break;
+                    const f = Math.min(1, (kini - O.mula) / hadOptimMs);
                     if (f >= 1) break;
                     const T = O.T0 * Math.pow(O.T1 / O.T0, f);
-                    O.langkah++;
-                    const r = Math.random();
-                    const d = r < 0.3 ? cubaIsiLubang(T) : r < 0.7 ? cubaAlih(O.boleh[Math.floor(Math.random() * O.boleh.length)], T) : cubaTukar(T, O.boleh);
-                    if (d === null) continue;
-                    O.diterima++;
-                    O.kini += d;
-                    if (O.kini < O.terbaik - 1e-9) { O.terbaik = O.kini; O.posTerbaik = salinPos(); }
+                    for (let n = 0; n < 256; n++) {
+                        O.langkah++;
+                        const r = Math.random();
+                        const d = r < 0.3 ? cubaIsiLubang(T) : r < 0.7 ? cubaAlih(O.boleh[Math.floor(Math.random() * O.boleh.length)], T) : cubaTukar(T, O.boleh);
+                        if (d === null) continue;
+                        O.diterima++;
+                        O.kini += d;
+                        if (O.kini < O.terbaik - 1e-9) { O.terbaik = O.kini; O.posTerbaik = salinPos(); }
+                    }
                 }
                 const msOpt = performance.now() - O.mula;
                 if (onProgress) onProgress({ fasa: 'optimum', iter, diletak, terbaik: diletak, jumlah: U, ms: O.msFasa1 + msOpt, kosAwal: O.awal, kos: O.terbaik });
@@ -9198,7 +9212,7 @@ window.VJSolver = (function () {
                 if (langgar > 0) isu.push({ jenis: 'amaran', teks: `Hubungan ${TAHAP_HUB[R.tahap].nama.toLowerCase()} "${namaHub(R.h)}" tidak dipenuhi sepenuhnya (${langgar} pelanggaran).` });
             });
             const kualiti = ukurKualiti();
-            return { sesi, tidakMuat, isu, stat: { unit: U, diletak: U - tidakMuat.length, iter, ms: Math.round(ms), bilAuto: B.bilAuto, kosongDepan: kualiti.kosongDepanKelas } };
+            return { sesi, tidakMuat, isu, stat: { unit: U, diletak: U - tidakMuat.length, iter, ms: Math.round(ms), hentiBuntu, bilAuto: B.bilAuto, kosongDepan: kualiti.kosongDepanKelas } };
         }
     }
 
@@ -9600,7 +9614,7 @@ window.VJSolver = (function () {
                 const teksDepan = s.kosongDepan ? ` ⚠ ${s.kosongDepan} slot kelas kosong sebelum waktu terakhir (tidak dapat dielak — cuba tambah masa optimum).` : '';
                 const teksOpt = o ? ` Optimum: slot kosong di depan kelas ${o.awal.kosongDepanKelas}→${o.kosongDepanKelas}, lompong guru ${o.awal.lompongGuru}→${o.lompongGuru}, subjek berulang ${o.awal.subjekBerulang}→${o.subjekBerulang}.` : '';
                 showToast((s.diletak === s.unit ? `Jadual lengkap: semua ${s.unit} sesi diletak (${(s.ms / 1000).toFixed(1)} s).${teksOpt}`
-                    : `${s.diletak}/${s.unit} sesi diletak. ${s.unit - s.diletak} sesi belum muat — lihat senarai di bawah jadual.${teksOpt}`) + teksDepan, s.diletak === s.unit && !s.kosongDepan ? 'success' : 'warning', o ? 10000 : 6000);
+                    : `${s.diletak}/${s.unit} sesi diletak. ${s.unit - s.diletak} sesi belum muat${s.hentiBuntu ? ' (carian dihentikan awal kerana tiada kemajuan)' : ''} — lihat senarai di bawah jadual.${teksOpt}`) + teksDepan, s.diletak === s.unit && !s.kosongDepan ? 'success' : 'warning', o ? 10000 : 6000);
             } catch (e) {
                 console.error(e);
                 showToast('Ralat semasa menyusun: ' + e.message, 'error');

@@ -172,6 +172,7 @@
             nilai: Math.max(0, parseInt(h.nilai) || 0),
             slot: ids(h.slot).filter(k => /^\d+-\d+$/.test(k)),
             slotB: ids(h.slotB).filter(k => /^\d+-\d+$/.test(k)),
+            berat: ['ketat', 'optimum', 'longgar'].includes(h.berat) ? h.berat : '',
             aktif: h.aktif !== false
         }));
     }
@@ -3273,7 +3274,13 @@ window.VJSampleData = function () {
                     <p class="text-xs font-bold text-slate-700">Tambah hubungan</p>
                     <div class="flex flex-wrap items-end gap-2">
                         <label class="block"><span class="block text-[10px] font-bold text-slate-500 mb-0.5">Jenis</span>
-                            <select id="hubJenis" onchange="hubFormUpdate()" class="border border-slate-300 rounded-lg px-2 py-1.5 text-xs bg-white max-w-[320px]"></select></label>
+                            <select id="hubJenis" onchange="hubJenisTukar()" class="border border-slate-300 rounded-lg px-2 py-1.5 text-xs bg-white max-w-[320px]"></select></label>
+                        <label class="block"><span class="block text-[10px] font-bold text-slate-500 mb-0.5">Pemberat</span>
+                            <select id="hubBerat" onchange="hubFormUpdate()" class="border border-slate-300 rounded-lg px-2 py-1.5 text-xs bg-white font-bold">
+                                <option value="ketat">Ketat</option>
+                                <option value="optimum">Optimum</option>
+                                <option value="longgar">Longgar</option>
+                            </select></label>
                         <label id="hubNilaiBox" class="block"><span id="hubNilaiLabel" class="block text-[10px] font-bold text-slate-500 mb-0.5"></span>
                             <input id="hubNilai" type="number" min="0" max="50" value="1" class="w-20 border border-slate-300 rounded-lg px-2 py-1.5 text-xs"></label>
                         <label class="block flex-1 min-w-[160px]"><span class="block text-[10px] font-bold text-slate-500 mb-0.5">Nama (pilihan)</span>
@@ -8236,6 +8243,19 @@ window.VJSolver = (function () {
     };
     const JENIS_DOMAIN = new Set(['slotHanya', 'slotLarang', 'tidakMula', 'tidakTamat']);
 
+    // Pemberat hubungan: ketat (wajib dipatuhi), optimum (diusahakan kuat), longgar (diusahakan jika mudah).
+    // Jenis lembut tidak boleh dijamin, jadi "ketat" baginya = pemberat paling tinggi.
+    const TAHAP_HUB = {
+        ketat: { nama: 'Ketat', berat: 200, hint: 'Wajib dipatuhi. Sesi tidak akan diletak jika melanggar.' },
+        optimum: { nama: 'Optimum', berat: 40, hint: 'Diusahakan sekuat mungkin, tetapi boleh dilanggar jika tiada pilihan lain.' },
+        longgar: { nama: 'Longgar', berat: 8, hint: 'Diusahakan jika mudah. Kekangan lain lebih diutamakan.' }
+    };
+    function tahapHub(h) {
+        const m = JENIS_HUB[h.jenis] || {};
+        if (h.jenis === 'serentak') return 'ketat';
+        return TAHAP_HUB[h.berat] ? h.berat : (m.lembut ? 'optimum' : 'ketat');
+    }
+
     function namaHub(h) { return h.nama || (JENIS_HUB[h.jenis] && JENIS_HUB[h.jenis].nama) || h.jenis; }
 
     function pilihKosong(p) { return !p || (!(p.subjek || []).length && !(p.guru || []).length && !(p.kelas || []).length); }
@@ -8428,8 +8448,10 @@ window.VJSolver = (function () {
                 if (u.ahliRows.some(r => padanHub(h, r))) inA[u.id] = 1;
                 if (adaB && u.ahliRows.some(r => padanHub(h, r, 'B'))) inB[u.id] = 1;
             });
+            const tahap = tahapHub(h);
             return {
-                h, meta, adaB, inA, inB,
+                h, meta, adaB, inA, inB, tahap, w: TAHAP_HUB[tahap].berat,
+                keras: !meta.lembut && tahap === 'ketat',
                 slot: new Set(h.slot || []), slotB: new Set(h.slotB || []),
                 units: units.filter(u => inA[u.id] || inB[u.id]).map(u => u.id)
             };
@@ -8460,8 +8482,9 @@ window.VJSolver = (function () {
         B.hubUnit.forEach((R, ri) => R.units.forEach(u => relU[u].push(ri)));
         const occR = B.hubUnit.map(() => Array.from({ length: N }, () => []));
         const dayR = B.hubUnit.map(() => Array.from({ length: H }, () => []));
-        const relLembut = B.hubUnit.map(R => !!R.meta.lembut);
-        const relKeras = B.hubUnit.map(R => !R.meta.lembut && !JENIS_DOMAIN.has(R.h.jenis));
+        const relLembut = B.hubUnit.map(R => !!R.meta.lembut);                                   // diukur dengan ukurLembut
+        const relKeras = B.hubUnit.map(R => R.keras && !JENIS_DOMAIN.has(R.h.jenis));             // usir unit lain
+        const relLonggar = B.hubUnit.map(R => !R.meta.lembut && !R.keras);                        // jenis keras berpemberat optimum/longgar
 
         function letak(u, s) {
             const T = units[u], d = Math.floor(s / W);
@@ -8505,7 +8528,7 @@ window.VJSolver = (function () {
                         if (T.kelas.some(k => blokK[k][s + i]) || T.guru.some(g => blokG[g][s + i])) ok = false;
                         for (const ri of relU[u]) {
                             const R = B.hubUnit[ri], J = R.h.jenis;
-                            if (!R.inA[u] || !JENIS_DOMAIN.has(J)) continue;
+                            if (!R.inA[u] || !JENIS_DOMAIN.has(J) || !R.keras) continue;
                             const ada = R.slot.has(`${d}-${p + i}`);
                             if ((J === 'slotHanya' && !ada) || (J === 'slotLarang' && ada) ||
                                 (J === 'tidakMula' && i === 0 && ada) || (J === 'tidakTamat' && i === T.len - 1 && ada)) ok = false;
@@ -8653,14 +8676,43 @@ window.VJSolver = (function () {
             return grid;
         }
 
+        // Bil. pelanggaran hubungan ri jika u diletak di s (untuk jenis keras yang dilonggarkan)
+        function langgarUnit(ri, u, s, set) {
+            const R = B.hubUnit[ri], J = R.h.jenis;
+            if (JENIS_DOMAIN.has(J)) {
+                if (!R.inA[u]) return 0;
+                const d = Math.floor(s / W), p = s - d * W, len = units[u].len;
+                let n = 0;
+                for (let i = 0; i < len; i++) {
+                    const ada = R.slot.has(`${d}-${p + i}`);
+                    if ((J === 'slotHanya' && !ada) || (J === 'slotLarang' && ada) ||
+                        (J === 'tidakMula' && i === 0 && ada) || (J === 'tidakTamat' && i === len - 1 && ada)) n++;
+                }
+                return n;
+            }
+            const tmp = new Set(set || []);
+            const asal = tmp.size;
+            konflikHubungan(ri, u, s, tmp);
+            return tmp.size - asal;
+        }
+
         function kosHubunganLembut(u, s, set) {
             let c = 0;
             for (const ri of relU[u]) {
-                if (!relLembut[ri]) continue;
                 const R = B.hubUnit[ri];
-                c += 40 * ukurLembut(R.h.jenis, R.h.nilai, gridHubungan(ri, u, s, set), H, W);
+                if (relLembut[ri]) c += R.w * ukurLembut(R.h.jenis, R.h.nilai, gridHubungan(ri, u, s, set), H, W);
+                else if (relLonggar[ri]) c += R.w * langgarUnit(ri, u, s, set);
             }
             return c;
+        }
+
+        // Jumlah pelanggaran semasa bagi hubungan ri (semua unit yang telah diletak)
+        function langgarHubungan(ri) {
+            const R = B.hubUnit[ri];
+            if (R.meta.lembut) return ukurLembut(R.h.jenis, R.h.nilai, gridHubungan(ri, -1, 0, null), H, W);
+            let n = 0;
+            for (const x of R.units) if (pos[x] >= 0) n += langgarUnit(ri, x, pos[x], null);
+            return n;
         }
 
         // Bil. slot kelas yang masih kosong (tidak diblok) antara slot kosong pertama hari itu dan s.
@@ -8739,7 +8791,7 @@ window.VJSolver = (function () {
                 for (const g of gs) c += BERAT.guru * lompong(occG[g], blokG[g], d);
                 for (const k of ks) c += BERAT.kelas * kosongDepan(occK[k], blokK[k], d) + BERAT.ulang * ulang(k, d) + BERAT.beban * dayLoadK[k][d] * dayLoadK[k][d];
             }
-            for (const ri of rs) if (relLembut[ri]) c += BERAT.hub * ukurLembut(B.hubUnit[ri].h.jenis, B.hubUnit[ri].h.nilai, gridHubungan(ri, -1, 0, null), H, W);
+            for (const ri of rs) if (relLembut[ri] || relLonggar[ri]) c += B.hubUnit[ri].w * langgarHubungan(ri);
             return c;
         }
         function kosSemua() {
@@ -8969,20 +9021,18 @@ window.VJSolver = (function () {
                 T.ahli.forEach(id => sesi.push({ uuid: id, ke: T.ke, hari: Math.floor(s / W), waktu: s % W, panjang: T.len, kunci: !!kunci[u] }));
             });
             const isu = B.isu.slice();
-            B.hubUnit.forEach(R => {
-                if (!R.meta.lembut) return;
-                const grid = new Uint8Array(N);
-                R.units.forEach(u => { if (akhir[u] >= 0) for (let i = 0; i < units[u].len; i++) grid[akhir[u] + i] = 1; });
-                const langgar = ukurLembut(R.h.jenis, R.h.nilai, grid, H, W);
-                if (langgar > 0) isu.push({ jenis: 'amaran', teks: `Hubungan lembut "${namaHub(R.h)}" tidak dipenuhi sepenuhnya (kekurangan/lebihan ${langgar}).` });
-            });
             tetapkanKedudukan(akhir);
+            B.hubUnit.forEach((R, ri) => {
+                if (R.keras) return;
+                const langgar = langgarHubungan(ri);
+                if (langgar > 0) isu.push({ jenis: 'amaran', teks: `Hubungan ${TAHAP_HUB[R.tahap].nama.toLowerCase()} "${namaHub(R.h)}" tidak dipenuhi sepenuhnya (${langgar} pelanggaran).` });
+            });
             const kualiti = ukurKualiti();
             return { sesi, tidakMuat, isu, stat: { unit: U, diletak: U - tidakMuat.length, iter, ms: Math.round(ms), bilAuto: B.bilAuto, kosongDepan: kualiti.kosongDepanKelas } };
         }
     }
 
-    return { bina, susun, parsePecahan, pecahAuto, hurufLabel, JENIS_HUB, namaHub, padanHub, pilihKosong, ukurLembut };
+    return { bina, susun, parsePecahan, pecahAuto, hurufLabel, JENIS_HUB, TAHAP_HUB, tahapHub, namaHub, padanHub, pilihKosong, ukurLembut };
 })();
     </script>
     <script>
@@ -9735,7 +9785,7 @@ window.VJSolver = (function () {
                 });
                 hubSlotDraf = new Set();
                 hubSlotDrafB = new Set();
-                hubFormUpdate();
+                hubJenisTukar();
                 hubRenderList();
             }
             const buka = box.classList.contains('hidden');
@@ -9748,6 +9798,19 @@ window.VJSolver = (function () {
 
         function hubPanelEsc(e) { if (e.key === 'Escape') hubTogglePanel(); }
 
+        function hubJenisTukar() {
+            const m = VJSolver.JENIS_HUB[document.getElementById('hubJenis').value] || {};
+            document.getElementById('hubBerat').value = m.lembut ? 'optimum' : 'ketat';
+            hubFormUpdate();
+        }
+
+        function hubBerat(id, v) {
+            if (!isEditMode) { hubRenderList(); ensureEditMode(() => hubBerat(id, v)); return; }
+            VJStore.setHubungan(VJStore.getHubungan().map(h => h.id === id ? Object.assign(h, { berat: v }) : h));
+            hubRenderList();
+            renderJadualView();
+        }
+
         function hubDipilih(id) { return Array.from(document.getElementById(id).selectedOptions).map(o => o.value); }
 
         function hubDraf() {
@@ -9757,6 +9820,7 @@ window.VJSolver = (function () {
                 pilih: { subjek: hubDipilih('hubSubjek'), guru: hubDipilih('hubGuru'), kelas: hubDipilih('hubKelas') },
                 pilihB: { subjek: hubDipilih('hubSubjekB'), guru: hubDipilih('hubGuruB'), kelas: hubDipilih('hubKelasB') },
                 nilai: parseInt(document.getElementById('hubNilai').value) || 0,
+                berat: document.getElementById('hubBerat').value,
                 slot: Array.from(hubSlotDraf),
                 slotB: Array.from(hubSlotDrafB)
             };
@@ -9780,7 +9844,14 @@ window.VJSolver = (function () {
             const inp = VJStore.getSolverInput();
             document.getElementById('hubNilaiBox').classList.toggle('hidden', !m.nilai);
             document.getElementById('hubNilaiLabel').innerText = m.nilai || '';
-            document.getElementById('hubJenisHint').innerHTML = escapeHtml(m.hint || '') + (m.lembut ? ' <span class="font-bold text-amber-700">Kekangan lembut: diusahakan, tidak dijamin.</span>' : '');
+            const beratEl = document.getElementById('hubBerat');
+            beratEl.disabled = h.jenis === 'serentak';
+            if (h.jenis === 'serentak') beratEl.value = 'ketat';
+            const tahap = VJSolver.TAHAP_HUB[beratEl.value] || {};
+            beratEl.title = tahap.hint || '';
+            document.getElementById('hubJenisHint').innerHTML = escapeHtml(m.hint || '') +
+                (m.lembut ? ' <span class="font-bold text-amber-700">Kekangan lembut: diusahakan, tidak dijamin.</span>' : '') +
+                ` <span class="font-bold text-indigo-700">Pemberat ${escapeHtml(tahap.nama || '')}: ${escapeHtml(h.jenis === 'serentak' ? 'Mesti serentak sentiasa ketat.' : (m.lembut && beratEl.value === 'ketat' ? 'Diutamakan paling tinggi (jenis lembut tidak boleh dijamin).' : (tahap.hint || '')))}</span>`;
             document.getElementById('hubTajukA').innerText = m.ab ? 'Kumpulan A' : 'Pilih agihan';
             document.getElementById('hubBoxB').classList.toggle('hidden', !m.ab);
             document.getElementById('hubTajukB').innerText = m.ab === 'wajib' ? 'Kumpulan B' : 'Kumpulan B (pilihan — kosongkan untuk guna Kumpulan A sahaja)';
@@ -9852,6 +9923,12 @@ window.VJSolver = (function () {
                         <div class="text-xs font-bold text-slate-800">${escapeHtml(VJSolver.namaHub(h))}${h.nama ? ` <span class="font-medium text-slate-400">· ${escapeHtml((VJSolver.JENIS_HUB[h.jenis] || {}).nama || h.jenis)}</span>` : ''}${(VJSolver.JENIS_HUB[h.jenis] || {}).lembut ? ' <span class="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">LEMBUT</span>' : ''}</div>
                         <div class="text-[11px] text-slate-500">${escapeHtml(hubRingkasan(h, inp))} · <strong>${hubAgihanSepadan(h, inp).length}</strong> agihan</div>
                     </div>
+                    ${(() => {
+                        const t = VJSolver.tahapHub(h);
+                        const warna = { ketat: 'bg-rose-50 text-rose-700 border-rose-200', optimum: 'bg-indigo-50 text-indigo-700 border-indigo-200', longgar: 'bg-slate-50 text-slate-600 border-slate-200' }[t];
+                        return `<select onchange="hubBerat('${escapeHtml(h.id)}', this.value)" ${h.jenis === 'serentak' ? 'disabled' : ''} class="text-[10px] font-bold uppercase rounded-md border px-1 py-0.5 ${warna}" title="Pemberat">` +
+                            Object.entries(VJSolver.TAHAP_HUB).map(([k, v]) => `<option value="${k}" ${k === t ? 'selected' : ''}>${v.nama}</option>`).join('') + '</select>';
+                    })()}
                     <button onclick="hubPadam('${escapeHtml(h.id)}')" class="text-rose-500 hover:text-rose-700 p-1" title="Padam"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
                 </div>`).join('') : '<p class="text-[11px] text-slate-400">Belum ada hubungan.</p>';
             lucide.createIcons();

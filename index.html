@@ -3273,6 +3273,7 @@ window.VJSampleData = function () {
                         <option value="30" selected>30 saat</option>
                         <option value="90">90 saat</option>
                     </select>
+                    <select id="jdlTeras" class="border border-slate-200 bg-white rounded-lg px-2 py-1.5 text-xs font-bold text-slate-700" title="Bilangan teras pemproses yang digunakan. Setiap teras menyusun jadual sendiri secara serentak; jadual terbaik dipilih."></select>
                     <select id="jdlOptimum" class="border border-slate-200 bg-white rounded-lg px-2 py-1.5 text-xs font-bold text-slate-700" title="Fasa pengoptimuman selepas semua sesi diletak: kurangkan lompong kelas & guru, subjek berulang sehari dan beban harian tidak seimbang">
                         <option value="0">Tanpa optimum</option>
                         <option value="10">Optimum 10 s</option>
@@ -8272,7 +8273,7 @@ window.VJSampleData = function () {
             };
         })();
     </script>
-    <script>
+    <script id="vjSolverSrc">
 /**
  * VISIJADUAL PRO V2 — PENYUSUN JADUAL AUTOMATIK (solver.js)
  *
@@ -8913,6 +8914,22 @@ window.VJSolver = (function () {
             else B.isu.push({ jenis: 'amaran', teks: `Sesi berkunci tidak dapat dikekalkan (bertembung/diblok): ${T.desc}` });
         });
 
+        // Sambung: mulakan daripada kedudukan dalam inp.jadual (sesi tidak berkunci turut diletak semula jika masih sah).
+        // Digunakan oleh penyusun selari untuk meneruskan optimum daripada jadual terbaik pusingan sebelumnya.
+        if (opt.sambung) {
+            const peta = {};
+            ((inp.jadual && inp.jadual.sesi) || []).forEach(x => { peta[x.uuid + '#' + x.ke] = x.hari * W + x.waktu; });
+            units.forEach((T, u) => {
+                if (pos[u] >= 0) return;
+                const key = T.ahli.map(id => id + '#' + T.ke).find(k => peta[k] !== undefined);
+                if (key === undefined) return;
+                const s = peta[key];
+                if (!domain[u].includes(s)) return;
+                const c = konflik(u, s);
+                if (c && c.size === 0) letak(u, s);
+            });
+        }
+
         // Paling sukar diletak di hujung tatasusunan (pop dahulu)
         const sukar = u => units[u].len * (units[u].kelas.length + units[u].guru.length) * 20 - domain[u].length;
         const pending = units.map((_, u) => u).filter(u => !kunci[u]).sort((a, b) => sukar(a) - sukar(b));
@@ -8922,6 +8939,9 @@ window.VJSolver = (function () {
         const hadBuntuMs = Math.max(5000, hadMs * 0.25);
         let tKemajuan = performance.now(), hentiBuntu = false;
         let diletak = units.filter((_, u) => pos[u] >= 0).length;
+        if (opt.sambung) { terbaik = diletak; posTerbaik = salinPos(); }
+        // Julat suhu fasa optimum [mula, akhir] dalam 0..1 (lalai keseluruhan jadual penyejukan)
+        const suhuA = opt.suhu ? +opt.suhu[0] : 0, suhuB = opt.suhu ? +opt.suhu[1] : 1;
         const mula = performance.now();
         const maxIter = 50000000;
 
@@ -9161,7 +9181,7 @@ window.VJSolver = (function () {
                     if (kini - t0 >= 40) break;
                     const f = Math.min(1, (kini - O.mula) / hadOptimMs);
                     if (f >= 1) break;
-                    const T = O.T0 * Math.pow(O.T1 / O.T0, f);
+                    const T = O.T0 * Math.pow(O.T1 / O.T0, suhuA + (suhuB - suhuA) * f);
                     for (let n = 0; n < 256; n++) {
                         O.langkah++;
                         const r = Math.random();
@@ -9552,6 +9572,149 @@ window.VJSolver = (function () {
             lucide.createIcons();
         }
 
+        // =====================================================================
+        // PENYUSUN SELARI — jalankan penyusun dalam Web Worker pada beberapa teras
+        // Setiap worker menyusun jadual penuh secara bebas (rawak berbeza); hasil terbaik dipilih.
+        // UI kekal responsif kerana tiada pengiraan pada thread utama.
+        // =====================================================================
+        const JDL_TERAS_MAKS = Math.max(1, Math.min(8, (navigator.hardwareConcurrency || 2) - 1));
+        (function () {
+            const el = document.getElementById('jdlTeras');
+            if (!el) return;
+            const pilihan = [...new Set([JDL_TERAS_MAKS, 4, 2, 1].filter(n => n <= JDL_TERAS_MAKS))].sort((a, b) => b - a);
+            el.innerHTML = pilihan.map((n, i) => `<option value="${n}">${n} teras${i === 0 && n > 1 ? ' (auto)' : ''}</option>`).join('');
+            try { const v = localStorage.getItem('visijadual_teras'); if (v && pilihan.includes(+v)) el.value = v; } catch (e) {}
+            el.addEventListener('change', () => { try { localStorage.setItem('visijadual_teras', el.value); } catch (e) {} });
+        })();
+
+        let jdlWorkerUrl = null;
+        function jdlBinaWorkerUrl() {
+            if (jdlWorkerUrl) return jdlWorkerUrl;
+            const src = document.getElementById('vjSolverSrc').textContent;
+            const kod = 'self.window = self;\n' + src + `
+                self.onmessage = async e => {
+                    const { inp, opt } = e.data;
+                    try {
+                        let t = 0;
+                        const res = await self.VJSolver.susun(inp, opt, st => {
+                            const kini = Date.now();
+                            if (kini - t < 120) return;
+                            t = kini;
+                            self.postMessage({ jenis: 'kemajuan', st });
+                        });
+                        self.postMessage({ jenis: 'hasil', res });
+                    } catch (err) {
+                        self.postMessage({ jenis: 'ralat', mesej: String(err && err.message || err) });
+                    }
+                };`;
+            jdlWorkerUrl = URL.createObjectURL(new Blob([kod], { type: 'text/javascript' }));
+            return jdlWorkerUrl;
+        }
+
+        // Hasil a lebih baik daripada b? Lebih banyak sesi diletak, kemudian kos kualiti lebih rendah
+        function jdlLebihBaik(a, b) {
+            if (!b) return true;
+            if (a.stat.diletak !== b.stat.diletak) return a.stat.diletak > b.stat.diletak;
+            const ka = a.stat.optimum ? a.stat.optimum.kosAkhir : Infinity, kb = b.stat.optimum ? b.stat.optimum.kosAkhir : Infinity;
+            if (ka !== kb) return ka < kb;
+            return (a.stat.kosongDepan || 0) < (b.stat.kosongDepan || 0);
+        }
+
+        // Penyusun selari koperatif:
+        //   Pusingan 1: setiap teras meletak sesi & mengoptimum secara bebas.
+        //   Pusingan seterusnya: semua teras menyambung daripada jadual TERBAIK pusingan sebelumnya
+        //   (suhu penyejukan diteruskan), jadi carian tertumpu di sekitar jadual terbaik.
+        function jdlSusunSelari(inp, opt, onProgress) {
+            const n = Math.max(1, Math.min(JDL_TERAS_MAKS, parseInt(opt.teras) || 1));
+            const isyarat = opt.isyarat;
+            const optAsas = Object.assign({}, opt); delete optAsas.isyarat; delete optAsas.teras; delete optAsas.pusingan;
+            let url;
+            try { url = jdlBinaWorkerUrl(); if (typeof Worker === 'undefined') throw new Error('Worker tiada'); }
+            catch (e) { console.warn('Web Worker tidak tersedia, guna thread utama:', e); return VJSolver.susun(inp, opt, onProgress); }
+
+            const hadOpt = Math.max(0, parseFloat(opt.hadOptimumSaat) || 0);
+            const R = n > 1 && hadOpt > 0 ? (parseInt(opt.pusingan) || Math.max(2, Math.min(12, Math.round(hadOpt / 2.5)))) : 1;
+            const workers = [];
+            for (let i = 0; i < n; i++) { try { workers.push(new Worker(url)); } catch (e) { console.warn('Worker gagal dicipta:', e); } }
+            if (!workers.length) return VJSolver.susun(inp, opt, onProgress);
+
+            let tamat = false, tolak = null;
+            const henti = () => { tamat = true; clearInterval(pemantau); workers.forEach(w => { try { w.terminate(); } catch (e) {} }); };
+            const batalJanji = new Promise(res => { tolak = res; });
+            const pemantau = setInterval(() => { if (isyarat && isyarat.batal && !tamat) { henti(); tolak({ batal: true }); } }, 100);
+            const t0 = performance.now();
+            let kosAwal0 = null;
+
+            // Jalankan satu pusingan pada semua worker; pulangkan senarai hasil
+            const pusingan = (inpR, optR, r) => new Promise(resolve => {
+                const status = [], hasil = [];
+                let selesai = 0;
+                const lapor = () => {
+                    if (!onProgress || tamat) return;
+                    const ada = status.filter(Boolean);
+                    if (!ada.length) return;
+                    const ms = performance.now() - t0;
+                    const fasa1 = ada.filter(s => s.fasa !== 'optimum');
+                    if (r === 0 && fasa1.length) {
+                        onProgress(Object.assign({}, fasa1.reduce((a, b) => (b.terbaik > a.terbaik ? b : a)), { ms }));
+                    } else {
+                        const opt = ada.filter(s => s.fasa === 'optimum');
+                        if (!opt.length) return;
+                        const s = opt.reduce((a, b) => (b.kos < a.kos ? b : a));
+                        if (kosAwal0 === null) kosAwal0 = s.kosAwal;
+                        onProgress(Object.assign({}, s, { ms, kosAwal: kosAwal0 }));
+                    }
+                };
+                workers.forEach((w, i) => {
+                    w.onmessage = e => {
+                        if (tamat) return;
+                        const m = e.data;
+                        if (m.jenis === 'kemajuan') { status[i] = m.st; lapor(); return; }
+                        if (m.jenis === 'hasil') hasil[i] = m.res; else console.error('Worker penyusun:', m.mesej);
+                        status[i] = null;
+                        if (++selesai === workers.length) resolve(hasil.filter(Boolean));
+                    };
+                    w.onerror = err => { if (tamat) return; console.error('Worker penyusun:', err.message); status[i] = null; if (++selesai === workers.length) resolve(hasil.filter(Boolean)); };
+                    w.postMessage({ inp: inpR, opt: optR });
+                });
+            });
+
+            const utama = (async () => {
+                let best = null, awal0 = null, iter = 0, langkah = 0, diterima = 0, hentiBuntu = false;
+                for (let r = 0; r < R && !tamat; r++) {
+                    const optR = Object.assign({}, optAsas, { hadOptimumSaat: hadOpt / R, suhu: [r / R, (r + 1) / R] });
+                    let inpR = inp;
+                    if (r > 0) {
+                        optR.sambung = true; optR.hadSaat = 0.05;
+                        inpR = Object.assign({}, inp, { jadual: Object.assign({}, inp.jadual, { sesi: best.sesi }) });
+                    }
+                    const hasil = await pusingan(inpR, optR, r);
+                    if (tamat) return { batal: true };
+                    if (!hasil.length) { if (best) break; throw new Error('Semua worker penyusun gagal.'); }
+                    let bestR = null;
+                    hasil.forEach(x => { if (jdlLebihBaik(x, bestR)) bestR = x; });
+                    if (r === 0) { awal0 = bestR.stat.optimum ? { awal: bestR.stat.optimum.awal, kosAwal: bestR.stat.optimum.kosAwal } : null; iter = bestR.stat.iter; hentiBuntu = !!bestR.stat.hentiBuntu; }
+                    hasil.forEach(x => { if (x.stat.optimum) { langkah += x.stat.optimum.langkah; diterima += x.stat.optimum.diterima; } });
+                    // Jangan sekali-kali mundur: kekalkan jadual terbaik setakat ini
+                    if (jdlLebihBaik(bestR, best)) {
+                        // Sebab "tidak muat" hanya diketahui oleh pusingan yang benar-benar mencuba meletak (pusingan 1)
+                        if (best && bestR.tidakMuat.length === best.tidakMuat.length) bestR.tidakMuat = best.tidakMuat;
+                        best = bestR;
+                    }
+                }
+                henti();
+                best.stat.teras = workers.length;
+                best.stat.pusingan = R;
+                best.stat.ms = Math.round(performance.now() - t0);
+                best.stat.iter = iter;
+                best.stat.hentiBuntu = hentiBuntu;
+                if (best.stat.optimum && awal0) Object.assign(best.stat.optimum, awal0, { langkah, diterima, ms: Math.round(hadOpt * 1000) });
+                return best;
+            })();
+            utama.catch(() => henti());
+            return Promise.race([utama, batalJanji]);
+        }
+
         async function jdlSusun() {
             if (jdlSedang) return;
             if (!isEditMode) { ensureEditMode(() => jdlSusun()); return; }
@@ -9579,10 +9742,11 @@ window.VJSolver = (function () {
             jdlOverlay(true, isyarat);
             let msMulaOpt = null;
             try {
-                const res = await VJSolver.susun(inp, {
+                const res = await jdlSusunSelari(inp, {
                     pecahAuto: document.getElementById('jdlPecahAuto').checked,
                     hadSaat: parseInt(document.getElementById('jdlMasaHad').value) || 30,
                     hadOptimumSaat: hadOpt,
+                    teras: parseInt(document.getElementById('jdlTeras').value) || 1,
                     isyarat
                 }, st => {
                     if (st.fasa === 'optimum') {
@@ -9612,7 +9776,8 @@ window.VJSolver = (function () {
                 jdlTidakMuat = res.tidakMuat;
                 const s = res.stat, o = s.optimum;
                 const teksDepan = s.kosongDepan ? ` ⚠ ${s.kosongDepan} slot kelas kosong sebelum waktu terakhir (tidak dapat dielak — cuba tambah masa optimum).` : '';
-                const teksOpt = o ? ` Optimum: slot kosong di depan kelas ${o.awal.kosongDepanKelas}→${o.kosongDepanKelas}, lompong guru ${o.awal.lompongGuru}→${o.lompongGuru}, subjek berulang ${o.awal.subjekBerulang}→${o.subjekBerulang}.` : '';
+                const teksTeras = s.teras > 1 ? ` ${s.teras} teras bekerjasama.` : '';
+                const teksOpt = o ? `${teksTeras} Optimum: slot kosong di depan kelas ${o.awal.kosongDepanKelas}→${o.kosongDepanKelas}, lompong guru ${o.awal.lompongGuru}→${o.lompongGuru}, subjek berulang ${o.awal.subjekBerulang}→${o.subjekBerulang}.` : '';
                 showToast((s.diletak === s.unit ? `Jadual lengkap: semua ${s.unit} sesi diletak (${(s.ms / 1000).toFixed(1)} s).${teksOpt}`
                     : `${s.diletak}/${s.unit} sesi diletak. ${s.unit - s.diletak} sesi belum muat${s.hentiBuntu ? ' (carian dihentikan awal kerana tiada kemajuan)' : ''} — lihat senarai di bawah jadual.${teksOpt}`) + teksDepan, s.diletak === s.unit && !s.kosongDepan ? 'success' : 'warning', o ? 10000 : 6000);
             } catch (e) {

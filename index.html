@@ -9545,17 +9545,24 @@ window.VJSolver = (function () {
                             const kunci = list.some(e => e.x.kunci);
                             const bentrok = jdlMode !== 'kelas' && new Set(list.map(e => e.x.uuid + '#' + e.x.ke)).size > 1;
                             const namaB = {}; ((inp.bilik || {}).senarai || []).forEach(b => { namaB[b.id] = b.kod || b.nama; });
-                            inner = list.slice(0, 3).map(e => {
-                                const sub = (jdlMode === 'kelas' ? (singGuru[e.t[1]] || e.t[2] || '-') : jdlMode === 'bilik' ? `${e.t[4]} · ${singGuru[e.t[1]] || e.t[2] || '-'}` : e.t[4]) + (jdlMode !== 'bilik' && e.x.bilik && namaB[e.x.bilik] ? ` · ${namaB[e.x.bilik]}` : '');
-                                return `<div class="rounded px-1 py-0.5 ${jdlWarna(e.t[5])} ${e.mula ? '' : 'opacity-70'}">
-                                    <div class="font-bold text-[10px] leading-tight truncate">${escapeHtml(kodSubjek[e.t[5]] || e.t[6])}${e.t[9] ? ` <span class="font-medium opacity-70">${escapeHtml(e.t[9])}</span>` : ''}</div>
-                                    <div class="text-[9px] leading-tight truncate opacity-80">${escapeHtml(sub)}</div></div>`;
-                            }).join('') + (list.length > 3 ? `<div class="text-[9px] text-slate-500 text-center">+${list.length - 3}</div>` : '');
-                            inner = `<div data-jdl="${d}-${p}" data-id="${escapeHtml(jdlSel)}" ${jdlMode !== 'bilik' ? 'draggable="true"' : ''} class="jdl-cell relative h-full min-h-[44px] space-y-0.5 ${jdlMode !== 'bilik' ? 'cursor-grab active:cursor-grabbing' : ''} ${bentrok ? 'ring-2 ring-rose-500 rounded' : ''}" title="${jdlMode !== 'bilik' ? 'Klik untuk kunci / buka kunci' : ''}">${inner}${kunci ? '<span class="absolute -top-1 -right-1 text-[10px]">🔒</span>' : ''}</div>`;
+                            // Saiz petak tetap (44px). Satu sesi = penuh (kod + guru); beberapa kumpulan = dibahagi sama rata, satu baris setiap kumpulan.
+                            const n = list.length;
+                            const subDari = e => (jdlMode === 'kelas' ? (singGuru[e.t[1]] || e.t[2] || '-') : jdlMode === 'bilik' ? `${e.t[4]} · ${singGuru[e.t[1]] || e.t[2] || '-'}` : e.t[4]) + (jdlMode !== 'bilik' && e.x.bilik && namaB[e.x.bilik] ? ` · ${namaB[e.x.bilik]}` : '');
+                            const fon = n === 1 ? 10 : n === 2 ? 10 : n === 3 ? 9 : 8;
+                            inner = list.map(e => {
+                                const kod = escapeHtml(kodSubjek[e.t[5]] || e.t[6]), lbl = e.t[9] ? ` <span class="font-medium opacity-70">${escapeHtml(e.t[9])}</span>` : '';
+                                if (n === 1) {
+                                    return `<div class="flex-1 min-h-0 rounded px-1 py-0.5 ${jdlWarna(e.t[5])} ${e.mula ? '' : 'opacity-70'} overflow-hidden">
+                                        <div class="font-bold text-[10px] leading-tight truncate">${kod}${lbl}</div>
+                                        <div class="text-[9px] leading-tight truncate opacity-80">${escapeHtml(subDari(e))}</div></div>`;
+                                }
+                                return `<div class="flex-1 min-h-0 rounded-sm px-1 ${jdlWarna(e.t[5])} ${e.mula ? '' : 'opacity-70'} flex items-center gap-1 overflow-hidden whitespace-nowrap leading-none" style="font-size:${fon}px" title="${escapeHtml(kodSubjek[e.t[5]] || e.t[6])} ${escapeHtml(e.t[9] || '')} · ${escapeHtml(subDari(e))}"><span class="font-bold shrink-0">${kod}${lbl}</span><span class="opacity-80 truncate">${escapeHtml(subDari(e))}</span></div>`;
+                            }).join('');
+                            inner = `<div data-jdl="${d}-${p}" data-id="${escapeHtml(jdlSel)}" ${jdlMode !== 'bilik' ? 'draggable="true"' : ''} class="jdl-cell relative h-[44px] flex flex-col gap-px ${jdlMode !== 'bilik' ? 'cursor-grab active:cursor-grabbing' : ''} ${bentrok ? 'ring-2 ring-rose-500 rounded' : ''}" title="${jdlMode !== 'bilik' ? 'Klik untuk kunci / buka kunci' : ''}">${inner}${kunci ? '<span class="absolute -top-1 -right-1 text-[10px]">🔒</span>' : ''}</div>`;
                         } else if (lb) {
-                            inner = `<div class="h-full min-h-[44px] rounded-md border flex items-center justify-center text-center text-[10px] font-bold ${slotLabelClass(lb, cfg)}">${escapeHtml(lb)}</div>`;
+                            inner = `<div class="h-[44px] rounded-md border flex items-center justify-center text-center text-[10px] font-bold ${slotLabelClass(lb, cfg)}">${escapeHtml(lb)}</div>`;
                         } else {
-                            inner = `<div class="min-h-[44px]"></div>`;
+                            inner = `<div class="h-[44px]"></div>`;
                         }
                         html += `<td data-sl="${d}-${p}" data-id="${escapeHtml(jdlSel)}" class="jdl-td border-t border-l border-slate-200 p-0.5 align-top">${inner}</td>`;
                     }

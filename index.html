@@ -1815,6 +1815,15 @@ window.VJSampleData = function () {
         .matrix-cell-linked { background-color: #F5F3FF !important; outline: 2px dashed #8B5CF6 !important; outline-offset: -3px !important; color: #5B21B6 !important; font-weight: 800 !important; }
         .matrix-cell-linked.matrix-link-strong { background-color: #EDE9FE !important; outline-style: solid !important; }
         .matrix-link-tag { display: block; font-size: 9px; line-height: 1; font-weight: 700; color: #7C3AED; margin-top: 1px; }
+        /* Sel dibahagi kepada beberapa kumpulan (lebih daripada satu guru dalam satu kelas) */
+        .grid-table td.matrix-cell-split { padding: 3px 3px; }
+        .matrix-split { display: flex; align-items: stretch; min-height: 32px; border-radius: 5px; overflow: hidden; }
+        .matrix-seg { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 1px 3px; line-height: 1.05; background: color-mix(in srgb, var(--seg) 13%, white); border-bottom: 3px solid var(--seg); }
+        .matrix-seg + .matrix-seg { border-left: 1.5px dashed #94A3B8; }
+        .matrix-seg b { font-size: 12px; font-weight: 800; color: #1E293B; }
+        .matrix-seg small { font-size: 8.5px; font-weight: 700; color: #475569; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .matrix-seg.matrix-seg-active { background: #FDE68A; border-bottom-color: #D97706; }
+        .matrix-seg.matrix-seg-linked { background: #EDE9FE; border-bottom-color: #7C3AED; }
         .matrix-cell-selected {
             outline: 2.5px solid #4F46E5 !important;
             outline-offset: -2px !important;
@@ -4800,6 +4809,8 @@ window.VJSampleData = function () {
         function handleMatrixCellClick(event, classIndex, className, subjekId) {
             const clickedTd = event.currentTarget;
             const plainClick = !event.shiftKey && !event.ctrlKey && !event.metaKey;
+            const seg = event.target && event.target.closest ? event.target.closest('[data-seg-uuid]') : null;
+            if (seg && plainClick) activeMatrixAllocationUuid = seg.dataset.segUuid;
             // SHIFT + CLICK: Range selection across classes for same subject
             if (event.shiftKey && lastClickedMatrixClassIndex !== null && selectedMatrixSubjectId === subjekId) {
                 const start = Math.min(lastClickedMatrixClassIndex, classIndex);
@@ -5011,6 +5022,7 @@ window.VJSampleData = function () {
                 td.classList.remove('matrix-cell-linked', 'matrix-link-strong');
                 td.querySelector('.matrix-link-tag')?.remove();
             });
+            document.querySelectorAll('.matrix-seg-active, .matrix-seg-linked').forEach(el => el.classList.remove('matrix-seg-active', 'matrix-seg-linked'));
             const info = document.getElementById('matrixBarLinkInfo');
             if (info) info.classList.add('hidden');
             if (selectedMatrixClasses.length !== 1 || !selectedMatrixSubjectId || typeof matrix === 'undefined' || !matrix) return;
@@ -5020,6 +5032,7 @@ window.VJSampleData = function () {
             if (allocs.length === 0) return;
             const act = allocs.find(a => a.uuid === activeMatrixAllocationUuid) || allocs[0];
             const prefix = act.label ? act.label.charAt(0).toUpperCase() : '';
+            document.querySelectorAll(`.matrix-cell-selected .matrix-seg[data-seg-uuid="${act.uuid}"]`).forEach(el => el.classList.add('matrix-seg-active'));
 
             const tingMap = {};
             dbData.kelas.forEach(k => { tingMap[k[1]] = String(k[2] || ''); });
@@ -5032,14 +5045,18 @@ window.VJSampleData = function () {
                 if (cn === selClass && sid === selectedMatrixSubjectId) return;
                 const list = (matrix[cn] && matrix[cn][sid]) || [];
                 let strong = false, tag = '';
+                const segLinked = [];
                 list.forEach(a => {
-                    if (a.uuid === act.uuid) { strong = true; tag = tag || a.label || 'Gabung'; }
-                    else if (prefix && a.label && a.label.charAt(0).toUpperCase() === prefix && tingMap[cn] === selTing) { tag = tag || a.label; }
+                    if (a.uuid === act.uuid) { strong = true; tag = tag || a.label || 'Gabung'; segLinked.push(a.uuid); }
+                    else if (prefix && a.label && a.label.charAt(0).toUpperCase() === prefix && tingMap[cn] === selTing) { tag = tag || a.label; segLinked.push(a.uuid); }
                 });
                 if (!strong && !tag) return;
                 td.classList.add('matrix-cell-linked');
                 if (strong) td.classList.add('matrix-link-strong');
-                if (!td.querySelector('input')) {
+                const segs = td.querySelectorAll('.matrix-seg');
+                if (segs.length) {
+                    segs.forEach(el => { if (segLinked.includes(el.dataset.segUuid)) el.classList.add('matrix-seg-linked'); });
+                } else if (!td.querySelector('input')) {
                     const t = document.createElement('span');
                     t.className = 'matrix-link-tag';
                     t.textContent = tag;
@@ -5655,11 +5672,21 @@ window.VJSampleData = function () {
                             borderStyle = `border-left: 3.5px double #4F46E5;`;
                         }
 
+                        let isSplit = allocations.length > 1;
+                        let cellInner = cellText;
+                        if (isSplit) {
+                            const segWarna = ['#6366F1', '#F59E0B', '#10B981', '#EC4899', '#0EA5E9', '#84CC16'];
+                            cellInner = '<div class="matrix-split">' + allocations.map((a, i) => {
+                                const inisial = a.guruNama.split(/\s+/).filter(w => !/^(BIN|BINTI|BT|B|A\/L|A\/P)$/i.test(w)).slice(0, 2).map(w => w.charAt(0)).join('');
+                                return `<span class="matrix-seg" data-seg-uuid="${a.uuid}" style="--seg:${segWarna[i % segWarna.length]}"><b>${a.masa}</b><small>${escapeHtml(a.label || inisial)}</small></span>`;
+                            }).join('') + '</div>';
+                        }
+
                         classRowHtml += `<td data-class-name="${className}" data-subjek-id="${subjekID}"
                                              onclick="handleMatrixCellClick(event, ${classIndex}, '${className.replace(/'/g, "\\'")}', '${subjekID}')" 
                                              style="${borderStyle}" 
-                                             class="matrix-cell ${selectedClass} ${isPending ? 'matrix-cell-pending' : ''} text-center font-bold text-slate-800 border-b border-l border-slate-200" 
-                                             title="${titleText}">${cellText}</td>`;
+                                             class="matrix-cell ${selectedClass} ${isPending ? 'matrix-cell-pending' : ''} ${isSplit ? 'matrix-cell-split' : ''} text-center font-bold text-slate-800 border-b border-l border-slate-200" 
+                                             title="${titleText}">${cellInner}</td>`;
                     } else {
                         classRowHtml += `<td data-class-name="${className}" data-subjek-id="${subjekID}"
                                              onclick="handleMatrixCellClick(event, ${classIndex}, '${className.replace(/'/g, "\\'")}', '${subjekID}')" 

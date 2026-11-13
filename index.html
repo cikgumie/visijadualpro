@@ -91,6 +91,7 @@
  *   slot      : { hari, waktu, label, kelas: {ID: {"hari-waktu": Label}}, guru: {ID: {"hari-waktu": Label}} }
  *   peraturan : peraturan susunan jadual automatik (lihat PERATURAN_DEFAULT)
  *   jadual    : { dijana, sesi: [{ uuid, ke, hari, waktu, panjang, kunci }] } — kedudukan setiap sesi dalam jadual
+ *   bilik     : { senarai: [{ id, nama, kod }], subjek: { ID_Subjek: [ID_Bilik] } } — bilik khas & subjek yang mesti di bilik itu
  *   hubungan  : [{ id, jenis, nama, pilih, pilihB, nilai, slot, slotB, aktif }] — kekangan antara sesi
  *               pilih / pilihB = { subjek, guru, kelas } (Kumpulan A / B); slot / slotB = ["hari-waktu"]
  */
@@ -103,7 +104,27 @@
     // PANGKALAN DATA DALAM MEMORI
     // =========================================================================
     function emptyDb() {
-        return { guru: [], kelas: [], subjek: [], transaksi: [], arkib: [], tetapan: { Kata_Laluan: DEFAULT_PASSWORD }, slot: defaultSlot(), peraturan: Object.assign({}, PERATURAN_DEFAULT), jadual: emptyJadual(), hubungan: [], gantian: emptyGantian() };
+        return { guru: [], kelas: [], subjek: [], transaksi: [], arkib: [], tetapan: { Kata_Laluan: DEFAULT_PASSWORD }, slot: defaultSlot(), peraturan: Object.assign({}, PERATURAN_DEFAULT), jadual: emptyJadual(), hubungan: [], gantian: emptyGantian(), bilik: emptyBilik() };
+    }
+
+    // Bilik khas (makmal, bengkel, bilik komputer...). Subjek yang ditetapkan mesti diajar di salah satu biliknya.
+    function emptyBilik() { return { senarai: [], subjek: {} }; }
+
+    function normalizeBilik(raw) {
+        const out = emptyBilik();
+        if (!raw || typeof raw !== 'object') return out;
+        const ada = new Set();
+        out.senarai = (Array.isArray(raw.senarai) ? raw.senarai : []).filter(b => b && String(b.nama || '').trim()).map(b => {
+            let id = String(b.id || '').trim() || ('B' + uuid().slice(0, 8));
+            while (ada.has(id)) id = 'B' + uuid().slice(0, 8);
+            ada.add(id);
+            return { id, nama: String(b.nama).trim(), kod: String(b.kod || '').trim() };
+        });
+        Object.entries(raw.subjek || {}).forEach(([sid, list]) => {
+            const ids = [...new Set((Array.isArray(list) ? list : []).map(String))].filter(id => ada.has(id));
+            if (ids.length) out.subjek[String(sid)] = ids;
+        });
+        return out;
     }
 
     // Guru ganti: tetapan, guru tidak hadir, cuti, rekod pengesahan
@@ -187,7 +208,8 @@
             hari: parseInt(x.hari) || 0,
             waktu: parseInt(x.waktu) || 0,
             panjang: Math.max(1, parseInt(x.panjang) || 1),
-            kunci: !!x.kunci
+            kunci: !!x.kunci,
+            bilik: x.bilik ? String(x.bilik) : ''
         }));
         return out;
     }
@@ -308,6 +330,7 @@
         out.jadual = normalizeJadual(raw.jadual);
         out.hubungan = normalizeHubungan(raw.hubungan);
         out.gantian = normalizeGantian(raw.gantian);
+        out.bilik = normalizeBilik(raw.bilik);
         if (!String(out.tetapan.Kata_Laluan || '').trim()) out.tetapan.Kata_Laluan = DEFAULT_PASSWORD;
         return out;
     }
@@ -557,7 +580,7 @@
     // =========================================================================
     // FAIL ZIP: BUKA & SIMPAN
     // =========================================================================
-    const ZIP_FILES = { guru: 'guru.json', kelas: 'kelas.json', subjek: 'subjek.json', transaksi: 'transaksi.json', arkib: 'arkib.json', tetapan: 'tetapan.json', slot: 'slot.json', peraturan: 'peraturan.json', jadual: 'jadual.json', hubungan: 'hubungan.json', gantian: 'gantian.json' };
+    const ZIP_FILES = { guru: 'guru.json', kelas: 'kelas.json', subjek: 'subjek.json', transaksi: 'transaksi.json', arkib: 'arkib.json', tetapan: 'tetapan.json', slot: 'slot.json', peraturan: 'peraturan.json', jadual: 'jadual.json', hubungan: 'hubungan.json', gantian: 'gantian.json', bilik: 'bilik.json' };
 
     async function buildZipBlob() {
         const zip = new JSZip();
@@ -878,6 +901,13 @@
         markDirty();
     }
 
+    function getBilik() { return clone(db.bilik); }
+
+    function setBilik(b) {
+        db.bilik = normalizeBilik(b);
+        markDirty();
+    }
+
     function getGantian() { return clone(db.gantian); }
 
     function setGantian(g) {
@@ -886,10 +916,10 @@
     }
 
     window.VJStore = {
-        getHubungan, setHubungan, getGantian, setGantian,
+        getHubungan, setHubungan, getGantian, setGantian, getBilik, setBilik,
         getSlot, setSlotConfig, addSlotLabel, setKelasBlok, setGuruBlok, copyKelasBlok, slotSummary, guruSlotSummary, genWaktu,
         getPeraturan, setPeraturan, PERATURAN_DEFAULT, getJadual, setJadual,
-        getSolverInput() { return clone({ guru: db.guru, kelas: db.kelas, subjek: db.subjek, transaksi: db.transaksi, slot: db.slot, peraturan: db.peraturan, jadual: db.jadual, hubungan: db.hubungan }); },
+        getSolverInput() { return clone({ guru: db.guru, kelas: db.kelas, subjek: db.subjek, transaksi: db.transaksi, slot: db.slot, peraturan: db.peraturan, jadual: db.jadual, hubungan: db.hubungan, bilik: db.bilik }); },
         getStatus, onChange: fn => listeners.push(fn),
         buildZipBlob, markSaved, openZip, defaultZipName,
         loadDb, restoreAutosave, hasAutosave,
@@ -2772,6 +2802,9 @@ window.VJSampleData = function () {
                 <button onclick="switchTab('slot')" id="nav-slot" class="nav-tab" title="Slot Masa">
                     <i data-lucide="calendar-clock" class="w-4 h-4 shrink-0"></i><span class="nav-label">Slot Masa</span>
                 </button>
+                <button onclick="switchTab('bilik')" id="nav-bilik" class="nav-tab" title="Bilik Khas">
+                    <i data-lucide="door-open" class="w-4 h-4 shrink-0"></i><span class="nav-label">Bilik Khas</span>
+                </button>
                 <button onclick="switchTab('jadual')" id="nav-jadual" class="nav-tab" title="Susun Jadual">
                     <i data-lucide="wand-sparkles" class="w-4 h-4 shrink-0"></i><span class="nav-label">Susun Jadual</span>
                 </button>
@@ -3341,6 +3374,7 @@ window.VJSampleData = function () {
                             <div class="flex p-0.5 bg-slate-200/70 rounded-lg text-[11px] font-bold">
                                 <button onclick="jdlSetMode('kelas')" id="jdlSemuaKelas" class="px-2.5 py-1 rounded-md transition">Kelas</button>
                                 <button onclick="jdlSetMode('guru')" id="jdlSemuaGuru" class="px-2.5 py-1 rounded-md transition">Guru</button>
+                                <button onclick="jdlSetMode('bilik')" id="jdlSemuaBilik" class="px-2.5 py-1 rounded-md transition" title="Lihat penggunaan bilik khas">Bilik</button>
                             </div>
                             <h4 id="jdlSemuaTitle" class="hidden"></h4>
                             <div class="flex p-0.5 bg-slate-200/70 rounded-lg text-[11px] font-bold">
@@ -3567,6 +3601,52 @@ window.VJSampleData = function () {
         <!-- ============================================================== -->
         <!-- VIEW 7: SLOT MASA KELAS (SLOT BOLEH ISI / BLOK)                -->
         <!-- ============================================================== -->
+        <!-- ============================================================== -->
+        <!-- BILIK KHAS: senarai bilik & subjek yang mesti di bilik itu      -->
+        <!-- ============================================================== -->
+        <div id="view-bilik" class="view-section hidden bg-white border border-slate-200 rounded-2xl shadow-card overflow-hidden">
+            <div class="p-3.5 bg-slate-50/80 border-b border-slate-200 flex flex-wrap justify-between items-center gap-2 no-print">
+                <div class="flex items-center gap-2">
+                    <i data-lucide="door-open" class="w-4 h-4 text-brand-600"></i>
+                    <h3 class="text-sm font-heading font-bold text-slate-800">Bilik Khas</h3>
+                    <span class="text-[11px] text-slate-500">Makmal, bengkel, bilik komputer… Subjek yang ditetapkan akan disusun di bilik itu tanpa bertindih.</span>
+                </div>
+            </div>
+            <div class="p-4 grid lg:grid-cols-[320px_1fr] gap-4">
+                <div class="space-y-3">
+                    <div class="bg-white border border-slate-200 rounded-xl p-3 space-y-2">
+                        <p class="text-xs font-bold text-slate-700">Tambah bilik</p>
+                        <div class="flex gap-2">
+                            <input id="bilikNamaBaru" type="text" placeholder="Nama (cth: Makmal Sains 1)" class="flex-1 min-w-0 border border-slate-300 rounded-lg px-2 py-1.5 text-xs" onkeydown="if (event.key === 'Enter') bilikTambah()">
+                            <input id="bilikKodBaru" type="text" placeholder="Kod" maxlength="8" class="w-16 border border-slate-300 rounded-lg px-2 py-1.5 text-xs font-mono" onkeydown="if (event.key === 'Enter') bilikTambah()">
+                        </div>
+                        <button onclick="bilikTambah()" class="w-full px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1.5"><i data-lucide="plus" class="w-3.5 h-3.5"></i> Tambah Bilik</button>
+                    </div>
+                    <div>
+                        <p class="text-xs font-bold text-slate-700 mb-1.5">Senarai bilik <span id="bilikBil" class="font-normal text-slate-400"></span></p>
+                        <div id="bilikList" class="space-y-1.5"></div>
+                    </div>
+                </div>
+                <div class="min-w-0">
+                    <div class="flex flex-wrap items-center justify-between gap-2 mb-1.5">
+                        <p class="text-xs font-bold text-slate-700">Subjek → Bilik</p>
+                        <input id="bilikCariSubjek" type="text" oninput="renderBilikView()" placeholder="Cari subjek…" class="border border-slate-300 rounded-lg px-2 py-1 text-xs w-44">
+                    </div>
+                    <p class="text-[11px] text-slate-500 mb-2">Klik bilik untuk tetapkan subjek itu ke bilik tersebut. Jika lebih daripada satu bilik dipilih, penyusun memilih mana-mana bilik yang kosong.</p>
+                    <div class="overflow-auto max-h-[70vh] border border-slate-200 rounded-xl">
+                        <table class="w-full text-xs">
+                            <thead class="bg-slate-50 sticky top-0 z-10"><tr>
+                                <th class="text-left px-3 py-2 font-bold text-slate-600 border-b border-slate-200">Subjek</th>
+                                <th class="text-left px-3 py-2 font-bold text-slate-600 border-b border-slate-200">Bilik</th>
+                                <th class="text-right px-3 py-2 font-bold text-slate-600 border-b border-slate-200 whitespace-nowrap">Waktu/minggu</th>
+                            </tr></thead>
+                            <tbody id="bilikSubjekBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <div id="view-slot" class="view-section hidden bg-white border border-slate-200 rounded-2xl shadow-card overflow-hidden">
             <div class="p-3.5 bg-slate-50/80 border-b border-slate-200 flex flex-wrap justify-between items-center gap-2 no-print">
                 <div class="flex items-center gap-2">
@@ -5946,6 +6026,7 @@ window.VJSampleData = function () {
 
             if (tabName === 'arkib') loadArkibData();
             if (tabName === 'banding') populateSystemDropdowns();
+            if (tabName === 'bilik') renderBilikView();
             if (tabName === 'matrix') {
                 populateMatrixBarTeachers();
                 highlightMatrixCells();
@@ -8457,7 +8538,36 @@ window.VJSolver = (function () {
             };
         });
 
-        return { H, W, N, kelas, guru, units, blokK, blokG, isu, bilAuto, rows, hubUnit };
+        // Bilik khas: setiap agihan yang subjeknya ditetapkan ke bilik memerlukan satu bilik (berbeza) daripada senarainya
+        const bilikCfg = inp.bilik || { senarai: [], subjek: {} };
+        const bilik = (bilikCfg.senarai || []).map(b => ({ id: String(b.id), nama: String(b.nama || b.id), kod: String(b.kod || b.nama || b.id) }));
+        const bilikIdx = {};
+        bilik.forEach((b, i) => { bilikIdx[b.id] = i; });
+        const permintaanTunggal = bilik.map(() => 0);
+        units.forEach(T => {
+            const req = [];
+            T.ahliRows.forEach(r => {
+                const cand = ((bilikCfg.subjek || {})[r.subjek] || []).map(id => bilikIdx[id]).filter(i => i !== undefined);
+                if (cand.length) req.push({ uuid: r.uuid, cand });
+            });
+            req.sort((a, b) => a.cand.length - b.cand.length);
+            const guna = new Set(), ok = [];
+            req.forEach(q => {
+                const r = q.cand.find(x => !guna.has(x));
+                if (r === undefined) {
+                    if (T.ke === 0) isu.push({ jenis: 'amaran', teks: `Bilik tidak cukup untuk sesi serentak ${T.desc} — satu agihan diletak tanpa bilik khas.` });
+                    return;
+                }
+                guna.add(r); ok.push(q);
+            });
+            T.bilikReq = ok;
+            ok.forEach(q => { if (q.cand.length === 1) permintaanTunggal[q.cand[0]] += T.len; });
+        });
+        bilik.forEach((b, i) => {
+            if (permintaanTunggal[i] > N) isu.push({ jenis: 'ralat', teks: `Bilik ${b.nama}: ${permintaanTunggal[i]} waktu perlu dijadualkan tetapi hanya ${N} slot seminggu. Tambah bilik lain untuk subjek berkenaan.` });
+        });
+
+        return { H, W, N, kelas, guru, units, blokK, blokG, isu, bilAuto, rows, hubUnit, bilik };
     }
 
     function susun(inp, opt, onProgress) {
@@ -8482,6 +8592,47 @@ window.VJSolver = (function () {
         B.hubUnit.forEach((R, ri) => R.units.forEach(u => relU[u].push(ri)));
         const occR = B.hubUnit.map(() => Array.from({ length: N }, () => []));
         const dayR = B.hubUnit.map(() => Array.from({ length: H }, () => []));
+        // Bilik: penghuni setiap slot & bilik yang diberikan kepada setiap unit
+        const occB = B.bilik.map(() => new Int32Array(N).fill(-1));
+        let bilikU = units.map(() => []);          // [{ uuid, r }] — kekal selepas angkat sebagai keutamaan
+        const bilikSnap = new WeakMap();           // tatasusunan kedudukan → salinan bilikU pada masa itu
+        const salinPos = () => { const a = pos.slice(); bilikSnap.set(a, bilikU.map(x => x.slice())); return a; };
+        {
+            const idxB = {}; B.bilik.forEach((b, i) => { idxB[b.id] = i; });
+            const unitKe = {}; units.forEach((T, u) => T.ahli.forEach(id => { unitKe[id + '#' + T.ke] = u; }));
+            ((inp.jadual && inp.jadual.sesi) || []).forEach(x => {
+                const u = unitKe[x.uuid + '#' + x.ke];
+                if (u === undefined || !x.bilik || idxB[x.bilik] === undefined) return;
+                bilikU[u].push({ uuid: x.uuid, r: idxB[x.bilik] });
+            });
+        }
+        function bebasBilik(r, u, s, len, set) {
+            for (let i = 0; i < len; i++) { const o = occB[r][s + i]; if (o >= 0 && o !== u && !(set && set.has(o))) return false; }
+            return true;
+        }
+        // Rancang bilik bagi u di s: pulangkan bilik yang dipilih & unit yang perlu diusir untuk mengosongkan bilik
+        function rancangBilik(u, s, set) {
+            const T = units[u], len = T.len, guna = new Set(), assign = [], usir = new Set(), tertunda = [];
+            for (const q of T.bilikReq) {
+                const lama = bilikU[u].find(a => a.uuid === q.uuid);
+                const order = lama && q.cand.includes(lama.r) ? [lama.r, ...q.cand.filter(x => x !== lama.r)] : q.cand;
+                const r = order.find(x => !guna.has(x) && bebasBilik(x, u, s, len, set));
+                if (r !== undefined) { guna.add(r); assign.push({ uuid: q.uuid, r }); } else tertunda.push(q);
+            }
+            for (const q of tertunda) {
+                let best = -1, bo = null;
+                for (const x of q.cand) {
+                    if (guna.has(x)) continue;
+                    const o = new Set();
+                    for (let i = 0; i < len; i++) { const y = occB[x][s + i]; if (y >= 0 && y !== u && !(set && set.has(y))) o.add(y); }
+                    if (best < 0 || o.size < bo.size) { best = x; bo = o; }
+                }
+                if (best < 0) continue;
+                guna.add(best); assign.push({ uuid: q.uuid, r: best }); bo.forEach(o => usir.add(o));
+            }
+            return { assign, usir };
+        }
+
         const relLembut = B.hubUnit.map(R => !!R.meta.lembut);                                   // diukur dengan ukurLembut
         const relKeras = B.hubUnit.map(R => R.keras && !JENIS_DOMAIN.has(R.h.jenis));             // usir unit lain
         const relLonggar = B.hubUnit.map(R => !R.meta.lembut && !R.keras);                        // jenis keras berpemberat optimum/longgar
@@ -8498,6 +8649,10 @@ window.VJSolver = (function () {
                 dayR[ri][d].push(u);
                 for (let i = 0; i < T.len; i++) occR[ri][s + i].push(u);
             });
+            if (T.bilikReq.length) {
+                bilikU[u] = rancangBilik(u, s, null).assign;
+                bilikU[u].forEach(a => { for (let i = 0; i < T.len; i++) if (occB[a.r][s + i] < 0) occB[a.r][s + i] = u; });
+            }
             pos[u] = s;
         }
 
@@ -8514,6 +8669,7 @@ window.VJSolver = (function () {
                 buang(dayR[ri][d]);
                 for (let i = 0; i < T.len; i++) buang(occR[ri][s + i]);
             });
+            bilikU[u].forEach(a => { for (let i = 0; i < T.len; i++) if (occB[a.r][s + i] === u) occB[a.r][s + i] = -1; });
             pos[u] = -1;
         }
 
@@ -8573,6 +8729,7 @@ window.VJSolver = (function () {
                 }
             }
             for (const ri of relU[u]) if (relKeras[ri]) konflikHubungan(ri, u, s, set);
+            if (T.bilikReq.length) rancangBilik(u, s, set).usir.forEach(x => set.add(x));
             for (const x of set) if (kunci[x]) return null;
             return set;
         }
@@ -8910,6 +9067,8 @@ window.VJSolver = (function () {
 
         function tetapkanKedudukan(akhir) {
             units.forEach((_, u) => { if (pos[u] >= 0) angkat(u); });
+            const snap = bilikSnap.get(akhir);
+            if (snap) bilikU = snap.map(x => x.slice());
             units.forEach((_, u) => { if (akhir[u] >= 0) letak(u, akhir[u]); });
         }
 
@@ -8954,12 +9113,12 @@ window.VJSolver = (function () {
                     letak(u, best);
                     placedAt[u] = iter;
                     diletak++;
-                    if (diletak > terbaik) { terbaik = diletak; posTerbaik = pos.slice(); }
+                    if (diletak > terbaik) { terbaik = diletak; posTerbaik = salinPos(); }
                 }
                 const ms = performance.now() - mula;
                 if (onProgress) onProgress({ iter, diletak, terbaik: Math.max(terbaik, diletak), jumlah: U, ms });
                 if (pending.length && ms < hadMs && iter < maxIter) { seterusnya(langkah); return; }
-                if (diletak >= terbaik) posTerbaik = pos.slice();
+                if (diletak >= terbaik) posTerbaik = salinPos();
                 // Fasa 2: optimum kualiti. Mulakan daripada susunan terbaik (paling banyak sesi diletak);
                 // langkah optimum tidak pernah mengeluarkan sesi, jadi bilangan sesi diletak kekal.
                 if (hadOptimMs > 0) {
@@ -8980,7 +9139,7 @@ window.VJSolver = (function () {
                 const boleh = units.map((_, u) => u).filter(u => pos[u] >= 0 && !kunci[u] && domain[u].length > 1);
                 if (!boleh.length) { resolve(hasil(pos, msFasa1)); return; }
                 const awal = kosSemua();
-                fasa2 = { boleh, kini: awal, awal, terbaik: awal, posTerbaik: pos.slice(), mula: performance.now(), msFasa1, langkah: 0, diterima: 0, T0: 4, T1: 0.05, kualitiAwal: ukurKualiti() };
+                fasa2 = { boleh, kini: awal, awal, terbaik: awal, posTerbaik: salinPos(), mula: performance.now(), msFasa1, langkah: 0, diterima: 0, T0: 4, T1: 0.05, kualitiAwal: ukurKualiti() };
                 seterusnya(langkahOptimum);
             }
 
@@ -8997,7 +9156,7 @@ window.VJSolver = (function () {
                     if (d === null) continue;
                     O.diterima++;
                     O.kini += d;
-                    if (O.kini < O.terbaik - 1e-9) { O.terbaik = O.kini; O.posTerbaik = pos.slice(); }
+                    if (O.kini < O.terbaik - 1e-9) { O.terbaik = O.kini; O.posTerbaik = salinPos(); }
                 }
                 const msOpt = performance.now() - O.mula;
                 if (onProgress) onProgress({ fasa: 'optimum', iter, diletak, terbaik: diletak, jumlah: U, ms: O.msFasa1 + msOpt, kosAwal: O.awal, kos: O.terbaik });
@@ -9014,14 +9173,25 @@ window.VJSolver = (function () {
 
 
         function hasil(akhir, ms) {
+            tetapkanKedudukan(akhir);
             const sesi = [], tidakMuat = [];
             units.forEach((T, u) => {
                 const s = akhir[u];
                 if (s < 0) { tidakMuat.push({ desc: T.desc, len: T.len, sebab: sebabMati[u] || 'Tiada ruang tanpa bertembung dengan sesi lain / peraturan.' }); return; }
-                T.ahli.forEach(id => sesi.push({ uuid: id, ke: T.ke, hari: Math.floor(s / W), waktu: s % W, panjang: T.len, kunci: !!kunci[u] }));
+                T.ahli.forEach(id => {
+                    const a = bilikU[u].find(x => x.uuid === id);
+                    sesi.push({ uuid: id, ke: T.ke, hari: Math.floor(s / W), waktu: s % W, panjang: T.len, kunci: !!kunci[u], bilik: a ? B.bilik[a.r].id : '' });
+                });
             });
             const isu = B.isu.slice();
-            tetapkanKedudukan(akhir);
+            // Semak bilik bertindih (sepatutnya tiada)
+            const guna = {};
+            units.forEach((T, u) => {
+                if (akhir[u] < 0) return;
+                bilikU[u].forEach(a => { for (let i = 0; i < T.len; i++) { const k = a.r + '|' + (akhir[u] + i); guna[k] = (guna[k] || 0) + 1; } });
+            });
+            const tindih = new Set(Object.keys(guna).filter(k => guna[k] > 1).map(k => B.bilik[+k.split('|')[0]].nama));
+            tindih.forEach(n => isu.push({ jenis: 'amaran', teks: `Bilik ${n} bertindih pada sekurang-kurangnya satu slot.` }));
             B.hubUnit.forEach((R, ri) => {
                 if (R.keras) return;
                 const langgar = langgarHubungan(ri);
@@ -9099,22 +9269,26 @@ window.VJSolver = (function () {
 
         function jdlRenderSemua(ctx) {
             const { inp, cfg, H, W, jadual, trx, kodSubjek, singGuru, items, tw, pl } = ctx;
-            const isKelas = jdlMode === 'kelas';
-            document.getElementById('jdlSemuaTitle').innerText = isKelas ? 'Semua Kelas' : 'Semua Guru';
+            const isKelas = jdlMode === 'kelas', isBilik = jdlMode === 'bilik';
+            const bisaAlih = jdlAlat === 'alih' && !isBilik;
+            document.getElementById('jdlSemuaTitle').innerText = isKelas ? 'Semua Kelas' : isBilik ? 'Semua Bilik' : 'Semua Guru';
             let jumA = 0, jumB = 0;
             items.forEach(x => { jumA += tw[x[0]] || 0; jumB += pl[x[0]] || 0; });
-            document.getElementById('jdlSemuaStats').innerText = `${items.length} ${isKelas ? 'kelas' : 'guru'} · ${jumA} daripada ${jumB} waktu telah dijadualkan`;
-            ['kelas', 'guru'].forEach(m => {
-                document.getElementById(m === 'kelas' ? 'jdlSemuaKelas' : 'jdlSemuaGuru').className =
+            document.getElementById('jdlSemuaStats').innerText = isBilik
+                ? `${items.length} bilik · ${jumA} waktu digunakan`
+                : `${items.length} ${isKelas ? 'kelas' : 'guru'} · ${jumA} daripada ${jumB} waktu telah dijadualkan`;
+            ['kelas', 'guru', 'bilik'].forEach(m => {
+                document.getElementById({ kelas: 'jdlSemuaKelas', guru: 'jdlSemuaGuru', bilik: 'jdlSemuaBilik' }[m]).className =
                     'px-2.5 py-1 rounded-md transition ' + (jdlMode === m ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-800');
             });
+            const namaBilik = {}; ((inp.bilik || {}).senarai || []).forEach(b => { namaBilik[b.id] = b.kod || b.nama; });
 
             // Petak bagi setiap baris
             const grid = {};
             items.forEach(x => { grid[x[0]] = Array.from({ length: H * W }, () => []); });
             jadual.sesi.forEach(x => {
                 const t = trx[x.uuid]; if (!t) return;
-                const ids = isKelas ? String(t[3]).split(',').map(s => s.trim()) : [String(t[1])];
+                const ids = isKelas ? String(t[3]).split(',').map(s => s.trim()) : isBilik ? (x.bilik ? [x.bilik] : []) : [String(t[1])];
                 ids.forEach(id => {
                     const g = grid[id]; if (!g) return;
                     for (let i = 0; i < x.panjang && x.waktu + i < W; i++) g[x.hari * W + x.waktu + i].push({ x, t, mula: i === 0, kunci: x.uuid + '#' + x.ke });
@@ -9123,7 +9297,7 @@ window.VJSolver = (function () {
 
             const bL = d => d > 0 ? 'border-l-2 border-l-slate-400' : 'border-l border-l-slate-200';
             const stickyTh = 'sticky left-0 z-20 bg-slate-50 border-r border-slate-300';
-            let html = `<thead><tr><th rowspan="2" class="${stickyTh} top-0 z-30 px-2 py-1 text-left text-[11px] font-bold text-slate-500 border-b border-slate-300 min-w-[64px]">${isKelas ? 'Kelas' : 'Guru'}</th>`;
+            let html = `<thead><tr><th rowspan="2" class="${stickyTh} top-0 z-30 px-2 py-1 text-left text-[11px] font-bold text-slate-500 border-b border-slate-300 min-w-[64px]">${isKelas ? 'Kelas' : isBilik ? 'Bilik' : 'Guru'}</th>`;
             cfg.hari.forEach((h, d) => {
                 html += `<th colspan="${W}" class="sticky top-0 z-10 bg-slate-100 px-1 py-1 text-[11px] font-bold text-slate-700 border-b border-slate-200 ${bL(d)}">${escapeHtml(h)}</th>`;
             });
@@ -9149,7 +9323,7 @@ window.VJSolver = (function () {
                     <div class="flex items-center gap-1.5">
                     ${isKelas ? `<input type="checkbox" ${dipilih ? 'checked' : ''} onclick="jdlTandaKelas(event, '${escapeHtml(id)}')" class="w-3.5 h-3.5 accent-brand-600 cursor-pointer shrink-0" title="Pilih kelas ini untuk disusun (Shift + klik: pilih julat)">` : ''}
                     <div class="min-w-0"><button onclick="jdlPilih('${escapeHtml(id)}')" class="text-[11px] font-bold text-slate-800 hover:text-brand-700 hover:underline max-w-[140px] truncate block" title="${escapeHtml(item[1])} — buka jadual penuh">${escapeHtml(item[1])}</button>
-                    <span class="text-[9px] font-bold ${warnaBil}">${a}/${b}</span></div></div></th>`;
+                    <span class="text-[9px] font-bold ${isBilik ? 'text-slate-500' : warnaBil}">${isBilik ? a + ' waktu' : a + '/' + b}</span></div></div></th>`;
                 for (let d = 0; d < H; d++) {
                     for (let p = 0; p < W; p++) {
                         const list = g[d * W + p];
@@ -9167,15 +9341,15 @@ window.VJSolver = (function () {
                         let inner;
                         if (list.length) {
                             const kunci = list.some(e => e.x.kunci);
-                            const bentrok = list.length > 1 && !isKelas;
-                            const tip = list.map(e => `${kodSubjek[e.t[5]] || e.t[6]}${e.t[9] ? ' ' + e.t[9] : ''} · ${isKelas ? (singGuru[e.t[1]] || e.t[2] || '-') : e.t[4]}`).join('\n');
+                            const bentrok = !isKelas && new Set(list.map(e => e.kunci)).size > 1;
+                            const tip = list.map(e => `${kodSubjek[e.t[5]] || e.t[6]}${e.t[9] ? ' ' + e.t[9] : ''} · ${isKelas ? (singGuru[e.t[1]] || e.t[2] || '-') : e.t[4]}${isBilik ? ' · ' + (singGuru[e.t[1]] || e.t[2] || '-') : (e.x.bilik && namaBilik[e.x.bilik] ? ' · Bilik ' + namaBilik[e.x.bilik] : '')}`).join('\n');
                             const tunjuk = list.slice(0, 3);
                             inner = tunjuk.map(e => {
                                 const teks = isKelas ? (kodSubjek[e.t[5]] || e.t[6]) : (e.t[4] || kodSubjek[e.t[5]] || '');
-                                const lbl = isKelas ? (e.t[9] || '') : (kodSubjek[e.t[5]] || '');
+                                const lbl = isKelas ? (e.t[9] || (e.x.bilik && namaBilik[e.x.bilik]) || '') : (kodSubjek[e.t[5]] || '');
                                 return `<div class="rounded-sm px-0.5 ${jdlWarna(e.t[5])} ${e.mula ? '' : 'opacity-70'} flex-1 flex items-center justify-center gap-0.5 min-h-0 overflow-hidden whitespace-nowrap leading-none font-bold text-[9px]">${escapeHtml(teks)}${lbl ? `<span class="font-medium opacity-70 text-[8px]">${escapeHtml(lbl)}</span>` : ''}</div>`;
                             }).join('') + (list.length > 3 ? `<div class="text-[8px] text-slate-500 text-center leading-none">+${list.length - 3}</div>` : '');
-                            inner = `<div data-jdl="${d}-${p}" data-id="${escapeHtml(id)}" ${jdlAlat === 'alih' ? 'draggable="true"' : ''} class="jdl-cell relative h-[34px] flex flex-col gap-px ${jdlAlat === 'alih' ? 'cursor-grab active:cursor-grabbing' : 'cursor-not-allowed opacity-80'} ${bentrok ? 'ring-2 ring-rose-500 rounded' : ''}" title="${escapeHtml(tip)}">${inner}${kunci ? '<span class="absolute -top-0.5 right-0 text-[8px]">🔒</span>' : ''}</div>`;
+                            inner = `<div data-jdl="${d}-${p}" data-id="${escapeHtml(id)}" ${bisaAlih ? 'draggable="true"' : ''} class="jdl-cell relative h-[34px] flex flex-col gap-px ${bisaAlih ? 'cursor-grab active:cursor-grabbing' : isBilik ? 'cursor-default' : 'cursor-not-allowed opacity-80'} ${bentrok ? 'ring-2 ring-rose-500 rounded' : ''}" title="${escapeHtml(tip)}">${inner}${kunci ? '<span class="absolute -top-0.5 right-0 text-[8px]">🔒</span>' : ''}</div>`;
                         } else if (blok[`${d}-${p}`]) {
                             const lb = blok[`${d}-${p}`];
                             inner = `<div class="h-[34px] rounded-sm border flex items-center justify-center text-center text-[8px] font-bold overflow-hidden ${slotLabelClass(lb, cfg)} ${jdlAlat === 'blok' ? 'cursor-pointer hover:ring-2 hover:ring-rose-400' : ''}" title="${escapeHtml(lb)}${jdlAlat === 'blok' ? ' — klik untuk buka' : ''}">${escapeHtml(lb.length > 5 ? lb.slice(0, 4) + '…' : lb)}</div>`;
@@ -9195,6 +9369,7 @@ window.VJSolver = (function () {
 
         // Kunci / buka kunci semua sesi bagi kelas/guru `id` di petak (d, p)
         function jdlTogolKunci(id, d, p) {
+            if (jdlMode === 'bilik') return;
             if (!isEditMode) { ensureEditMode(() => renderJadualView()); return; }
             const inp = VJStore.getSolverInput();
             const trx = {}; inp.transaksi.forEach(t => { trx[String(t[8])] = t; });
@@ -9238,7 +9413,11 @@ window.VJSolver = (function () {
                 if (t[1]) perluG[t[1]] = (perluG[t[1]] || 0) + m;
             });
 
-            const items = jdlMode === 'guru'
+            const waktuB = {};
+            jadual.sesi.forEach(x => { if (x.bilik) waktuB[x.bilik] = (waktuB[x.bilik] || 0) + x.panjang; });
+            const items = jdlMode === 'bilik'
+                ? ((inp.bilik || {}).senarai || []).map(b => [b.id, b.kod ? `${b.nama} (${b.kod})` : b.nama])
+                : jdlMode === 'guru'
                 ? inp.guru.slice().sort((a, b) => String(a[1]).localeCompare(String(b[1]), 'ms'))
                 : inp.kelas.slice().sort((a, b) => (parseInt(a[2]) || 0) - (parseInt(b[2]) || 0) || String(a[1]).localeCompare(String(b[1]), 'ms', { numeric: true }));
             if (!items.some(x => x[0] === jdlSel)) jdlSel = null;
@@ -9268,7 +9447,7 @@ window.VJSolver = (function () {
             selLabel.classList.toggle('hidden', jdlAlat !== 'blok');
             if (!cfg.label.some(l => l.nama === jdlBlokLabel)) jdlBlokLabel = cfg.label.length ? cfg.label[0].nama : 'Blok';
             selLabel.innerHTML = (cfg.label.length ? cfg.label : [{ nama: 'Blok' }]).map(l => `<option ${l.nama === jdlBlokLabel ? 'selected' : ''}>${escapeHtml(l.nama)}</option>`).join('');
-            const tw = jdlMode === 'guru' ? waktuG : waktuK, pl = jdlMode === 'guru' ? perluG : perluK;
+            const tw = jdlMode === 'guru' ? waktuG : jdlMode === 'bilik' ? waktuB : waktuK, pl = jdlMode === 'guru' ? perluG : jdlMode === 'bilik' ? waktuB : perluK;
 
             const totalSesi = new Set(jadual.sesi.map(x => x.uuid + '#' + x.ke)).size;
             const dikunci = jadual.sesi.filter(x => x.kunci).length;
@@ -9279,7 +9458,7 @@ window.VJSolver = (function () {
 
             const empty = document.getElementById('jdlEmpty'), modal = document.getElementById('jdlModal');
             const semuaBox = document.getElementById('jdlSemuaBox');
-            empty.innerText = jdlMode === 'guru' ? 'Tiada guru.' : 'Tiada kelas. Tambah kelas di "Data Induk" dahulu.';
+            empty.innerText = jdlMode === 'guru' ? 'Tiada guru.' : jdlMode === 'bilik' ? 'Tiada bilik khas. Tambah bilik di menu "Bilik Khas" dahulu.' : 'Tiada kelas. Tambah kelas di "Data Induk" dahulu.';
             empty.classList.toggle('hidden', items.length > 0);
             semuaBox.classList.toggle('hidden', !items.length);
             modal.classList.toggle('hidden', !jdlSel);
@@ -9296,7 +9475,7 @@ window.VJSolver = (function () {
                 jadual.sesi.forEach(x => {
                     const t = trx[x.uuid]; if (!t) return;
                     const kIds = String(t[3]).split(',').map(s => s.trim());
-                    if (jdlMode === 'kelas' ? !kIds.includes(jdlSel) : String(t[1]) !== jdlSel) return;
+                    if (jdlMode === 'kelas' ? !kIds.includes(jdlSel) : jdlMode === 'bilik' ? x.bilik !== jdlSel : String(t[1]) !== jdlSel) return;
                     for (let i = 0; i < x.panjang && x.waktu + i < W; i++) sel[x.hari * W + x.waktu + i].push({ x, t, mula: i === 0 });
                 });
                 const blok = (cfg[jdlMode] || {})[jdlSel] || {};
@@ -9314,14 +9493,15 @@ window.VJSolver = (function () {
                         let inner;
                         if (list.length) {
                             const kunci = list.some(e => e.x.kunci);
-                            const bentrok = list.length > 1 && jdlMode === 'guru';
+                            const bentrok = jdlMode !== 'kelas' && new Set(list.map(e => e.x.uuid + '#' + e.x.ke)).size > 1;
+                            const namaB = {}; ((inp.bilik || {}).senarai || []).forEach(b => { namaB[b.id] = b.kod || b.nama; });
                             inner = list.slice(0, 3).map(e => {
-                                const sub = jdlMode === 'kelas' ? (singGuru[e.t[1]] || e.t[2] || '-') : e.t[4];
+                                const sub = (jdlMode === 'kelas' ? (singGuru[e.t[1]] || e.t[2] || '-') : jdlMode === 'bilik' ? `${e.t[4]} · ${singGuru[e.t[1]] || e.t[2] || '-'}` : e.t[4]) + (jdlMode !== 'bilik' && e.x.bilik && namaB[e.x.bilik] ? ` · ${namaB[e.x.bilik]}` : '');
                                 return `<div class="rounded px-1 py-0.5 ${jdlWarna(e.t[5])} ${e.mula ? '' : 'opacity-70'}">
                                     <div class="font-bold text-[10px] leading-tight truncate">${escapeHtml(kodSubjek[e.t[5]] || e.t[6])}${e.t[9] ? ` <span class="font-medium opacity-70">${escapeHtml(e.t[9])}</span>` : ''}</div>
                                     <div class="text-[9px] leading-tight truncate opacity-80">${escapeHtml(sub)}</div></div>`;
                             }).join('') + (list.length > 3 ? `<div class="text-[9px] text-slate-500 text-center">+${list.length - 3}</div>` : '');
-                            inner = `<div data-jdl="${d}-${p}" data-id="${escapeHtml(jdlSel)}" draggable="true" class="jdl-cell relative h-full min-h-[44px] space-y-0.5 cursor-grab active:cursor-grabbing ${bentrok ? 'ring-2 ring-rose-500 rounded' : ''}" title="Klik untuk kunci / buka kunci">${inner}${kunci ? '<span class="absolute -top-1 -right-1 text-[10px]">🔒</span>' : ''}</div>`;
+                            inner = `<div data-jdl="${d}-${p}" data-id="${escapeHtml(jdlSel)}" ${jdlMode !== 'bilik' ? 'draggable="true"' : ''} class="jdl-cell relative h-full min-h-[44px] space-y-0.5 ${jdlMode !== 'bilik' ? 'cursor-grab active:cursor-grabbing' : ''} ${bentrok ? 'ring-2 ring-rose-500 rounded' : ''}" title="${jdlMode !== 'bilik' ? 'Klik untuk kunci / buka kunci' : ''}">${inner}${kunci ? '<span class="absolute -top-1 -right-1 text-[10px]">🔒</span>' : ''}</div>`;
                         } else if (lb) {
                             inner = `<div class="h-full min-h-[44px] rounded-md border flex items-center justify-center text-center text-[10px] font-bold ${slotLabelClass(lb, cfg)}">${escapeHtml(lb)}</div>`;
                         } else {
@@ -9345,7 +9525,7 @@ window.VJSolver = (function () {
             document.getElementById('jdlIsuBox').classList.toggle('hidden', !isuHtml.length);
             document.getElementById('jdlIsu').innerHTML = isuHtml.join('');
             // Tray: sesi belum diletak (ditapis ikut kelas dipilih)
-            const idBaris = T => jdlMode === 'guru' ? T.guru.map(g => B.guru[g].id) : T.kelas.map(k => B.kelas[k].id);
+            const idBaris = T => jdlMode === 'guru' ? T.guru.map(g => B.guru[g].id) : jdlMode === 'bilik' ? [] : T.kelas.map(k => B.kelas[k].id);
             const trayUnits = belum.filter(T => !jdlPilihan.size || T.kelas.some(k => jdlPilihan.has(B.kelas[k].id)));
             document.getElementById('jdlTrayBil').innerText = trayUnits.length + (trayUnits.length !== belum.length ? ' / ' + belum.length : '');
             document.getElementById('jdlTrayList').innerHTML = trayUnits.length ? trayUnits.map(T => {
@@ -9550,6 +9730,8 @@ window.VJSolver = (function () {
         function jdlLetakUnit(K, u, hari, waktu) {
             const T = K.B.units[u];
             K.j.sesi.forEach(x => { if (x.ke === T.ke && T.ahli.includes(x.uuid)) { x.hari = hari; x.waktu = waktu; x.kunci = true; } });
+            const nota = jdlAgihBilik(K, u, hari, waktu);
+            if (nota) showToast(nota, 'warning', 6000);
         }
 
         function jdlAlih(id, d, p, d2, p2) {
@@ -9625,7 +9807,9 @@ window.VJSolver = (function () {
                 nota = ` ${r.lawan.size} sesi (${desc}) dipindah ke kotak bawah.`;
             }
             jdlBuangUnit(K, u);
-            T.ahli.forEach(uuid => K.j.sesi.push({ uuid, ke: T.ke, hari: d, waktu: p, panjang: T.len, kunci: true }));
+            T.ahli.forEach(uuid => K.j.sesi.push({ uuid, ke: T.ke, hari: d, waktu: p, panjang: T.len, kunci: true, bilik: '' }));
+            const notaBilik = jdlAgihBilik(K, u, d, p);
+            if (notaBilik) showToast(notaBilik, 'warning', 6000);
             if (!K.j.dijana) K.j.dijana = new Date().toISOString();
             VJStore.setJadual(K.j);
             if (nota) showToast('Sesi diletak & dikunci.' + nota, 'info', 6000);
@@ -9733,7 +9917,7 @@ window.VJSolver = (function () {
             if (box) box.textContent = jdlCat.nilai ? (jdlCat.nilai.length > 5 ? jdlCat.nilai.slice(0, 4) + '…' : jdlCat.nilai) : '';
         }
         document.getElementById('jdlSemuaGrid').addEventListener('pointerdown', e => {
-            if (jdlAlat !== 'blok') return;
+            if (jdlAlat !== 'blok' || jdlMode === 'bilik') return;
             const td = e.target.closest('.jdl-td');
             if (!td) return;
             e.preventDefault();
@@ -9764,6 +9948,114 @@ window.VJSolver = (function () {
             if (c.adaSesi) showToast('Petak yang ada sesi tidak diblok. Alih atau kosongkan sesi itu dahulu.', 'info');
             renderJadualView();
         });
+
+        // ---- Bilik khas ----
+        function renderBilikView() {
+            const view = document.getElementById('view-bilik');
+            if (!view || view.classList.contains('hidden')) return;
+            const b = VJStore.getBilik();
+            const inp = VJStore.getSolverInput();
+            const pakai = {};
+            Object.values(b.subjek).forEach(ids => ids.forEach(id => { pakai[id] = (pakai[id] || 0) + 1; }));
+            document.getElementById('bilikBil').innerText = b.senarai.length ? `(${b.senarai.length})` : '';
+            document.getElementById('bilikList').innerHTML = b.senarai.length ? b.senarai.map(r => `
+                <div class="flex items-center gap-1.5 bg-white border border-slate-200 rounded-lg px-2 py-1.5">
+                    <i data-lucide="door-open" class="w-3.5 h-3.5 text-slate-400 shrink-0"></i>
+                    <input value="${escapeHtml(r.nama)}" onchange="bilikUbah('${escapeHtml(r.id)}', 'nama', this.value)" class="flex-1 min-w-0 text-xs font-bold text-slate-800 bg-transparent outline-none focus:bg-slate-50 rounded px-1" title="Nama bilik">
+                    <input value="${escapeHtml(r.kod)}" placeholder="Kod" maxlength="8" onchange="bilikUbah('${escapeHtml(r.id)}', 'kod', this.value)" class="w-14 text-[11px] font-mono text-slate-600 bg-slate-50 border border-slate-200 rounded px-1 py-0.5" title="Kod ringkas (dipapar dalam jadual)">
+                    <span class="text-[10px] text-slate-400 whitespace-nowrap" title="Bilangan subjek">${pakai[r.id] || 0} subj</span>
+                    <button onclick="bilikPadam('${escapeHtml(r.id)}')" class="text-rose-500 hover:text-rose-700 p-0.5" title="Padam"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
+                </div>`).join('') : '<p class="text-[11px] text-slate-400">Belum ada bilik. Tambah bilik di atas.</p>';
+
+            const waktu = {};
+            inp.transaksi.forEach(t => { waktu[t[5]] = (waktu[t[5]] || 0) + (parseInt(t[7]) || 0); });
+            const cari = (document.getElementById('bilikCariSubjek').value || '').trim().toLowerCase();
+            const subjek = inp.subjek.filter(r => !cari || `${r[1]} ${r[2]}`.toLowerCase().includes(cari))
+                .sort((x, y) => (b.subjek[y[0]] ? 1 : 0) - (b.subjek[x[0]] ? 1 : 0) || String(x[1]).localeCompare(String(y[1]), 'ms'));
+            document.getElementById('bilikSubjekBody').innerHTML = subjek.length ? subjek.map(r => {
+                const dipilih = new Set(b.subjek[r[0]] || []);
+                const chips = b.senarai.length ? b.senarai.map(x => `<button onclick="bilikTogol('${escapeHtml(r[0])}', '${escapeHtml(x.id)}')" class="px-2 py-0.5 rounded-md border text-[11px] font-bold transition ${dipilih.has(x.id) ? 'bg-brand-600 text-white border-brand-600' : 'bg-white text-slate-500 border-slate-200 hover:border-brand-400 hover:text-brand-700'}">${escapeHtml(x.kod || x.nama)}</button>`).join(' ')
+                    : '<span class="text-[11px] text-slate-400">—</span>';
+                return `<tr class="border-b border-slate-100 ${dipilih.size ? 'bg-brand-50/40' : ''}">
+                    <td class="px-3 py-1.5 align-top"><div class="font-bold text-slate-800">${escapeHtml(r[2] || r[1])}</div><div class="text-[10px] text-slate-500">${escapeHtml(r[1])}</div></td>
+                    <td class="px-3 py-1.5"><div class="flex flex-wrap gap-1">${chips}</div></td>
+                    <td class="px-3 py-1.5 text-right font-mono text-slate-600 align-top">${waktu[r[0]] || 0}</td></tr>`;
+            }).join('') : '<tr><td colspan="3" class="px-3 py-4 text-center text-[11px] text-slate-400">Tiada subjek.</td></tr>';
+            lucide.createIcons();
+        }
+
+        function bilikSimpan(fn) {
+            if (!isEditMode) { ensureEditMode(() => renderBilikView()); renderBilikView(); return false; }
+            const b = VJStore.getBilik();
+            if (fn(b) === false) return false;
+            VJStore.setBilik(b);
+            renderBilikView();
+            return true;
+        }
+
+        function bilikTambah() {
+            const nama = document.getElementById('bilikNamaBaru').value.trim();
+            const kod = document.getElementById('bilikKodBaru').value.trim();
+            if (!nama) { showToast('Masukkan nama bilik.', 'warning'); return; }
+            const ok = bilikSimpan(b => {
+                if (b.senarai.some(r => r.nama.toLowerCase() === nama.toLowerCase())) { showToast('Nama bilik sudah ada.', 'warning'); return false; }
+                b.senarai.push({ id: 'B' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), nama, kod });
+            });
+            if (ok) {
+                document.getElementById('bilikNamaBaru').value = '';
+                document.getElementById('bilikKodBaru').value = '';
+                document.getElementById('bilikNamaBaru').focus();
+                showToast(`Bilik "${nama}" ditambah.`, 'success');
+            }
+        }
+
+        function bilikUbah(id, medan, nilai) {
+            nilai = String(nilai || '').trim();
+            if (medan === 'nama' && !nilai) { renderBilikView(); return; }
+            bilikSimpan(b => { const r = b.senarai.find(x => x.id === id); if (!r) return false; r[medan] = nilai; });
+        }
+
+        function bilikPadam(id) {
+            const b0 = VJStore.getBilik(), r = b0.senarai.find(x => x.id === id);
+            if (!r) return;
+            if (!isEditMode) { ensureEditMode(() => bilikPadam(id)); return; }
+            if (!confirm(`Padam bilik "${r.nama}"? Subjek yang ditetapkan ke bilik ini akan dikeluarkan daripadanya.`)) return;
+            bilikSimpan(b => {
+                b.senarai = b.senarai.filter(x => x.id !== id);
+                Object.keys(b.subjek).forEach(sid => { b.subjek[sid] = b.subjek[sid].filter(x => x !== id); });
+            });
+        }
+
+        function bilikTogol(subjekId, id) {
+            bilikSimpan(b => {
+                const list = b.subjek[subjekId] || [];
+                b.subjek[subjekId] = list.includes(id) ? list.filter(x => x !== id) : list.concat([id]);
+            });
+        }
+
+        // Tetapkan bilik bagi unit u selepas dialih secara manual (pilih bilik yang tidak digunakan pada masa itu)
+        function jdlAgihBilik(K, u, hari, waktu) {
+            const T = K.B.units[u];
+            if (!T.bilikReq || !T.bilikReq.length) return '';
+            const sibuk = new Set();
+            K.j.sesi.forEach(x => {
+                if (!x.bilik || x.hari !== hari || K.unitOf[x.uuid + '#' + x.ke] === u) return;
+                if (x.waktu > waktu + T.len - 1 || x.waktu + x.panjang - 1 < waktu) return;
+                sibuk.add(x.bilik);
+            });
+            const guna = new Set(), gagal = [];
+            T.bilikReq.forEach(q => {
+                const ids = q.cand.map(i => K.B.bilik[i].id);
+                const sesiQ = K.j.sesi.filter(x => x.uuid === q.uuid && x.ke === T.ke);
+                const kini = (sesiQ[0] || {}).bilik;
+                const order = kini && ids.includes(kini) ? [kini, ...ids.filter(i => i !== kini)] : ids;
+                let r = order.find(i => !sibuk.has(i) && !guna.has(i));
+                if (!r) { r = order[0]; gagal.push(K.B.bilik[q.cand[0]].nama); }
+                guna.add(r);
+                sesiQ.forEach(x => { x.bilik = r; });
+            });
+            return gagal.length ? `Tiada bilik kosong (${[...new Set(gagal)].join(', ')}) — bilik bertindih.` : '';
+        }
 
         // ---- Hubungan antara sesi ----
         let hubSlotDraf = new Set(), hubSlotDrafB = new Set();

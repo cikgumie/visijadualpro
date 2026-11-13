@@ -8584,7 +8584,20 @@ window.VJSolver = (function () {
         const occG = B.guru.map(() => new Int32Array(N).fill(-1));
         const pos = new Int32Array(U).fill(-1);
         const kunci = new Uint8Array(U);
-        const daySub = {};                 // "kelas|subjek|hari" -> [unit]
+        // Sesi setiap (kelas, subjek) mengikut hari. Diindeks dengan nombor (bukan kunci teks) kerana
+        // dibaca dalam gelung paling dalam: daySub[asas + hari] -> [unit], asas = idPasangan * H
+        const daySub = [];
+        const pasang = units.map(() => []);   // unit -> [[kelas, asas]]
+        {
+            const idPasang = {};
+            let nPasang = 0;
+            units.forEach((T, u) => T.pairs.forEach(([k, sj]) => {
+                const key = k + '|' + sj;
+                if (idPasang[key] === undefined) idPasang[key] = nPasang++;
+                pasang[u].push([k, idPasang[key] * H]);
+            }));
+            for (let i = 0; i < nPasang * H; i++) daySub.push([]);
+        }
         const ulangKD = new Int32Array(B.kelas.length * H);   // bil. sesi subjek berulang bagi (kelas, hari) — dikemas kini secara tokokan
         const dayLoadK = B.kelas.map(() => new Int32Array(H));
         const placedAt = new Int32Array(U).fill(-1000);
@@ -8645,11 +8658,11 @@ window.VJSolver = (function () {
                 T.kelas.forEach(k => { occK[k][s + i] = u; });
                 T.guru.forEach(g => { occG[g][s + i] = u; });
             }
-            T.pairs.forEach(([k, sj]) => {
-                const key = k + '|' + sj + '|' + d, arr = daySub[key] || (daySub[key] = []);
+            for (const [k, asas] of pasang[u]) {
+                const arr = daySub[asas + d];
                 arr.push(u);
                 if (arr.length > 1) ulangKD[k * H + d]++;
-            });
+            }
             T.kelas.forEach(k => { dayLoadK[k][d] += T.len; });
             relU[u].forEach(ri => {
                 dayR[ri][d].push(u);
@@ -8668,11 +8681,11 @@ window.VJSolver = (function () {
                 T.kelas.forEach(k => { occK[k][s + i] = -1; });
                 T.guru.forEach(g => { occG[g][s + i] = -1; });
             }
-            T.pairs.forEach(([k, sj]) => {
-                const arr = daySub[k + '|' + sj + '|' + d];
+            for (const [k, asas] of pasang[u]) {
+                const arr = daySub[asas + d];
                 if (arr.length > 1) ulangKD[k * H + d]--;
                 arr.splice(arr.indexOf(u), 1);
-            });
+            }
             T.kelas.forEach(k => { dayLoadK[k][d] -= T.len; });
             const buang = arr => arr.splice(arr.indexOf(u), 1);
             relU[u].forEach(ri => {
@@ -8714,9 +8727,12 @@ window.VJSolver = (function () {
                 for (const g of T.guru) { const o = occG[g][s + i]; if (o >= 0) set.add(o); }
             }
             if (P.sesiSehariSubjek > 0) {
-                for (const [k, sj] of T.pairs) {
-                    const arr = (daySub[k + '|' + sj + '|' + d] || []).filter(x => !set.has(x) && x !== u);
-                    if (arr.length >= P.sesiSehariSubjek) arr.forEach(x => set.add(x));
+                for (const pg of pasang[u]) {
+                    const arr = daySub[pg[1] + d];
+                    if (arr.length < P.sesiSehariSubjek) continue;
+                    let hidup = 0;
+                    for (let i = 0; i < arr.length; i++) { const x = arr[i]; if (x !== u && !set.has(x)) hidup++; }
+                    if (hidup >= P.sesiSehariSubjek) for (let i = 0; i < arr.length; i++) { const x = arr[i]; if (x !== u) set.add(x); }
                 }
             }
             if (P.maxGuruSehari > 0 || P.maxGuruBerturut > 0) {
@@ -8898,7 +8914,7 @@ window.VJSolver = (function () {
         function kosLembut(u, s) {
             const T = units[u], d = Math.floor(s / W);
             let c = kosHubunganLembut(u, s, null) + BERAT_DEPAN * lompatDepan(T, s);
-            T.pairs.forEach(([k, sj]) => { c += 10 * ((daySub[k + '|' + sj + '|' + d] || []).length); });
+            for (const pg of pasang[u]) c += 10 * daySub[pg[1] + d].length;
             T.kelas.forEach(k => { c += 0.3 * dayLoadK[k][d]; });
             return c + Math.random();
         }
@@ -9131,7 +9147,7 @@ window.VJSolver = (function () {
                             for (const x of set) kos += 200 * units[x].len + (iter - placedAt[x] < 25 ? 2000 : 0);
                             // Sebaran subjek (dari enjin Jadual Guru): elak subjek sama berulang pada hari yang sama walaupun perlu mengusir
                             const dd = Math.floor(s / W);
-                            units[u].pairs.forEach(([k, sj]) => { kos += 10 * (daySub[k + '|' + sj + '|' + dd] || []).filter(x => !set.has(x)).length; });
+                            for (const pg of pasang[u]) { const arr = daySub[pg[1] + dd]; for (let i = 0; i < arr.length; i++) if (!set.has(arr[i])) kos += 10; }
                         }
                         if (kos < bestKos) { bestKos = kos; best = s; bestSet = set; }
                     }

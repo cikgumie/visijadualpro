@@ -1484,6 +1484,91 @@ window.VJSampleData = function () {
         toast(`${added} baris ditambah${skipped ? `, ${skipped} dilangkau (kosong/berulang)` : ''}. Klik "Simpan" untuk sahkan.`, added ? 'success' : 'warning');
     }
 
+    // ---- Templat & muat naik Excel (.xlsx) untuk Guru, Kelas, Bilik, Subjek ----
+    const DI_XLSX = {
+        guru:   { sheet: 'Guru',   head: ['Nama Guru', 'Singkatan', 'Maks. Waktu'] },
+        kelas:  { sheet: 'Kelas',  head: ['Nama Kelas', 'Tingkatan', 'Guru Kelas'] },
+        bilik:  { sheet: 'Bilik',  head: ['Nama Bilik', 'Kod'] },
+        subjek: { sheet: 'Subjek', head: ['Nama Subjek', 'Kod', 'Waktu/Minggu'] }
+    };
+
+    function diTemplate() {
+        if (typeof XLSX === 'undefined') { toast('Pustaka Excel belum dimuatkan. Semak sambungan internet.', 'error'); return; }
+        const wb = XLSX.utils.book_new();
+        const guide = [
+            ['PANDUAN TEMPLAT DATA INDUK — VisiJadual'],
+            [],
+            ['1. Isi data pada sheet Guru, Kelas, Bilik dan Subjek (satu baris = satu rekod). Jangan ubah baris tajuk (baris 1).'],
+            ['2. Hanya "Nama" yang wajib. Lajur lain boleh dikosongkan. ID dijana automatik.'],
+            ['3. Sheet yang tidak diisi akan diabaikan. Nama yang sudah wujud dalam sistem akan dilangkau (tiada pendua).'],
+            ['4. Simpan fail, kemudian klik "Muat Naik Excel" dalam Data Induk.'],
+            [],
+            ['Sheet', 'Lajur', 'Contoh'],
+            ['Guru', 'Nama Guru | Singkatan | Maks. Waktu', 'AHMAD BIN ALI | AHMAD | 35'],
+            ['Kelas', 'Nama Kelas | Tingkatan | Guru Kelas', '1 ARIF | 1 | AHMAD BIN ALI'],
+            ['Bilik', 'Nama Bilik | Kod', 'Makmal Sains 1 | MS1'],
+            ['Subjek', 'Nama Subjek | Kod | Waktu/Minggu', 'Bahasa Melayu | BM | 7']
+        ];
+        const wsG = XLSX.utils.aoa_to_sheet(guide);
+        wsG['!cols'] = [{ wch: 14 }, { wch: 38 }, { wch: 38 }];
+        XLSX.utils.book_append_sheet(wb, wsG, 'Panduan');
+        Object.values(DI_XLSX).forEach(c => {
+            const ws = XLSX.utils.aoa_to_sheet([c.head]);
+            ws['!cols'] = c.head.map((h, i) => ({ wch: i === 0 ? 36 : 16 }));
+            XLSX.utils.book_append_sheet(wb, ws, c.sheet);
+        });
+        XLSX.writeFile(wb, 'Templat_Data_Induk.xlsx');
+        toast('Templat dimuat turun. Isi, simpan, kemudian "Muat Naik Excel".', 'success');
+    }
+
+    function diUploadClick() { $('diXlsxInput').click(); }
+
+    async function diUploadFile(ev) {
+        const f = ev.target.files && ev.target.files[0];
+        ev.target.value = '';
+        if (!f) return;
+        if (typeof XLSX === 'undefined') { toast('Pustaka Excel belum dimuatkan. Semak sambungan internet.', 'error'); return; }
+        if (diDirty && !confirm('Perubahan pada senarai semasa belum disimpan dan akan dibuang. Teruskan muat naik?')) return;
+        try {
+            const wb = XLSX.read(await f.arrayBuffer(), { type: 'array' });
+            const byName = {};
+            wb.SheetNames.forEach(n => { byName[n.trim().toLowerCase()] = wb.Sheets[n]; });
+            const report = [];
+            let found = 0;
+            const staged = {};
+            Object.keys(DI_XLSX).forEach(t => {
+                const ws = byName[DI_XLSX[t].sheet.toLowerCase()];
+                if (!ws) return;
+                found++;
+                const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: true });
+                if (aoa.length && /^nama/i.test(String(aoa[0][0]).trim())) aoa.shift();
+                const defaults = DI_TABLES[t].defaults;
+                const rows = VJStore.getMaster(t);
+                const seen = new Set(rows.map(r => String(r[1]).trim().toLowerCase()));
+                let added = 0, skipped = 0;
+                aoa.forEach(p => {
+                    const nama = String(p[0] === undefined ? '' : p[0]).trim();
+                    if (!nama) return;
+                    if (seen.has(nama.toLowerCase())) { skipped++; return; }
+                    seen.add(nama.toLowerCase());
+                    const v = i => (p[i] === undefined || String(p[i]).trim() === '' ? defaults[i + 1] : (typeof p[i] === 'string' ? p[i].trim() : p[i]));
+                    rows.push(['', nama, v(1), v(2)]);
+                    added++;
+                });
+                staged[t] = rows;
+                report.push(`${DI_TABLES[t].title}: +${added}${skipped ? ` (${skipped} dilangkau)` : ''}`);
+            });
+            if (!found) throw new Error('Tiada sheet Guru / Kelas / Bilik / Subjek ditemui. Gunakan templat yang disediakan.');
+            // Nama pendua sudah ditapis di atas, jadi setMaster tidak dijangka gagal; jika gagal, mesej ralat dipaparkan.
+            Object.keys(staged).forEach(t => VJStore.setMaster(t, staged[t]));
+            loadAllData();
+            diSwitch(diTable, true);
+            toast(`Muat naik berjaya — ${report.join(' · ')}. Ingat simpan fail ZIP.`, 'success', 7000);
+        } catch (e) {
+            toast('Muat naik gagal: ' + e.message, 'error', 7000);
+        }
+    }
+
     function diSave() {
         try {
             const n = VJStore.setMaster(diTable, diRows);
@@ -1528,7 +1613,7 @@ window.VJSampleData = function () {
 
     window.VJFile = {
         init, saveZip, openZip, newFile, loadSample, openWelcome, closeWelcome, loadZipFile, confirmDiscard, showLoading, hideLoading,
-        openDataInduk, closeDataInduk, diSwitch, diAdd, diDelete, diTogglePaste, diApplyPaste, diSave,
+        openDataInduk, closeDataInduk, diSwitch, diAdd, diDelete, diTogglePaste, diApplyPaste, diSave, diTemplate, diUploadClick, diUploadFile,
         supportsFsApi
     };
 })();
@@ -2353,6 +2438,13 @@ window.VJSampleData = function () {
                         <i data-lucide="search" class="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2 pointer-events-none"></i>
                         <input id="diSearch" type="text" placeholder="Cari..." class="w-32 sm:w-40 pl-8 pr-2 py-1.5 border border-slate-200 rounded-lg text-xs outline-none focus:border-brand-600 bg-white">
                     </div>
+                    <input type="file" id="diXlsxInput" accept=".xlsx,.xls" class="hidden" onchange="VJFile.diUploadFile(event)">
+                    <button onclick="VJFile.diTemplate()" class="px-2.5 py-1.5 border border-slate-200 bg-white hover:bg-slate-100 rounded-lg text-xs font-bold text-slate-700 flex items-center gap-1.5" title="Muat turun templat Excel (Guru, Kelas, Bilik, Subjek)">
+                        <i data-lucide="file-down" class="w-3.5 h-3.5"></i> <span class="hidden sm:inline">Templat</span>
+                    </button>
+                    <button onclick="VJFile.diUploadClick()" class="px-2.5 py-1.5 border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 rounded-lg text-xs font-bold text-emerald-700 flex items-center gap-1.5" title="Muat naik fail Excel yang telah diisi (semua sheet sekaligus)">
+                        <i data-lucide="file-up" class="w-3.5 h-3.5"></i> <span class="hidden sm:inline">Muat Naik Excel</span>
+                    </button>
                     <button onclick="VJFile.diTogglePaste()" class="px-2.5 py-1.5 border border-slate-200 bg-white hover:bg-slate-100 rounded-lg text-xs font-bold text-slate-700 flex items-center gap-1.5" title="Tampal banyak baris sekaligus dari Excel">
                         <i data-lucide="clipboard-paste" class="w-3.5 h-3.5"></i> <span class="hidden sm:inline">Tampal dari Excel</span>
                     </button>
@@ -9326,10 +9418,51 @@ window.VJSolver = (function () {
             'bg-rose-100 text-rose-900', 'bg-teal-100 text-teal-900', 'bg-orange-100 text-orange-900', 'bg-lime-100 text-lime-900',
             'bg-indigo-100 text-indigo-900', 'bg-pink-100 text-pink-900', 'bg-cyan-100 text-cyan-900', 'bg-fuchsia-100 text-fuchsia-900'];
 
-        function jdlWarna(subjekId) {
+        // Warna asal ikut subjek (digunakan di paparan Guru Ganti)
+        function jdlWarnaSubjek(subjekId) {
             let h = 0;
             String(subjekId).split('').forEach(c => { h = (h * 31 + c.charCodeAt(0)) >>> 0; });
             return JDL_WARNA[h % JDL_WARNA.length];
+        }
+
+        // 100 warna untuk guru. Hue mengikut sudut emas supaya warna berjiran sentiasa berbeza,
+        // dan 4 gabungan ketepuan/kecerahan memberi variasi. Teks sentiasa gelap (mudah dibaca).
+        const JDL_PALET = (() => {
+            const gaya = [[72, 86], [58, 79], [85, 91], [50, 74]]; // [ketepuan %, kecerahan %]
+            return Array.from({ length: 100 }, (_, i) => {
+                const h = Math.round((i * 137.508) % 360);
+                const [s, l] = gaya[i % 4];
+                return { bg: `hsl(${h} ${s}% ${l}%)`, fg: `hsl(${h} 60% 17%)` };
+            });
+        })();
+        (() => {
+            const st = document.createElement('style');
+            st.textContent = JDL_PALET.map((c, i) => `.jc-${i}{background-color:${c.bg};color:${c.fg}}`).join('');
+            document.head.appendChild(st);
+        })();
+        // Susunan rawak tetap (benih tetap): warna guru sama setiap kali, tetapi tidak berturutan mengikut senarai.
+        const JDL_PERM = (() => {
+            const a = Array.from({ length: 100 }, (_, i) => i);
+            let s = 20240607;
+            const rnd = () => { s = (s + 0x6D2B79F5) | 0; let t = Math.imul(s ^ (s >>> 15), 1 | s); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+            for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+            return a;
+        })();
+        let jdlWarnaGuru = {};
+        // Setiap guru diberi satu warna unik (sehingga 100 guru), mengikut urutan ID guru.
+        function jdlBinaWarna(senaraiGuru) {
+            const ids = senaraiGuru.map(g => String(g[0])).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+            jdlWarnaGuru = {};
+            ids.forEach((id, i) => { jdlWarnaGuru[id] = JDL_PERM[i % 100]; });
+        }
+        function jdlWarna(guruId) {
+            let n = jdlWarnaGuru[String(guruId)];
+            if (n === undefined) {
+                let h = 0;
+                String(guruId).split('').forEach(c => { h = (h * 31 + c.charCodeAt(0)) >>> 0; });
+                n = JDL_PERM[h % 100];
+            }
+            return 'jc-' + n;
         }
 
         function jdlSetMode(mode) {
@@ -9433,7 +9566,7 @@ window.VJSolver = (function () {
                             inner = tunjuk.map(e => {
                                 const teks = isKelas ? (kodSubjek[e.t[5]] || e.t[6]) : (e.t[4] || kodSubjek[e.t[5]] || '');
                                 const lbl = isKelas ? (e.t[9] || (e.x.bilik && namaBilik[e.x.bilik]) || '') : (kodSubjek[e.t[5]] || '');
-                                return `<div class="rounded-sm px-0.5 ${jdlWarna(e.t[5])} ${e.mula ? '' : 'opacity-70'} flex-1 flex items-center justify-center gap-0.5 min-h-0 overflow-hidden whitespace-nowrap leading-none font-bold text-[9px]">${escapeHtml(teks)}${lbl ? `<span class="font-medium opacity-70 text-[8px]">${escapeHtml(lbl)}</span>` : ''}</div>`;
+                                return `<div class="rounded-sm px-0.5 ${jdlWarna(e.t[1])} ${e.mula ? '' : 'opacity-70'} flex-1 flex items-center justify-center gap-0.5 min-h-0 overflow-hidden whitespace-nowrap leading-none font-bold text-[9px]">${escapeHtml(teks)}${lbl ? `<span class="font-medium opacity-70 text-[8px]">${escapeHtml(lbl)}</span>` : ''}</div>`;
                             }).join('') + (list.length > 3 ? `<div class="text-[8px] text-slate-500 text-center leading-none">+${list.length - 3}</div>` : '');
                             inner = `<div data-jdl="${d}-${p}" data-id="${escapeHtml(id)}" ${bisaAlih ? 'draggable="true"' : ''} class="jdl-cell relative h-[34px] flex flex-col gap-px ${bisaAlih ? 'cursor-grab active:cursor-grabbing' : isBilik ? 'cursor-default' : 'cursor-not-allowed opacity-80'} ${bentrok ? 'ring-2 ring-rose-500 rounded' : ''}" title="${escapeHtml(tip)}">${inner}${kunci ? '<span class="absolute -top-0.5 right-0 text-[8px]">🔒</span>' : ''}</div>`;
                         } else if (blok[`${d}-${p}`]) {
@@ -9476,6 +9609,7 @@ window.VJSolver = (function () {
             const view = document.getElementById('view-jadual');
             if (!view || view.classList.contains('hidden')) return;
             const inp = VJStore.getSolverInput();
+            jdlBinaWarna(inp.guru);
             const cfg = inp.slot;
             const H = cfg.hari.length, W = cfg.waktu.length;
             const B = VJSolver.bina(inp, { pecahAuto: document.getElementById('jdlPecahAuto').checked });
@@ -9588,11 +9722,11 @@ window.VJSolver = (function () {
                             inner = list.map(e => {
                                 const kod = escapeHtml(kodSubjek[e.t[5]] || e.t[6]), lbl = e.t[9] ? ` <span class="font-medium opacity-70">${escapeHtml(e.t[9])}</span>` : '';
                                 if (n === 1) {
-                                    return `<div class="flex-1 min-h-0 rounded px-1 py-0.5 ${jdlWarna(e.t[5])} ${e.mula ? '' : 'opacity-70'} overflow-hidden">
+                                    return `<div class="flex-1 min-h-0 rounded px-1 py-0.5 ${jdlWarna(e.t[1])} ${e.mula ? '' : 'opacity-70'} overflow-hidden">
                                         <div class="font-bold text-[10px] leading-tight truncate">${kod}${lbl}</div>
                                         <div class="text-[9px] leading-tight truncate opacity-80">${escapeHtml(subDari(e))}</div></div>`;
                                 }
-                                return `<div class="flex-1 min-h-0 rounded-sm px-1 ${jdlWarna(e.t[5])} ${e.mula ? '' : 'opacity-70'} flex items-center gap-1 overflow-hidden whitespace-nowrap leading-none" style="font-size:${fon}px" title="${escapeHtml(kodSubjek[e.t[5]] || e.t[6])} ${escapeHtml(e.t[9] || '')} · ${escapeHtml(subDari(e))}"><span class="font-bold shrink-0">${kod}${lbl}</span><span class="opacity-80 truncate">${escapeHtml(subDari(e))}</span></div>`;
+                                return `<div class="flex-1 min-h-0 rounded-sm px-1 ${jdlWarna(e.t[1])} ${e.mula ? '' : 'opacity-70'} flex items-center gap-1 overflow-hidden whitespace-nowrap leading-none" style="font-size:${fon}px" title="${escapeHtml(kodSubjek[e.t[5]] || e.t[6])} ${escapeHtml(e.t[9] || '')} · ${escapeHtml(subDari(e))}"><span class="font-bold shrink-0">${kod}${lbl}</span><span class="opacity-80 truncate">${escapeHtml(subDari(e))}</span></div>`;
                             }).join('');
                             inner = `<div data-jdl="${d}-${p}" data-id="${escapeHtml(jdlSel)}" ${jdlMode !== 'bilik' ? 'draggable="true"' : ''} class="jdl-cell relative h-[44px] flex flex-col gap-px ${jdlMode !== 'bilik' ? 'cursor-grab active:cursor-grabbing' : ''} ${bentrok ? 'ring-2 ring-rose-500 rounded' : ''}" title="${jdlMode !== 'bilik' ? 'Klik untuk kunci / buka kunci' : ''}">${inner}${kunci ? '<span class="absolute -top-1 -right-1 text-[10px]">🔒</span>' : ''}</div>`;
                         } else if (lb) {
@@ -9626,7 +9760,7 @@ window.VJSolver = (function () {
                 const kod = [...new Set(T.ahliRows.map(r => r.kod + (r.label ? ' ' + r.label : '')))].join('/');
                 const siapa = jdlMode === 'guru' ? [...new Set(T.ahliRows.map(r => r.kelasNama))].join(', ') : [...new Set(T.ahliRows.map(r => r.kelasNama))].join(', ');
                 const tip = T.desc + (sebab[T.desc + '#' + T.len] ? '\n' + sebab[T.desc + '#' + T.len] : '');
-                return `<div draggable="true" data-k="${escapeHtml(T.ahli[0] + '#' + T.ke)}" data-ids="${escapeHtml(idBaris(T).join(','))}" class="jdl-chip ${jdlWarna(r0.subjek)} rounded-md px-1.5 py-0.5 text-[10px] font-bold cursor-grab active:cursor-grabbing border border-black/5 flex items-center gap-1" title="${escapeHtml(tip)}">${escapeHtml(kod)} <span class="font-medium opacity-70">${escapeHtml(siapa)}</span> <span class="text-[9px] px-1 rounded bg-white/70">${T.len}w</span></div>`;
+                return `<div draggable="true" data-k="${escapeHtml(T.ahli[0] + '#' + T.ke)}" data-ids="${escapeHtml(idBaris(T).join(','))}" class="jdl-chip ${jdlWarna(r0.guru)} rounded-md px-1.5 py-0.5 text-[10px] font-bold cursor-grab active:cursor-grabbing border border-black/5 flex items-center gap-1" title="${escapeHtml(tip)}">${escapeHtml(kod)} <span class="font-medium opacity-70">${escapeHtml(siapa)}</span> <span class="text-[9px] px-1 rounded bg-white/70">${T.len}w</span></div>`;
             }).join('') : '<span class="text-[11px] text-slate-400 py-1">Tiada — semua sesi telah diletak.</span>';
             lucide.createIcons();
         }
@@ -10772,7 +10906,7 @@ window.VJGanti = (function () {
                         ${x.calon.map(c => `<option value="${escapeHtml(c.id)}" ${c.id === x.ganti ? 'selected' : ''}>${escapeHtml(c.nama)} · ${c.minit} minit</option>`).join('')}</select>
                         ${x.calon.length ? '' : '<span class="block text-[10px] text-rose-600">Tiada guru lapang</span>'}`;
                 return `<tr><td class="px-3 py-2 whitespace-nowrap"><b>W${x.waktu + 1}</b> <span class="text-slate-500">${escapeHtml(x.mula)}–${escapeHtml(x.tamat)}</span></td>
-                    <td class="px-3 py-2">${escapeHtml(x.kelasNama)}</td><td class="px-3 py-2"><span class="px-1.5 py-0.5 rounded ${jdlWarna(x.subjek)} font-bold text-[10px]">${escapeHtml(x.subjekNama)}</span></td>
+                    <td class="px-3 py-2">${escapeHtml(x.kelasNama)}</td><td class="px-3 py-2"><span class="px-1.5 py-0.5 rounded ${jdlWarnaSubjek(x.subjek)} font-bold text-[10px]">${escapeHtml(x.subjekNama)}</span></td>
                     <td class="px-3 py-2">${escapeHtml(x.guruNama)}<span class="block text-[10px] text-slate-400">${escapeHtml(x.sebab)}</span></td><td class="px-3 py-2">${sel}</td></tr>`;
             }).join('');
         }

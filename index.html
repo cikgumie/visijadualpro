@@ -3414,6 +3414,9 @@ window.VJSampleData = function () {
                     <label class="flex items-center gap-1.5 text-[11px] font-semibold text-slate-600 mr-1" title="Agihan yang pecahannya sama dengan jumlah masa (cth 6) dipecah sama rata mengikut hari (cth 2,2,2)">
                         <input id="jdlPecahAuto" type="checkbox" checked class="w-3.5 h-3.5 accent-brand-600"> Pecah automatik agihan tanpa pecahan
                     </label>
+                    <label class="flex items-center gap-1.5 text-[11px] font-semibold text-slate-600 mr-1" title="Agihan berlabel huruf kumpulan yang sama (cth K1, K2, K3), bilangan waktu sama dan tingkatan sama diletak pada masa yang sama walaupun kelas berlainan">
+                        <input id="jdlSerentakHuruf" type="checkbox" checked class="w-3.5 h-3.5 accent-brand-600"> Kumpulan sama serentak
+                    </label>
                     <select id="jdlMasaHad" class="border border-slate-200 bg-white rounded-lg px-2 py-1.5 text-xs font-bold text-slate-700" title="Had masa mencari susunan">
                         <option value="10">10 saat</option>
                         <option value="30" selected>30 saat</option>
@@ -8596,6 +8599,29 @@ window.VJSolver = (function () {
                 if (a.huruf === b.huruf && a.masa === b.masa && a.kelas.some(k => b.kelas.includes(k))) par[cari(i)] = cari(j);
             }
         }
+        // Kumpulan huruf sama (cth K1/K2/K3, G1/G2) + masa sama + tingkatan sama => serentak walaupun kelas berlainan.
+        // Pasangan dilangkau jika guru yang sama akan berada dalam kumpulan itu (seorang guru tidak boleh mengajar dua kelas serentak).
+        if (opt.serentakHuruf) {
+            const tingK = {};
+            inp.kelas.forEach(k => { const n = parseInt(k[2]); if (n) tingK[k[0]] = n; });
+            const tingOf = r => new Set(r.kelas.map(k => tingK[k]).filter(Boolean));
+            const guruDalam = akar => { const g = new Set(); rows.forEach((r, x) => { if (r.guru && cari(x) === akar) g.add(r.guru); }); return g; };
+            for (let i = 0; i < rows.length; i++) {
+                const a = rows[i];
+                if (!a.huruf) continue;
+                for (let j = 0; j < i; j++) {
+                    const b = rows[j];
+                    if (a.huruf !== b.huruf || a.masa !== b.masa) continue;
+                    const ta = tingOf(a), tb = tingOf(b);
+                    if (![...ta].some(t => tb.has(t))) continue;
+                    const ri = cari(i), rj = cari(j);
+                    if (ri === rj) continue;
+                    const gi = guruDalam(ri), gj = guruDalam(rj);
+                    if ([...gi].some(g => gj.has(g))) continue;
+                    par[ri] = rj;
+                }
+            }
+        }
         // Hubungan "mesti serentak": satukan semua agihan yang dipilih
         const hub = (inp.hubungan || []).filter(h => h.aktif !== false);
         hub.forEach(h => {
@@ -9435,6 +9461,9 @@ window.VJSolver = (function () {
         // Adakah transaksi t melibatkan mana-mana kelas dipilih
         const jdlTrxDipilih = t => String(t[3]).split(',').some(k => jdlPilihan.has(k.trim()));
 
+        // Pilihan penyusunan dari kotak semak di bar atas
+        const jdlOptBina = () => ({ pecahAuto: document.getElementById('jdlPecahAuto').checked, serentakHuruf: document.getElementById('jdlSerentakHuruf').checked });
+
         const JDL_WARNA = ['bg-sky-100 text-sky-900', 'bg-emerald-100 text-emerald-900', 'bg-amber-100 text-amber-900', 'bg-violet-100 text-violet-900',
             'bg-rose-100 text-rose-900', 'bg-teal-100 text-teal-900', 'bg-orange-100 text-orange-900', 'bg-lime-100 text-lime-900',
             'bg-indigo-100 text-indigo-900', 'bg-pink-100 text-pink-900', 'bg-cyan-100 text-cyan-900', 'bg-fuchsia-100 text-fuchsia-900'];
@@ -9633,7 +9662,7 @@ window.VJSolver = (function () {
             jdlBinaWarna(inp.guru);
             const cfg = inp.slot;
             const H = cfg.hari.length, W = cfg.waktu.length;
-            const B = VJSolver.bina(inp, { pecahAuto: document.getElementById('jdlPecahAuto').checked });
+            const B = VJSolver.bina(inp, jdlOptBina());
             const jadual = VJStore.getJadual();
             const trx = {};
             inp.transaksi.forEach(t => { trx[String(t[8])] = t; });
@@ -9957,7 +9986,7 @@ window.VJSolver = (function () {
             let msMulaOpt = null;
             try {
                 const res = await jdlSusunSelari(inp, {
-                    pecahAuto: document.getElementById('jdlPecahAuto').checked,
+                    ...jdlOptBina(),
                     hadSaat: parseInt(document.getElementById('jdlMasaHad').value) || 30,
                     hadOptimumSaat: hadOpt,
                     teras: parseInt(document.getElementById('jdlTeras').value) || 1,
@@ -9978,7 +10007,7 @@ window.VJSolver = (function () {
                     const kekal = asal.filter(x => !trxDipilih.has(x.uuid));
                     VJStore.setJadual({ dijana: new Date().toISOString(), sesi: kekal.concat(baru) });
                     const perlu = new Set(), ada = new Set(baru.map(x => x.uuid + '#' + x.ke));
-                    VJSolver.bina(VJStore.getSolverInput(), { pecahAuto: document.getElementById('jdlPecahAuto').checked }).units
+                    VJSolver.bina(VJStore.getSolverInput(), jdlOptBina()).units
                         .forEach(u => { if (u.ahli.some(id => trxDipilih.has(id))) perlu.add(u); });
                     const muat = [...perlu].filter(u => u.ahli.every(id => ada.has(id + '#' + u.ke))).length;
                     jdlTidakMuat = res.tidakMuat;
@@ -10081,7 +10110,7 @@ window.VJSolver = (function () {
         // =====================================================================
         function jdlKonteks() {
             const inp = VJStore.getSolverInput();
-            const B = VJSolver.bina(inp, { pecahAuto: document.getElementById('jdlPecahAuto').checked });
+            const B = VJSolver.bina(inp, jdlOptBina());
             const unitOf = {};
             B.units.forEach((T, u) => T.ahli.forEach(id => { unitOf[id + '#' + T.ke] = u; }));
             const trx = {}; inp.transaksi.forEach(t => { trx[String(t[8])] = t; });
@@ -10660,6 +10689,7 @@ window.VJSolver = (function () {
         }
 
         document.getElementById('jdlPecahAuto').addEventListener('change', () => renderJadualView());
+        document.getElementById('jdlSerentakHuruf').addEventListener('change', () => renderJadualView());
     </script>
     <script>
 /**

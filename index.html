@@ -8600,12 +8600,14 @@ window.VJSolver = (function () {
             }
         }
         // Kumpulan huruf sama (cth K1/K2/K3, G1/G2) + masa sama + tingkatan sama => serentak walaupun kelas berlainan.
-        // Pasangan dilangkau jika guru yang sama akan berada dalam kumpulan itu (seorang guru tidak boleh mengajar dua kelas serentak).
+        // Guru yang sama dengan label & subjek yang sama dalam dua kelas = satu kumpulan gabungan (cth RBT K1 guru X di 1DN dan 1PR), dibenarkan.
+        // Pasangan dilangkau jika guru yang sama mengajar label/subjek berbeza dalam kumpulan itu (tidak boleh serentak).
         if (opt.serentakHuruf) {
             const tingK = {};
             inp.kelas.forEach(k => { const n = parseInt(k[2]); if (n) tingK[k[0]] = n; });
             const tingOf = r => new Set(r.kelas.map(k => tingK[k]).filter(Boolean));
-            const guruDalam = akar => { const g = new Set(); rows.forEach((r, x) => { if (r.guru && cari(x) === akar) g.add(r.guru); }); return g; };
+            const sigR = r => r.subjek + '|' + String(r.label).toUpperCase();
+            const guruDalam = akar => { const g = new Map(); rows.forEach((r, x) => { if (r.guru && cari(x) === akar) { if (!g.has(r.guru)) g.set(r.guru, new Set()); g.get(r.guru).add(sigR(r)); } }); return g; };
             for (let i = 0; i < rows.length; i++) {
                 const a = rows[i];
                 if (!a.huruf) continue;
@@ -8617,7 +8619,7 @@ window.VJSolver = (function () {
                     const ri = cari(i), rj = cari(j);
                     if (ri === rj) continue;
                     const gi = guruDalam(ri), gj = guruDalam(rj);
-                    if ([...gi].some(g => gj.has(g))) continue;
+                    if ([...gi.keys()].some(g => gj.has(g) && new Set([...gi.get(g), ...gj.get(g)]).size > 1)) continue;
                     par[ri] = rj;
                 }
             }
@@ -8654,7 +8656,9 @@ window.VJSolver = (function () {
             }
             const guruAll = ahli.map(r => r.guru).filter(Boolean);
             const guruSet = [...new Set(guruAll)];
-            if (guruSet.length < guruAll.length) {
+            const sigGuru = {};
+            ahli.forEach(r => { if (r.guru) (sigGuru[r.guru] = sigGuru[r.guru] || new Set()).add(r.subjek + '|' + String(r.label).toUpperCase()); });
+            if (Object.values(sigGuru).some(sg => sg.size > 1)) {
                 isu.push({ jenis: 'ralat', teks: `Guru yang sama mempunyai lebih daripada satu agihan dalam ${namaKump}. Semak label.` });
             }
             const pairs = [];
@@ -9610,7 +9614,7 @@ window.VJSolver = (function () {
                         let inner;
                         if (list.length) {
                             const kunci = list.some(e => e.x.kunci);
-                            const bentrok = !isKelas && new Set(list.map(e => e.kunci)).size > 1;
+                            const bentrok = !isKelas && new Set(list.map(e => (String(e.t[9] || '').trim() ? e.t[5] + '|' + e.t[9] : e.x.uuid + '#' + e.x.ke))).size > 1;
                             const tip = list.map(e => `${kodSubjek[e.t[5]] || e.t[6]}${e.t[9] ? ' ' + e.t[9] : ''} · ${isKelas ? (singGuru[e.t[1]] || e.t[2] || '-') : e.t[4]}${isBilik ? ' · ' + (singGuru[e.t[1]] || e.t[2] || '-') : (e.x.bilik && namaBilik[e.x.bilik] ? ' · Bilik ' + namaBilik[e.x.bilik] : '')}`).join('\n');
                             const tunjuk = list.slice(0, 3);
                             inner = tunjuk.map(e => {
@@ -9763,7 +9767,7 @@ window.VJSolver = (function () {
                         let inner;
                         if (list.length) {
                             const kunci = list.some(e => e.x.kunci);
-                            const bentrok = jdlMode !== 'kelas' && new Set(list.map(e => e.x.uuid + '#' + e.x.ke)).size > 1;
+                            const bentrok = jdlMode !== 'kelas' && new Set(list.map(e => (String(e.t[9] || '').trim() ? e.t[5] + '|' + e.t[9] : e.x.uuid + '#' + e.x.ke))).size > 1;
                             const namaB = {}; ((inp.bilik || {}).senarai || []).forEach(b => { namaB[b.id] = b.kod || b.nama; });
                             // Saiz petak tetap (44px). Satu sesi = penuh (kod + guru); beberapa kumpulan = dibahagi sama rata, satu baris setiap kumpulan.
                             const n = list.length;

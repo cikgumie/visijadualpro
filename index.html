@@ -315,7 +315,7 @@
             return row;
         });
         out.guru = rows(raw.guru, 4).map(r => [String(r[0]), String(r[1]), String(r[2]), parseInt(r[3]) || 0]);
-        out.kelas = rows(raw.kelas, 4).map(r => [String(r[0]), String(r[1]), r[2] === '' ? '' : (parseInt(r[2]) || r[2]), String(r[3])]);
+        out.kelas = rows(raw.kelas, 5).map(r => [String(r[0]), String(r[1]), r[2] === '' ? '' : (parseInt(r[2]) || r[2]), String(r[3]), parseInt(r[4]) > 0 ? parseInt(r[4]) : '']);
         out.subjek = rows(raw.subjek, 4).map(r => [String(r[0]), String(r[1]), String(r[2]), parseInt(r[3]) || 0]);
         out.transaksi = rows(raw.transaksi, 11).map(r => {
             r[7] = parseInt(r[7]) || 0;
@@ -676,9 +676,18 @@
     // =========================================================================
     const MASTER = {
         guru: { prefix: 'G', cols: 4 },
-        kelas: { prefix: 'K', cols: 4 },
+        kelas: { prefix: 'K', cols: 5 },
         subjek: { prefix: 'S', cols: 4 }
     };
+
+    // Susunan kelas: ikut No. Susunan (tetapan pengguna); kelas tanpa nombor di hujung, ikut tingkatan kemudian nama.
+    function cmpKelas(a, b) {
+        const na = parseInt(a[4]), nb = parseInt(b[4]);
+        const ha = na > 0, hb = nb > 0;
+        if (ha && hb && na !== nb) return na - nb;
+        if (ha !== hb) return ha ? -1 : 1;
+        return (parseInt(a[2]) || 99) - (parseInt(b[2]) || 99) || String(a[1]).localeCompare(String(b[1]), 'ms', { numeric: true });
+    }
 
     function nextId(table) {
         const prefix = MASTER[table].prefix;
@@ -734,8 +743,9 @@
         const seen = new Set();
         const clean = [];
         rows.forEach(r => {
-            const row = r.slice(0, 4).map(v => (typeof v === 'string' ? v.trim() : v));
-            while (row.length < 4) row.push('');
+            const nCol = MASTER[table].cols;
+            const row = r.slice(0, nCol).map(v => (typeof v === 'string' ? v.trim() : v));
+            while (row.length < nCol) row.push('');
             if (!String(row[1]).trim()) return; // nama wajib
             if (!String(row[0]).trim()) row[0] = '';
             clean.push(row);
@@ -780,7 +790,7 @@
             clean.forEach(r => { r[3] = parseInt(r[3]) || 0; });
             db.transaksi.forEach(t => { const s = clean.find(r => r[0] === String(t[5])); if (s) t[6] = s[1]; });
         } else if (table === 'kelas') {
-            clean.forEach(r => { r[2] = r[2] === '' ? '' : (parseInt(r[2]) || r[2]); });
+            clean.forEach(r => { r[2] = r[2] === '' ? '' : (parseInt(r[2]) || r[2]); r[4] = parseInt(r[4]) > 0 ? parseInt(r[4]) : ''; });
             const nameById = {};
             clean.forEach(r => { nameById[r[0]] = r[1]; });
             db.transaksi.forEach(t => {
@@ -792,6 +802,7 @@
             });
         }
 
+        if (table === 'kelas') clean.sort(cmpKelas); // simpan mengikut susunan tetap
         db[table] = clean;
         markDirty();
         return clean.length;
@@ -945,7 +956,7 @@
         buildZipBlob, markSaved, openZip, defaultZipName,
         loadDb, restoreAutosave, hasAutosave,
         newEmpty() { loadDb({ guru: [], kelas: [], subjek: [] }, { dirty: false }); },
-        getMaster, setMaster, nextId, usageCount,
+        getMaster, setMaster, nextId, usageCount, cmpKelas,
         isDirty: () => dirty,
         // Snapshot penuh data (untuk Redo); restore menggantikan data & menandakan perubahan
         snapshot() { return clone(db); },
@@ -1332,10 +1343,11 @@ window.VJSampleData = function () {
                 { label: 'ID', ro: true, w: 'w-16' },
                 { label: 'Nama Kelas', ph: 'cth: 1 ARIF', w: 'w-40' },
                 { label: 'Tingkatan', type: 'number', w: 'w-24' },
-                { label: 'Guru Kelas', list: 'diGuruNames' }
+                { label: 'Guru Kelas', list: 'diGuruNames' },
+                { label: 'No. Susunan', type: 'number', w: 'w-24', ph: 'cth: 1' }
             ],
-            pasteHelp: 'Nama Kelas [Tab] Tingkatan [Tab] Guru Kelas',
-            defaults: ['', '', 1, '']
+            pasteHelp: 'Nama Kelas [Tab] Tingkatan [Tab] Guru Kelas [Tab] No. Susunan',
+            defaults: ['', '', 1, '', '']
         },
         subjek: {
             title: 'Subjek', icon: 'book-open',
@@ -1439,7 +1451,9 @@ window.VJSampleData = function () {
     }
 
     function diAdd() {
-        diRows.push(DI_TABLES[diTable].defaults.slice());
+        const baru = DI_TABLES[diTable].defaults.slice();
+        if (diTable === 'kelas') baru[4] = diRows.reduce((m, r) => Math.max(m, parseInt(r[4]) || 0), 0) + 1;
+        diRows.push(baru);
         diDirty = true;
         $('diSearch').value = '';
         diRender();
@@ -1471,7 +1485,8 @@ window.VJSampleData = function () {
         text.split(/\r?\n/).forEach(line => {
             if (!line.trim()) return;
             const parts = line.split('\t').map(s => s.trim());
-            const row = ['', parts[0] || '', parts[1] !== undefined ? parts[1] : defaults[2], parts[2] !== undefined ? parts[2] : defaults[3]];
+            const row = ['', parts[0] || ''];
+            for (let i = 1; i < defaults.length - 1; i++) row.push(parts[i] !== undefined && parts[i] !== '' ? parts[i] : defaults[i + 1]);
             if (!row[1] || existing.has(row[1].toLowerCase())) { skipped++; return; }
             existing.add(row[1].toLowerCase());
             diRows.push(row);
@@ -1487,7 +1502,7 @@ window.VJSampleData = function () {
     // ---- Templat & muat naik Excel (.xlsx) untuk Guru, Kelas, Bilik, Subjek ----
     const DI_XLSX = {
         guru:   { sheet: 'Guru',   head: ['Nama Guru', 'Singkatan', 'Maks. Waktu'] },
-        kelas:  { sheet: 'Kelas',  head: ['Nama Kelas', 'Tingkatan', 'Guru Kelas'] },
+        kelas:  { sheet: 'Kelas',  head: ['Nama Kelas', 'Tingkatan', 'Guru Kelas', 'No. Susunan'] },
         bilik:  { sheet: 'Bilik',  head: ['Nama Bilik', 'Kod'] },
         subjek: { sheet: 'Subjek', head: ['Nama Subjek', 'Kod', 'Waktu/Minggu'] }
     };
@@ -1501,11 +1516,12 @@ window.VJSampleData = function () {
             ['1. Isi data pada sheet Guru, Kelas, Bilik dan Subjek (satu baris = satu rekod). Jangan ubah baris tajuk (baris 1).'],
             ['2. Hanya "Nama" yang wajib. Lajur lain boleh dikosongkan. ID dijana automatik.'],
             ['3. Sheet yang tidak diisi akan diabaikan. Nama yang sudah wujud dalam sistem akan dilangkau (tiada pendua).'],
+            ['   No. Susunan (Kelas) menentukan urutan kelas di semua paparan. Kosongkan jika tidak perlu (kelas tanpa nombor diletak di hujung).'],
             ['4. Simpan fail, kemudian klik "Muat Naik Excel" dalam Data Induk.'],
             [],
             ['Sheet', 'Lajur', 'Contoh'],
             ['Guru', 'Nama Guru | Singkatan | Maks. Waktu', 'AHMAD BIN ALI | AHMAD | 35'],
-            ['Kelas', 'Nama Kelas | Tingkatan | Guru Kelas', '1 ARIF | 1 | AHMAD BIN ALI'],
+            ['Kelas', 'Nama Kelas | Tingkatan | Guru Kelas | No. Susunan', '1 ARIF | 1 | AHMAD BIN ALI | 1'],
             ['Bilik', 'Nama Bilik | Kod', 'Makmal Sains 1 | MS1'],
             ['Subjek', 'Nama Subjek | Kod | Waktu/Minggu', 'Bahasa Melayu | BM | 7']
         ];
@@ -1552,7 +1568,9 @@ window.VJSampleData = function () {
                     if (seen.has(nama.toLowerCase())) { skipped++; return; }
                     seen.add(nama.toLowerCase());
                     const v = i => (p[i] === undefined || String(p[i]).trim() === '' ? defaults[i + 1] : (typeof p[i] === 'string' ? p[i].trim() : p[i]));
-                    rows.push(['', nama, v(1), v(2)]);
+                    const extra = [];
+                    for (let i = 1; i < defaults.length - 1; i++) extra.push(v(i));
+                    rows.push(['', nama, ...extra]);
                     added++;
                 });
                 staged[t] = rows;
@@ -5793,12 +5811,7 @@ window.VJSampleData = function () {
             thead.innerHTML = '';
 
             let subjects = dbData.subjek;
-            let sortedClasses = [...dbData.kelas].sort((a, b) => {
-                let tingA = parseInt(a[2]) || 99;
-                let tingB = parseInt(b[2]) || 99;
-                if (tingA !== tingB) return tingA - tingB;
-                return String(a[1]).localeCompare(String(b[1]));
-            });
+            let sortedClasses = [...dbData.kelas].sort(VJStore.cmpKelas);
 
             sortedClassesCache = sortedClasses;
 
@@ -5994,7 +6007,8 @@ window.VJSampleData = function () {
                 });
             });
 
-            let classKeys = Object.keys(classMap).sort();
+            const kelasRank = kelasRankMap();
+            let classKeys = Object.keys(classMap).sort((a, b) => (kelasRank[a] ?? 1e9) - (kelasRank[b] ?? 1e9) || a.localeCompare(b));
             if (currentSearchQuery) {
                 classKeys = classKeys.filter(k => k.toLowerCase().includes(currentSearchQuery));
             }
@@ -6807,7 +6821,8 @@ window.VJSampleData = function () {
                     });
                 });
             });
-            dataKelas.sort((a, b) => a.Kelas.localeCompare(b.Kelas));
+            const kRank = kelasRankMap();
+            dataKelas.sort((a, b) => (kRank[a.Kelas] ?? 1e9) - (kRank[b.Kelas] ?? 1e9) || a.Kelas.localeCompare(b.Kelas));
 
             // 3. Analisis Subjek
             let dataSubjek = [];
@@ -8025,9 +8040,15 @@ window.VJSampleData = function () {
             return SLOT_WARNA[(l && l.warna) || 'slate'] || SLOT_WARNA.slate;
         }
 
+        // Nama kelas -> kedudukan mengikut No. Susunan
+        function kelasRankMap() {
+            const m = {};
+            dbData.kelas.slice().sort(VJStore.cmpKelas).forEach((k, i) => { m[k[1]] = i; });
+            return m;
+        }
+
         function slotSortedKelas() {
-            return dbData.kelas.slice().sort((a, b) =>
-                (parseInt(a[2]) || 0) - (parseInt(b[2]) || 0) || String(a[1]).localeCompare(String(b[1]), 'ms', { numeric: true }));
+            return dbData.kelas.slice().sort(VJStore.cmpKelas);
         }
 
         function slotSortedGuru() {
@@ -9639,7 +9660,7 @@ window.VJSolver = (function () {
                 ? ((inp.bilik || {}).senarai || []).map(b => [b.id, b.kod ? `${b.nama} (${b.kod})` : b.nama])
                 : jdlMode === 'guru'
                 ? inp.guru.slice().sort((a, b) => String(a[1]).localeCompare(String(b[1]), 'ms'))
-                : inp.kelas.slice().sort((a, b) => (parseInt(a[2]) || 0) - (parseInt(b[2]) || 0) || String(a[1]).localeCompare(String(b[1]), 'ms', { numeric: true }));
+                : inp.kelas.slice().sort(VJStore.cmpKelas);
             if (!items.some(x => x[0] === jdlSel)) jdlSel = null;
             // Buang pilihan kelas yang sudah tiada
             const idKelas = new Set(inp.kelas.map(k => k[0]));

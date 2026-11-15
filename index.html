@@ -10263,10 +10263,22 @@ window.VJSolver = (function () {
         }
 
         async function jdlUjianData(inp, B) {
-            const ralat = B.isu.filter(i => i.jenis === 'ralat'), amaran = B.isu.filter(i => i.jenis !== 'ralat');
+            // Skop kelas dipilih: hanya isu yang menyebut kelas dipilih (isu tanpa nama kelas = umum, kekal)
+            const skop = jdlUjianSkop(B);
+            let isu = B.isu, tersembunyi = 0;
+            if (skop) {
+                const sebut = nama => ({ test: t => { const al = c => /[A-Za-z0-9]/.test(c || ''); let i = t.indexOf(nama); while (i >= 0) { if (!al(t[i - 1]) && !al(t[i + nama.length])) return true; i = t.indexOf(nama, i + 1); } return false; } });
+                const semua = B.kelas.map(k => ({ i: k.id, re: sebut(k.nama), dipilih: jdlPilihan.has(k.id) }));
+                isu = B.isu.filter(x => {
+                    const kena = semua.filter(c => c.re.test(x.teks));
+                    return !kena.length || kena.some(c => c.dipilih);
+                });
+                tersembunyi = B.isu.length - isu.length;
+            }
+            const ralat = isu.filter(i => i.jenis === 'ralat'), amaran = isu.filter(i => i.jenis !== 'ralat');
             const status = ralat.length ? 'gagal' : amaran.length ? 'amaran' : 'ok';
-            const senarai = B.isu.map(i => `<li class="${i.jenis === 'ralat' ? 'text-rose-700' : 'text-amber-700'}">${i.jenis === 'ralat' ? '✖' : '⚠'} ${escapeHtml(i.teks)}</li>`).join('');
-            return { status, html: `<p class="text-[11px] text-slate-600 mt-2">${B.units.length} sesi (unit) daripada ${B.rows.length} agihan · ${B.kelas.length} kelas · ${B.guru.length} guru · ${B.bilik.length} bilik · ${ralat.length} ralat, ${amaran.length} amaran.</p>${senarai ? `<ul class="mt-1 space-y-0.5 text-[11px] list-none max-h-40 overflow-auto">${senarai}</ul>` : ''}` };
+            const senarai = isu.map(i => `<li class="${i.jenis === 'ralat' ? 'text-rose-700' : 'text-amber-700'}">${i.jenis === 'ralat' ? '✖' : '⚠'} ${escapeHtml(i.teks)}</li>`).join('');
+            return { status, html: `<p class="text-[11px] text-slate-600 mt-2">${B.units.length} sesi (unit) daripada ${B.rows.length} agihan · ${B.kelas.length} kelas · ${B.guru.length} guru · ${B.bilik.length} bilik · ${ralat.length} ralat, ${amaran.length} amaran.${tersembunyi ? ` (${tersembunyi} isu kelas tidak dipilih disembunyikan)` : ''}</p>${senarai ? `<ul class="mt-1 space-y-0.5 text-[11px] list-none max-h-40 overflow-auto">${senarai}</ul>` : ''}` };
         }
 
         async function jdlUjianKelas(inp, B) {

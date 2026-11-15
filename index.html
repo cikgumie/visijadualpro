@@ -3458,10 +3458,31 @@ window.VJSampleData = function () {
                     <button onclick="jdlKosongkan()" class="px-3 py-1.5 border border-rose-200 bg-rose-50 hover:bg-rose-100 rounded-lg text-xs font-bold text-rose-700 flex items-center gap-1.5">
                         <i data-lucide="eraser" class="w-3.5 h-3.5"></i> Kosongkan
                     </button>
+                    <button onclick="jdlUjianBuka()" class="px-3 py-1.5 border border-amber-300 bg-amber-50 hover:bg-amber-100 rounded-lg text-xs font-bold text-amber-800 flex items-center gap-1.5" title="Semak & cuba susun tanpa mengubah jadual">
+                        <i data-lucide="flask-conical" class="w-3.5 h-3.5"></i> Mod Ujian
+                    </button>
                     <button id="jdlBtnSusun" onclick="jdlSusun()" class="px-3.5 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-xs font-bold shadow flex items-center gap-1.5">
                         <i data-lucide="wand-sparkles" class="w-3.5 h-3.5"></i> <span id="jdlBtnSusunTeks">Susun Automatik</span>
                     </button>
                 </div>
+            </div>
+
+            <!-- Mod Ujian (dry-run, tidak mengubah jadual) -->
+            <div id="jdlUjianPanel" class="hidden fixed inset-0 z-[60] bg-slate-900/50 items-center justify-center p-4 no-print" role="dialog" aria-modal="true" onclick="if (event.target === this) jdlUjianTutup()">
+              <div class="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[92vh] overflow-auto">
+                <div class="flex items-center justify-between gap-2 px-5 py-3.5 border-b border-slate-200 sticky top-0 bg-white z-10">
+                    <h4 class="font-heading font-bold text-sm text-slate-800 flex items-center gap-2"><i data-lucide="flask-conical" class="w-4 h-4 text-amber-600"></i> Mod Ujian — semak sebelum Susun Automatik penuh</h4>
+                    <div class="flex items-center gap-2">
+                        <button id="jdlUjianSemuaBtn" onclick="jdlUjianSemua()" class="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-slate-950 rounded-lg text-xs font-extrabold">Jalankan Semua (satu persatu)</button>
+                        <button onclick="jdlUjianTutup()" class="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500" title="Tutup"><i data-lucide="x" class="w-4 h-4"></i></button>
+                    </div>
+                </div>
+                <div class="p-5 space-y-3 bg-amber-50/30">
+                    <p class="text-[11px] text-slate-500">Ujian ini hanya menyemak dan mencuba. <b>Jadual sedia ada tidak diubah atau disimpan.</b> Jalankan setiap langkah satu persatu, atau tekan "Jalankan Semua".</p>
+                    <div id="jdlUjianBanner" class="hidden rounded-xl px-3 py-2 text-xs font-bold"></div>
+                    <div id="jdlUjianLangkah" class="space-y-2"></div>
+                </div>
+              </div>
             </div>
 
             <!-- Hubungan antara sesi -->
@@ -10123,6 +10144,190 @@ window.VJSolver = (function () {
             e.preventDefault(); e.stopImmediatePropagation();
         }, true);
         window.addEventListener('beforeunload', e => { if (jdlSedang) { e.preventDefault(); e.returnValue = ''; } });
+
+        // =====================================================================
+        // MOD UJIAN: semak data -> kelas -> guru -> bilik -> jana percubaan (tiada perubahan pada jadual)
+        // =====================================================================
+        const JDL_UJIAN_LANGKAH = [
+            { id: 'data', nama: '1. Semakan data & peraturan', info: 'Pecahan waktu, kumpulan serentak, hubungan' },
+            { id: 'kelas', nama: '2. Ujian Kelas', info: 'Beban waktu setiap kelas vs slot boleh isi' },
+            { id: 'guru', nama: '3. Ujian Guru', info: 'Beban (logik kumpulan serentak) vs slot boleh mengajar & had maksimum' },
+            { id: 'bilik', nama: '4. Ujian Bilik', info: 'Permintaan bilik khas vs slot seminggu' },
+            { id: 'jana', nama: '5. Jana percubaan (10 saat, tidak disimpan)', info: 'Cuba susun sebenar, kemudian laporan ikut kelas, guru & bilik' }
+        ];
+        const jdlUjian = { hasil: {}, sedang: false, isyarat: null, B: null };
+
+        function jdlUjianBuka() {
+            const p = document.getElementById('jdlUjianPanel');
+            p.classList.remove('hidden'); p.classList.add('flex');
+            jdlUjian.hasil = {};
+            jdlUjianRender();
+        }
+        function jdlUjianTutup() {
+            if (jdlUjian.sedang && jdlUjian.isyarat) jdlUjian.isyarat.batal = true;
+            const p = document.getElementById('jdlUjianPanel');
+            p.classList.add('hidden'); p.classList.remove('flex');
+        }
+
+        function jdlUjianJadual(tajuk, kepala, baris) {
+            const warna = { gagal: 'text-rose-700 bg-rose-50', amaran: 'text-amber-700 bg-amber-50', ok: 'text-emerald-700' };
+            const ikon = { gagal: '✖', amaran: '⚠', ok: '✔' };
+            return `<div class="mt-2"><p class="text-[11px] font-bold text-slate-600 mb-1">${escapeHtml(tajuk)}</p>
+                <div class="max-h-56 overflow-auto border border-slate-200 rounded-lg bg-white"><table class="w-full text-[11px]">
+                <thead class="bg-slate-50 sticky top-0"><tr>${kepala.map(k => `<th class="text-left px-2 py-1 font-bold text-slate-600">${escapeHtml(k)}</th>`).join('')}<th class="px-2 py-1"></th></tr></thead>
+                <tbody>${baris.map(b => `<tr class="border-t border-slate-100 ${warna[b.status] || ''}">${b.sel.map(c => `<td class="px-2 py-1">${escapeHtml(String(c))}</td>`).join('')}<td class="px-2 py-1 text-right font-bold">${ikon[b.status]}${b.catatan ? ' ' + escapeHtml(b.catatan) : ''}</td></tr>`).join('')}</tbody></table></div></div>`;
+        }
+
+        function jdlUjianRender() {
+            const wrap = document.getElementById('jdlUjianLangkah');
+            wrap.innerHTML = JDL_UJIAN_LANGKAH.map(l => {
+                const h = jdlUjian.hasil[l.id];
+                const lencana = !h ? '<span class="text-[10px] font-bold text-slate-400">belum dijalankan</span>'
+                    : h.status === 'gagal' ? '<span class="text-[10px] font-bold text-rose-600">✖ ada masalah</span>'
+                    : h.status === 'amaran' ? '<span class="text-[10px] font-bold text-amber-600">⚠ amaran</span>'
+                    : '<span class="text-[10px] font-bold text-emerald-600">✔ lulus</span>';
+                return `<div class="bg-white border border-slate-200 rounded-xl p-3">
+                    <div class="flex items-center justify-between gap-2 flex-wrap">
+                        <div><p class="text-xs font-bold text-slate-800">${l.nama}</p><p class="text-[10px] text-slate-500">${l.info}</p></div>
+                        <div class="flex items-center gap-2">${lencana}
+                            <button ${jdlUjian.sedang ? 'disabled' : ''} onclick="jdlUjianJalan('${l.id}')" class="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-slate-800 text-white hover:bg-slate-900 disabled:opacity-50">Jalankan</button></div>
+                    </div>
+                    <div id="jdlUj_${l.id}">${h ? h.html : ''}</div></div>`;
+            }).join('');
+            const ada = Object.values(jdlUjian.hasil);
+            const banner = document.getElementById('jdlUjianBanner');
+            if (!ada.length) { banner.classList.add('hidden'); return; }
+            banner.classList.remove('hidden');
+            const gagal = ada.some(h => h.status === 'gagal'), amaran = ada.some(h => h.status === 'amaran');
+            const lengkap = JDL_UJIAN_LANGKAH.every(l => jdlUjian.hasil[l.id]);
+            banner.className = 'rounded-xl px-3 py-2 text-xs font-bold ' + (gagal ? 'bg-rose-100 text-rose-800' : amaran ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800');
+            banner.textContent = gagal ? 'Ada masalah yang perlu dibetulkan sebelum Susun Automatik penuh.'
+                : (lengkap ? (amaran ? 'Boleh teruskan Susun Automatik penuh (ada amaran).' : 'Semua ujian lulus — sedia untuk Susun Automatik penuh.') : 'Setakat ini tiada masalah. Teruskan langkah seterusnya.');
+        }
+
+        function jdlUjianSiap() {
+            const inp = VJStore.getSolverInput();
+            if (!inp.transaksi.length) throw new Error('Tiada agihan untuk diuji.');
+            const B = VJSolver.bina(inp, jdlOptBina());
+            return { inp, B };
+        }
+
+        async function jdlUjianJalan(id) {
+            if (jdlUjian.sedang) return;
+            jdlUjian.sedang = true;
+            jdlUjianRender();
+            try {
+                const { inp, B } = jdlUjianSiap();
+                jdlUjian.B = B;
+                const fn = { data: jdlUjianData, kelas: jdlUjianKelas, guru: jdlUjianGuru, bilik: jdlUjianBilik, jana: jdlUjianJana }[id];
+                const el = () => document.getElementById('jdlUj_' + id);
+                if (id === 'jana') { jdlUjian.hasil[id] = null; jdlUjianRender(); }
+                jdlUjian.hasil[id] = await fn(inp, B, t => { const e = el(); if (e) e.innerHTML = `<p class="text-[11px] text-slate-500 mt-2">${escapeHtml(t)}</p>`; });
+            } catch (e) {
+                console.error(e);
+                jdlUjian.hasil[id] = { status: 'gagal', html: `<p class="text-[11px] text-rose-700 mt-2">Ralat: ${escapeHtml(e.message)}</p>` };
+            } finally {
+                jdlUjian.sedang = false;
+                jdlUjianRender();
+            }
+        }
+
+        async function jdlUjianSemua() {
+            for (const l of JDL_UJIAN_LANGKAH) {
+                if (document.getElementById('jdlUjianPanel').classList.contains('hidden')) return;
+                await jdlUjianJalan(l.id);
+                await new Promise(r => setTimeout(r, 300));
+            }
+        }
+
+        function jdlUjianBeban(B) {
+            const K = new Array(B.kelas.length).fill(0), G = new Array(B.guru.length).fill(0);
+            B.units.forEach(u => { u.kelas.forEach(k => { K[k] += u.len; }); u.guru.forEach(g => { G[g] += u.len; }); });
+            return { K, G };
+        }
+
+        async function jdlUjianData(inp, B) {
+            const ralat = B.isu.filter(i => i.jenis === 'ralat'), amaran = B.isu.filter(i => i.jenis !== 'ralat');
+            const status = ralat.length ? 'gagal' : amaran.length ? 'amaran' : 'ok';
+            const senarai = B.isu.map(i => `<li class="${i.jenis === 'ralat' ? 'text-rose-700' : 'text-amber-700'}">${i.jenis === 'ralat' ? '✖' : '⚠'} ${escapeHtml(i.teks)}</li>`).join('');
+            return { status, html: `<p class="text-[11px] text-slate-600 mt-2">${B.units.length} sesi (unit) daripada ${B.rows.length} agihan · ${B.kelas.length} kelas · ${B.guru.length} guru · ${B.bilik.length} bilik · ${ralat.length} ralat, ${amaran.length} amaran.</p>${senarai ? `<ul class="mt-1 space-y-0.5 text-[11px] list-none max-h-40 overflow-auto">${senarai}</ul>` : ''}` };
+        }
+
+        async function jdlUjianKelas(inp, B) {
+            const { K } = jdlUjianBeban(B);
+            const baris = B.kelas.map((k, i) => {
+                const boleh = B.N - B.blokK[i].reduce((a, b) => a + b, 0);
+                const status = K[i] > boleh ? 'gagal' : (K[i] === 0 ? 'amaran' : 'ok');
+                return { sel: [k.nama, K[i], boleh], status, catatan: K[i] > boleh ? `lebih ${K[i] - boleh}` : (K[i] === 0 ? 'tiada agihan' : `baki ${boleh - K[i]}`) };
+            });
+            const st = baris.some(b => b.status === 'gagal') ? 'gagal' : baris.some(b => b.status === 'amaran') ? 'amaran' : 'ok';
+            return { status: st, html: jdlUjianJadual('Setiap kelas (waktu perlu vs slot boleh isi)', ['Kelas', 'Perlu', 'Boleh isi'], baris) };
+        }
+
+        async function jdlUjianGuru(inp, B) {
+            const { G } = jdlUjianBeban(B);
+            const maks = {}; inp.guru.forEach(g => { maks[g[0]] = parseInt(g[3]) || 0; });
+            const baris = B.guru.map((g, i) => {
+                const boleh = B.N - B.blokG[i].reduce((a, b) => a + b, 0);
+                const had = maks[g.id] || 0;
+                let status = 'ok', catatan = `baki ${boleh - G[i]}`;
+                if (G[i] > boleh) { status = 'gagal'; catatan = `lebih ${G[i] - boleh} slot`; }
+                else if (had && G[i] > had) { status = 'amaran'; catatan = `melebihi had ${had}`; }
+                else if (G[i] === 0) { status = 'amaran'; catatan = 'tiada agihan'; }
+                return { sel: [g.nama, G[i], boleh, had || '-'], status, catatan };
+            });
+            const st = baris.some(b => b.status === 'gagal') ? 'gagal' : baris.some(b => b.status === 'amaran') ? 'amaran' : 'ok';
+            return { status: st, html: jdlUjianJadual('Setiap guru (beban ikut kumpulan serentak)', ['Guru', 'Beban', 'Boleh mengajar', 'Had'], baris) };
+        }
+
+        async function jdlUjianBilik(inp, B) {
+            if (!B.bilik.length) return { status: 'ok', html: '<p class="text-[11px] text-slate-500 mt-2">Tiada bilik khas ditetapkan.</p>' };
+            const tunggal = B.bilik.map(() => 0), kongsi = B.bilik.map(() => 0);
+            B.units.forEach(T => (T.bilikReq || []).forEach(q => {
+                if (q.cand.length === 1) tunggal[q.cand[0]] += T.len;
+                else q.cand.forEach(c => { kongsi[c] += T.len; });
+            }));
+            const baris = B.bilik.map((b, i) => {
+                const gagal = tunggal[i] > B.N;
+                return { sel: [b.nama, tunggal[i], kongsi[i], B.N], status: gagal ? 'gagal' : 'ok', catatan: gagal ? `lebih ${tunggal[i] - B.N}` : '' };
+            });
+            const st = baris.some(b => b.status === 'gagal') ? 'gagal' : 'ok';
+            return { status: st, html: jdlUjianJadual('Setiap bilik (waktu wajib / boleh dikongsi vs slot seminggu)', ['Bilik', 'Wajib bilik ini', 'Boleh pilih', 'Slot'], baris) };
+        }
+
+        async function jdlUjianJana(inp, B, lapor) {
+            const isyarat = { batal: false };
+            jdlUjian.isyarat = isyarat;
+            lapor('Mencuba menyusun…');
+            const res = await jdlSusunSelari(inp, Object.assign({}, jdlOptBina(), { hadSaat: 10, hadOptimumSaat: 0, teras: 1, isyarat }),
+                st => lapor(`${st.terbaik} / ${st.jumlah} sesi diletak · ${(st.ms / 1000).toFixed(1)} s`));
+            jdlUjian.isyarat = null;
+            if (res.batal) return { status: 'amaran', html: '<p class="text-[11px] text-amber-700 mt-2">Ujian dibatalkan.</p>' };
+            const ada = new Set(res.sesi.map(x => x.uuid + '#' + x.ke));
+            const kelasP = B.kelas.map(() => [0, 0]), guruP = B.guru.map(() => [0, 0]);
+            let diletak = 0;
+            B.units.forEach(u => {
+                const ok = u.ahli.every(id => ada.has(id + '#' + u.ke));
+                if (ok) diletak++;
+                u.kelas.forEach(k => { kelasP[k][0] += u.len; if (ok) kelasP[k][1] += u.len; });
+                u.guru.forEach(g => { guruP[g][0] += u.len; if (ok) guruP[g][1] += u.len; });
+            });
+            const mk = (arr, senarai) => senarai.map((o, i) => ({ o, p: arr[i] })).filter(x => x.p[0] > 0)
+                .map(x => ({ sel: [x.o.nama, x.p[0], x.p[1]], status: x.p[1] < x.p[0] ? 'gagal' : 'ok', catatan: x.p[1] < x.p[0] ? `kurang ${x.p[0] - x.p[1]}` : '' }));
+            const bilikGuna = {};
+            res.sesi.forEach(x => { if (x.bilik) bilikGuna[x.bilik] = (bilikGuna[x.bilik] || 0) + (x.panjang || 1); });
+            const barisBilik = B.bilik.map(b => ({ sel: [b.nama, bilikGuna[b.id] || 0, B.N], status: 'ok', catatan: '' }));
+            const bK = mk(kelasP, B.kelas), bG = mk(guruP, B.guru);
+            const gagal = diletak < B.units.length;
+            const tm = (res.tidakMuat || []).slice(0, 15).map(t => `<li>✖ ${escapeHtml(t.desc)} (${t.len}w) — ${escapeHtml(t.sebab)}</li>`).join('');
+            const html = `<p class="text-[11px] mt-2 ${gagal ? 'text-rose-700' : 'text-emerald-700'} font-bold">${diletak} / ${B.units.length} sesi berjaya diletak (${((res.stat.ms || 0) / 1000).toFixed(1)} s).</p>`
+                + (gagal ? '<p class="text-[11px] text-amber-700 mt-1">Belum tentu mustahil: penyusun hanya mencari dalam 10 saat. Cuba naikkan had masa / bilangan teras, longgarkan Hubungan, atau semak sebab di bawah dan jalankan semula.</p>' : '')
+                + (tm ? `<ul class="mt-1 text-[11px] text-rose-700 space-y-0.5 list-none max-h-32 overflow-auto">${tm}</ul>` : '')
+                + jdlUjianJadual('Jana — kelas (perlu vs diletak)', ['Kelas', 'Perlu', 'Diletak'], bK)
+                + jdlUjianJadual('Jana — guru (perlu vs diletak)', ['Guru', 'Perlu', 'Diletak'], bG)
+                + (B.bilik.length ? jdlUjianJadual('Jana — bilik (slot digunakan)', ['Bilik', 'Digunakan', 'Slot'], barisBilik) : '');
+            return { status: gagal ? 'gagal' : 'ok', html };
+        }
 
         function jdlKosongkan() {
             if (!isEditMode) { ensureEditMode(() => jdlKosongkan()); return; }

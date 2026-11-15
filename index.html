@@ -1982,7 +1982,10 @@ window.VJSampleData = function () {
         .matrix-link-tag { display: block; font-size: 9px; line-height: 1; font-weight: 700; color: #7C3AED; margin-top: 1px; }
         /* Sel dibahagi kepada beberapa kumpulan (lebih daripada satu guru dalam satu kelas) */
         .grid-table td.matrix-cell-split { padding: 3px 3px; }
-        .matrix-split { display: flex; align-items: stretch; min-height: 32px; border-radius: 5px; overflow: hidden; }
+        /* Tinggi baris matriks seragam (sel biasa, kosong & bahagi) */
+        #matrixBody > tr > td { height: 48px; box-sizing: border-box; vertical-align: middle; }
+        #matrixBody > tr > td.matrix-cell-split { padding: 2px 3px; }
+        .matrix-split { display: flex; align-items: stretch; height: 40px; border-radius: 5px; overflow: hidden; }
         .matrix-seg { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 1px 3px; line-height: 1.05; background: color-mix(in srgb, var(--seg) 13%, white); border-bottom: 3px solid var(--seg); }
         .matrix-seg + .matrix-seg { border-left: 1.5px dashed #94A3B8; }
         .matrix-seg b { font-size: 12px; font-weight: 800; color: #1E293B; }
@@ -3102,7 +3105,7 @@ window.VJSampleData = function () {
                             </span>
                         </div>
                         <div class="relative">
-                            <input type="text" id="matrixBarPecahanInput" oninput="onMatrixBarPecahanInput(event)" placeholder="Cth: 2,3,3 atau 2,2,2 atau 6" class="w-full text-xs font-bold bg-white text-slate-800 rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-brand-400 border border-transparent shadow-sm font-mono placeholder:font-sans placeholder:text-slate-400">
+                            <input type="text" id="matrixBarPecahanInput" oninput="onMatrixBarPecahanInput(event)" onchange="stageMatrixBarPecahan()" onkeydown="if(event.key==='Enter'){event.preventDefault();stageMatrixBarPecahan(true);}" placeholder="Cth: 2,3,3 atau 2,2,2 atau 6" class="w-full text-xs font-bold bg-white text-slate-800 rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-brand-400 border border-transparent shadow-sm font-mono placeholder:font-sans placeholder:text-slate-400">
                         </div>
                     </div>
 
@@ -5083,7 +5086,11 @@ window.VJSampleData = function () {
 
             highlightMatrixCells();
             updateMatrixActionBar();
-            if (plainClick) startMatrixInlineEdit(clickedTd);
+            // Edit pembahagian waktu dibuat di Panel Pengisian Matriks (atas), bukan dalam sel
+            if (plainClick && isEditMode) {
+                const pin = document.getElementById('matrixBarPecahanInput');
+                if (pin && !pin.disabled) { try { pin.focus({ preventScroll: true }); pin.select(); } catch (e) {} }
+            }
         }
 
         // ---------------------------------------------------------------------
@@ -5188,6 +5195,34 @@ window.VJSampleData = function () {
                 const other = document.querySelector(`.matrix-cell[data-class-name="${cn}"][data-subjek-id="${sid}"]`);
                 if (other && other !== td) refreshMatrixCell(other);
             });
+        }
+
+        // Tukar waktu dari Panel Pengisian: dikumpul (belum simpan) sehingga "Simpan Semua Perubahan"
+        function stageMatrixBarPecahan(moveNext) {
+            if (!isEditMode || !selectedMatrixSubjectId || selectedMatrixClasses.length === 0) return;
+            const gVal = document.getElementById('matrixBarGuruSelect').value;
+            if (gVal !== '' && gVal !== '__KEEP__') return; // tukar guru: guna butang Simpan panel
+            const raw = document.getElementById('matrixBarPecahanInput').value.trim();
+            if (raw === '' || parseMasaBreakdown(raw).total <= 0) return;
+            const sid = selectedMatrixSubjectId;
+            let staged = 0;
+            selectedMatrixClasses.forEach(cn => {
+                const allocs = (matrix[cn] && matrix[cn][sid]) || [];
+                if (allocs.length !== 1) return;
+                const td = document.querySelector(`.matrix-cell[data-class-name="${cn}"][data-subjek-id="${sid}"]`);
+                if (!td) return;
+                commitMatrixInlineEdit(td, allocs[0], raw);
+                refreshMatrixCell(td);
+                staged++;
+            });
+            if (!staged) return;
+            updateMatrixPendingBar();
+            if (moveNext && selectedMatrixClasses.length === 1) {
+                const td = document.querySelector(`.matrix-cell[data-class-name="${selectedMatrixClasses[0]}"][data-subjek-id="${sid}"]`);
+                const nextRow = td && td.parentElement.nextElementSibling;
+                const next = nextRow ? nextRow.children[td.cellIndex] : null;
+                if (next && next.classList.contains('matrix-cell')) next.click();
+            }
         }
 
         function discardMatrixPending() {

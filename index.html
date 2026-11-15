@@ -3459,6 +3459,9 @@ window.VJSampleData = function () {
                     <button onclick="jdlKosongkan()" class="px-3 py-1.5 border border-rose-200 bg-rose-50 hover:bg-rose-100 rounded-lg text-xs font-bold text-rose-700 flex items-center gap-1.5">
                         <i data-lucide="eraser" class="w-3.5 h-3.5"></i> Kosongkan
                     </button>
+                    <button onclick="jdlRumusanBuka(false)" class="px-3 py-1.5 border border-slate-200 bg-white hover:bg-slate-100 rounded-lg text-xs font-bold text-slate-700 flex items-center gap-1.5" title="Rumusan kualiti jadual: sesi tidak muat, hubungan, lompong, beban guru">
+                        <i data-lucide="clipboard-check" class="w-3.5 h-3.5"></i> Rumusan
+                    </button>
                     <button onclick="jdlUjianBuka()" class="px-3 py-1.5 border border-amber-300 bg-amber-50 hover:bg-amber-100 rounded-lg text-xs font-bold text-amber-800 flex items-center gap-1.5" title="Semak & cuba susun tanpa mengubah jadual">
                         <i data-lucide="flask-conical" class="w-3.5 h-3.5"></i> Mod Ujian
                     </button>
@@ -3466,6 +3469,17 @@ window.VJSampleData = function () {
                         <i data-lucide="wand-sparkles" class="w-3.5 h-3.5"></i> <span id="jdlBtnSusunTeks">Susun Automatik</span>
                     </button>
                 </div>
+            </div>
+
+            <!-- Rumusan jadual -->
+            <div id="jdlRumusanPanel" class="hidden fixed inset-0 z-[60] bg-slate-900/50 items-center justify-center p-4 no-print" role="dialog" aria-modal="true" onclick="if (event.target === this) jdlRumusanTutup()">
+              <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[92vh] overflow-auto">
+                <div class="flex items-center justify-between gap-2 px-5 py-3.5 border-b border-slate-200 sticky top-0 bg-white z-10">
+                    <h4 class="font-heading font-bold text-sm text-slate-800 flex items-center gap-2"><i data-lucide="clipboard-check" class="w-4 h-4 text-brand-600"></i> Rumusan Jadual</h4>
+                    <button onclick="jdlRumusanTutup()" class="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500" title="Tutup"><i data-lucide="x" class="w-4 h-4"></i></button>
+                </div>
+                <div id="jdlRumusanIsi" class="p-5 space-y-3 bg-slate-50/50"></div>
+              </div>
             </div>
 
             <!-- Mod Ujian (dry-run, tidak mengubah jadual) -->
@@ -9238,7 +9252,7 @@ window.VJSolver = (function () {
         const subjekKelas = B.kelas.map(() => new Set());
         units.forEach(T => T.pairs.forEach(([k, sj]) => subjekKelas[k].add(sj)));
         function ulang(k, d) { return ulangKD[k * H + d]; }
-        const BERAT = { kelas: 40, guru: 3, ulang: 6, beban: 0.2, hub: 40 };
+        const BERAT = { kelas: 40, guru: (+opt.beratGuru > 0 ? +opt.beratGuru : 3), ulang: 6, beban: 0.2, hub: 40 };
         function kosBahagian(gs, ks, ds, rs) {
             let c = 0;
             for (const d of ds) {
@@ -9378,6 +9392,52 @@ window.VJSolver = (function () {
             return { lompongKelas, lompongGuru, subjekBerulang, kosongDepanKelas };
         }
 
+        // ---------- Pembaikan terarah sesi tidak muat (rantaian pengusiran dengan undur) ----------
+        // Letak u pada slot bebas; jika tiada, usir 1-2 sesi lalu letak semula sesi yang diusir (secara rekursif, ke kedalaman terhad).
+        function rantaiLetak(u, kedalaman, tabu, tamat) {
+            if (performance.now() > tamat) return false;
+            let best = -1, bk = Infinity;
+            for (const s of domain[u]) { const c = konflik(u, s); if (c && c.size === 0) { const k = kosLembut(u, s); if (k < bk) { bk = k; best = s; } } }
+            if (best >= 0) { letak(u, best); return true; }
+            if (kedalaman <= 0) return false;
+            const cand = [];
+            for (const s of domain[u]) {
+                const c = konflik(u, s);
+                if (!c || c.size === 0 || c.size > 2) continue;
+                let ok = true;
+                for (const x of c) if (tabu.has(x)) { ok = false; break; }
+                if (ok) cand.push([s, c]);
+            }
+            for (let i = cand.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = cand[i]; cand[i] = cand[j]; cand[j] = t; }
+            tabu.add(u);
+            for (const [s, c] of cand.slice(0, 12)) {
+                const snap = salinPos();
+                const ev = [...c];
+                ev.forEach(x => angkat(x));
+                letak(u, s);
+                let ok = true;
+                for (const x of ev) { if (!rantaiLetak(x, kedalaman - 1, tabu, tamat)) { ok = false; break; } }
+                if (ok) { tabu.delete(u); return true; }
+                tetapkanKedudukan(snap);
+                if (performance.now() > tamat) break;
+            }
+            tabu.delete(u);
+            return false;
+        }
+        function baikiTakMuat(ms) {
+            const tamat = performance.now() + ms;
+            let tak = units.map((_, u) => u).filter(u => pos[u] < 0 && !kunci[u] && !sebabMati[u] && domain[u].length);
+            let pusingan = 0;
+            while (tak.length && performance.now() < tamat) {
+                pusingan++;
+                const u = tak[Math.floor(Math.random() * tak.length)];
+                const snap = salinPos();
+                if (rantaiLetak(u, 2 + (pusingan % 3), new Set(), tamat)) tak = tak.filter(x => pos[x] < 0);
+                else tetapkanKedudukan(snap);
+            }
+            diletak = units.filter((_, u) => pos[u] >= 0).length;
+        }
+
         return new Promise(resolve => {
             // Pengguna batal: hentikan tanpa hasil (jadual sedia ada tidak diubah)
             const dibatal = () => { if (opt.isyarat && opt.isyarat.batal) { resolve({ batal: true }); return true; } return false; };
@@ -9416,6 +9476,12 @@ window.VJSolver = (function () {
                 if (onProgress) onProgress({ iter, diletak, terbaik: Math.max(terbaik, diletak), jumlah: U, ms });
                 hentiBuntu = pending.length > 0 && performance.now() - tKemajuan > hadBuntuMs;
                 if (pending.length && ms < hadMs && iter < maxIter && !hentiBuntu) { seterusnya(langkah); return; }
+                // Pembaikan terarah: jika masih ada sesi tidak muat, cuba rantaian pengusiran sebelum menyerah
+                if (diletak < U && !opt.sambung && !opt.tanpaPembaikan) {
+                    if (posTerbaik && diletak < terbaik) { tetapkanKedudukan(posTerbaik); diletak = units.filter((_, u) => pos[u] >= 0).length; }
+                    baikiTakMuat(Math.min(15000, Math.max(3000, hadMs * 0.25)));
+                    if (diletak > terbaik) { terbaik = diletak; posTerbaik = salinPos(); }
+                }
                 if (diletak >= terbaik) posTerbaik = salinPos();
                 // Fasa 2: optimum kualiti. Mulakan daripada susunan terbaik (paling banyak sesi diletak);
                 // langkah optimum tidak pernah mengeluarkan sesi, jadi bilangan sesi diletak kekal.
@@ -9501,7 +9567,7 @@ window.VJSolver = (function () {
                 if (langgar > 0) isu.push({ jenis: 'amaran', teks: `Hubungan ${TAHAP_HUB[R.tahap].nama.toLowerCase()} "${namaHub(R.h)}" tidak dipenuhi sepenuhnya (${langgar} pelanggaran).` });
             });
             const kualiti = ukurKualiti();
-            return { sesi, tidakMuat, isu, stat: { unit: U, diletak: U - tidakMuat.length, iter, ms: Math.round(ms), hentiBuntu, bilAuto: B.bilAuto, kosongDepan: kualiti.kosongDepanKelas } };
+            return { sesi, tidakMuat, isu, stat: { unit: U, diletak: U - tidakMuat.length, iter, ms: Math.round(ms), hentiBuntu, bilAuto: B.bilAuto, kosongDepan: kualiti.kosongDepanKelas, kualiti } };
         }
     }
 
@@ -10033,8 +10099,10 @@ window.VJSolver = (function () {
                 if (tanpaHad && best && best.stat.optimum) {
                     const kosKini = best.stat.optimum.kosAkhir;
                     if (kosKini <= 0) { hentiAuto = 'sempurna'; break; }
-                    if (kosTerbaikKitaran !== null && kosKini >= kosTerbaikKitaran) { kitaranTiadaBaik++; } else { kitaranTiadaBaik = 0; }
-                    kosTerbaikKitaran = kosTerbaikKitaran === null ? kosKini : Math.min(kosTerbaikKitaran, kosKini);
+                    // Peningkatan kurang 1% (atau < 2 mata kos) dianggap tiada peningkatan bermakna
+                    if (kosTerbaikKitaran !== null && kosTerbaikKitaran - kosKini < Math.max(2, kosTerbaikKitaran * 0.01)) { kitaranTiadaBaik++; } else { kitaranTiadaBaik = 0; kosTerbaikKitaran = kosKini; }
+                    if (kosTerbaikKitaran === null) kosTerbaikKitaran = kosKini;
+                    if (isyarat) isyarat.status = { kitaran, tiada: kitaranTiadaBaik, kos: kosKini };
                     if (kitaranTiadaBaik >= 2) { hentiAuto = 'stabil'; break; }
                 }
                 } while (tanpaHad && !tamat && !(isyarat && isyarat.henti));
@@ -10092,7 +10160,7 @@ window.VJSolver = (function () {
                     if (st.fasa === 'optimum') {
                         if (msMulaOpt === null) msMulaOpt = st.ms;
                         const f = tanpaHad ? 1 : (hadOpt ? Math.min(1, (st.ms - msMulaOpt) / (hadOpt * 1000)) : 1);
-                        jdlOverlayKemas(tanpaHad ? 'Fasa 2/2 · Mengoptimum tanpa had' : 'Fasa 2/2 · Mengoptimum kualiti', `Kos ${Math.round(st.kosAwal)} → ${Math.round(st.kos)} · ${(st.ms / 1000).toFixed(1)} s${tanpaHad ? ' · berhenti sendiri jika tiada peningkatan, atau tekan "Henti & Guna Terbaik"' : ''}`, f);
+                        jdlOverlayKemas(tanpaHad ? 'Fasa 2/2 · Mengoptimum tanpa had' : 'Fasa 2/2 · Mengoptimum kualiti', `Kos ${Math.round(st.kosAwal)} → ${Math.round(st.kos)} · ${(st.ms / 1000).toFixed(1)} s${tanpaHad ? ' · ' + (isyarat.status ? 'kitaran ' + isyarat.status.kitaran + ' (tiada peningkatan ' + isyarat.status.tiada + '/2) · ' : '') + 'berhenti sendiri jika tiada peningkatan, atau tekan "Henti & Guna Terbaik"' : ''}`, f);
                     } else {
                         jdlOverlayKemas(hadOpt ? 'Fasa 1/2 · Meletak sesi' : 'Meletak sesi', `${st.terbaik} / ${st.jumlah} sesi diletak · ${(st.ms / 1000).toFixed(1)} s`, st.jumlah ? st.terbaik / st.jumlah : 0);
                     }
@@ -10108,12 +10176,14 @@ window.VJSolver = (function () {
                         .forEach(u => { if (u.ahli.some(id => trxDipilih.has(id))) perlu.add(u); });
                     const muat = [...perlu].filter(u => u.ahli.every(id => ada.has(id + '#' + u.ke))).length;
                     jdlTidakMuat = res.tidakMuat;
+                    jdlRumusanSimpan(res, isyarat, true);
                     showToast(muat === perlu.size ? `${jdlPilihan.size} kelas disusun: semua ${perlu.size} sesi diletak (${(res.stat.ms / 1000).toFixed(1)} s).`
                         : `${jdlPilihan.size} kelas disusun: ${muat}/${perlu.size} sesi diletak — lihat senarai di bawah jadual.`, muat === perlu.size ? 'success' : 'warning', 6000);
                     return;
                 }
                 VJStore.setJadual({ dijana: new Date().toISOString(), sesi: res.sesi });
                 jdlTidakMuat = res.tidakMuat;
+                jdlRumusanSimpan(res, isyarat, false);
                 const s = res.stat, o = s.optimum;
                 const teksDepan = s.kosongDepan ? ` ⚠ ${s.kosongDepan} slot kelas kosong sebelum waktu terakhir (tidak dapat dielak — cuba tambah masa optimum).` : '';
                 const teksAuto = s.hentiAuto === 'sempurna' ? ' Optimum dihentikan automatik: kos sifar (sempurna).'
@@ -10403,6 +10473,118 @@ window.VJSolver = (function () {
                 + jdlUjianJadual('Jana — guru (perlu vs diletak)', ['Guru', 'Perlu', 'Diletak'], bG)
                 + (B.bilik.length ? jdlUjianJadual('Jana — bilik (slot digunakan)', ['Bilik', 'Digunakan', 'Slot'], barisBilik) : '');
             return { status: gagal ? 'gagal' : 'ok', html };
+        }
+
+        // =====================================================================
+        // RUMUSAN JADUAL: analisis hasil susunan (lengkap? hubungan? kualiti? beban guru?)
+        // =====================================================================
+        let jdlRumusanTerakhir = null; // { res, tarikh, skop, henti, semasa }
+
+        function jdlRumusanKualiti(stat) {
+            const o = stat && stat.optimum;
+            const q = o && o.lompongGuru !== undefined ? o : (stat && stat.kualiti) || {};
+            return { lompongKelas: q.lompongKelas || 0, lompongGuru: q.lompongGuru || 0, subjekBerulang: q.subjekBerulang || 0, kosongDepanKelas: q.kosongDepanKelas || 0 };
+        }
+
+        function jdlRumusanBina(R) {
+            const res = R.res, stat = res.stat || {};
+            const butir = [];
+            const tambah = (jenis, tajuk, teks, cadangan) => butir.push({ jenis, tajuk, teks, cadangan: cadangan || '' });
+            const q = R.semasa ? R.kualitiSemasa : jdlRumusanKualiti(stat);
+
+            // 1. Sesi tidak muat
+            const tm = res.tidakMuat || [];
+            if (tm.length) {
+                tambah('gagal', `${tm.length} sesi tidak dapat diletak`,
+                    tm.slice(0, 12).map(t => `${t.desc} (${t.len}w) — ${t.sebab}`).join('\n') + (tm.length > 12 ? `\n… dan ${tm.length - 12} lagi` : ''),
+                    'Cuba Optimum/had masa lebih lama atau teras lebih banyak. Semak slot diblok, hubungan "ketat" dan kumpulan serentak. Jalankan Mod Ujian untuk lihat kelas/guru yang padat.');
+            }
+            // 2. Hubungan & isu lain daripada penyusun
+            (res.isu || []).forEach(i => {
+                if (/^Hubungan .*tidak dipenuhi/.test(i.teks)) tambah('amaran', 'Hubungan tidak dipenuhi sepenuhnya', i.teks, 'Ubah pemberat hubungan itu kepada "Longgar", atau semak sesi yang dihubungkan.');
+                else if (/bertindih/.test(i.teks)) tambah('amaran', 'Bilik bertindih', i.teks, 'Tambah bilik untuk subjek berkenaan atau kurangkan sesi serentak.');
+                else tambah(i.jenis === 'ralat' ? 'gagal' : 'amaran', i.jenis === 'ralat' ? 'Ralat data' : 'Perhatian data', i.teks, '');
+            });
+            // 3. Kualiti jadual
+            if (q.kosongDepanKelas > 0) tambah('amaran', `${q.kosongDepanKelas} slot kelas kosong sebelum waktu terakhir`, 'Ada kelas yang mula lewat atau berlompong di tengah hari, bukan di hujung hari.', 'Naikkan masa Optimum (atau guna Optimum tanpa had) supaya lompong dialihkan ke hujung hari.');
+            if (q.lompongGuru > 0) tambah('info', `Lompong guru: ${q.lompongGuru} slot`, 'Guru perlu menunggu antara dua sesi pada hari yang sama.', 'Optimum lebih lama biasanya mengurangkannya.');
+            if (q.lompongKelas > 0) tambah('info', `Lompong kelas: ${q.lompongKelas} slot`, 'Kelas ada slot kosong di antara sesi.', '');
+            if (q.subjekBerulang > 0) tambah('info', `Subjek berulang sehari: ${q.subjekBerulang}`, 'Subjek yang sama muncul lebih daripada satu sesi pada hari yang sama bagi sesuatu kelas.', 'Jika subjek 4+ waktu, pecahan 2,2 membantu menyebarkannya.');
+            // 4. Beban guru (logik kumpulan) vs slot & had
+            try {
+                const inp = VJStore.getSolverInput();
+                const B = VJSolver.bina(inp, jdlOptBina());
+                const { G } = jdlUjianBeban(B);
+                const had = {}; inp.guru.forEach(g => { had[g[0]] = parseInt(g[3]) || 0; });
+                const lebih = [];
+                B.guru.forEach((g, i) => {
+                    const boleh = B.N - B.blokG[i].reduce((a, b) => a + b, 0);
+                    if (G[i] > boleh) lebih.push(`${g.nama}: ${G[i]} waktu > ${boleh} slot boleh mengajar`);
+                    else if (had[g.id] && G[i] > had[g.id]) lebih.push(`${g.nama}: ${G[i]} waktu > had ${had[g.id]}`);
+                });
+                if (lebih.length) tambah('amaran', `${lebih.length} guru melebihi had beban`, lebih.slice(0, 12).join('\n'), 'Agihkan semula sebahagian waktu kepada guru lain di Matriks.');
+            } catch (e) { console.warn('Rumusan beban guru:', e); }
+            // 5. Maklumat optimum
+            const o = stat.optimum;
+            if (o && !R.semasa) {
+                const sebab = stat.hentiAuto === 'sempurna' ? 'dihentikan automatik (kos sifar)'
+                    : stat.hentiAuto === 'stabil' ? 'dihentikan automatik (tiada peningkatan)'
+                    : R.henti ? 'dihentikan oleh anda' : 'tamat had masa';
+                tambah('info', `Optimum: kos ${o.kosAwal} → ${o.kosAkhir}`, `${sebab}. ${o.kosAkhir <= 0 ? 'Kos sifar bermakna semua lompong dan pengulangan sudah dihapuskan.' : 'Kos tinggal bermakna masih ada lompong/pengulangan yang tidak dapat dielak atau belum dijumpai penyelesaian lebih baik.'}`,
+                    o.kosAkhir > 0 && R.henti ? 'Jika belum puas hati, jalankan semula Optimum tanpa had dan biar ia berhenti sendiri.' : '');
+            }
+            const tahap = butir.some(b => b.jenis === 'gagal') ? 'gagal' : butir.some(b => b.jenis === 'amaran') ? 'amaran' : 'ok';
+            return { tahap, butir, q, unit: stat.unit, diletak: stat.diletak };
+        }
+
+        function jdlRumusanRender() {
+            const R = jdlRumusanTerakhir;
+            const el = document.getElementById('jdlRumusanIsi');
+            if (!R) { el.innerHTML = '<p class="text-xs text-slate-500">Tiada rumusan.</p>'; return; }
+            const S = jdlRumusanBina(R);
+            const kepala = { ok: ['bg-emerald-100 text-emerald-800', '✔ Jadual lengkap dan baik — tiada masalah dikesan.'],
+                amaran: ['bg-amber-100 text-amber-800', '⚠ Jadual lengkap tetapi ada kompromi / amaran.'],
+                gagal: ['bg-rose-100 text-rose-800', '✖ Jadual belum lengkap atau ada masalah serius.'] }[S.tahap];
+            const ikon = { gagal: '✖', amaran: '⚠', info: 'ℹ' }, warna = { gagal: 'border-rose-200 bg-rose-50', amaran: 'border-amber-200 bg-amber-50', info: 'border-slate-200 bg-white' };
+            const tarikh = new Date(R.tarikh).toLocaleString('ms-MY');
+            el.innerHTML = `<div class="rounded-xl px-3 py-2 text-xs font-bold ${kepala[0]}">${kepala[1]}</div>
+                <p class="text-[11px] text-slate-500">${R.semasa ? 'Analisis jadual semasa' : 'Hasil susunan'} · ${escapeHtml(tarikh)}${R.skop ? ' · kelas dipilih: ' + escapeHtml(R.skop) : ''}${S.unit ? ` · ${S.diletak}/${S.unit} sesi diletak` : ''}</p>
+                ${S.butir.map(b => `<div class="border rounded-xl p-3 ${warna[b.jenis]}">
+                    <p class="text-xs font-bold text-slate-800">${ikon[b.jenis]} ${escapeHtml(b.tajuk)}</p>
+                    ${b.teks ? `<p class="text-[11px] text-slate-600 mt-1 whitespace-pre-line">${escapeHtml(b.teks)}</p>` : ''}
+                    ${b.cadangan ? `<p class="text-[11px] text-indigo-700 mt-1">Cadangan: ${escapeHtml(b.cadangan)}</p>` : ''}</div>`).join('') || '<p class="text-xs text-emerald-700">Tiada apa-apa untuk dilaporkan.</p>'}`;
+        }
+
+        async function jdlRumusanBuka(auto) {
+            const p = document.getElementById('jdlRumusanPanel');
+            if (!auto && !jdlRumusanTerakhir) {
+                // Analisis jadual semasa (tanpa mengubah): sesi tidak diletak + kualiti + hubungan
+                try {
+                    const inp = VJStore.getSolverInput();
+                    if (!inp.transaksi.length) { showToast('Tiada agihan untuk dianalisis.', 'warning'); return; }
+                    const B = VJSolver.bina(inp, jdlOptBina());
+                    const ada = new Set((inp.jadual.sesi || []).map(x => x.uuid + '#' + x.ke));
+                    const tidakMuat = B.units.filter(u => !u.ahli.every(id => ada.has(id + '#' + u.ke))).map(u => ({ desc: u.desc, len: u.len, sebab: 'Belum dijadualkan.' }));
+                    const r = await VJSolver.susun(inp, Object.assign({}, jdlOptBina(), { sambung: true, hadSaat: 0.05, hadOptimumSaat: 0.2 }));
+                    const kualitiSemasa = jdlRumusanKualiti(r.stat && r.stat.optimum ? { optimum: r.stat.optimum.awal } : r.stat);
+                    jdlRumusanTerakhir = { res: { tidakMuat, isu: r.isu || [], stat: { unit: B.units.length, diletak: B.units.length - tidakMuat.length } }, tarikh: Date.now(), semasa: true, kualitiSemasa, simpan: false };
+                } catch (e) { console.error(e); showToast('Gagal menganalisis: ' + e.message, 'error'); return; }
+            }
+            p.classList.remove('hidden'); p.classList.add('flex');
+            jdlRumusanRender();
+        }
+        function jdlRumusanTutup() {
+            const p = document.getElementById('jdlRumusanPanel');
+            p.classList.add('hidden'); p.classList.remove('flex');
+            if (jdlRumusanTerakhir && jdlRumusanTerakhir.semasa) jdlRumusanTerakhir = null;
+        }
+        function jdlRumusanSimpan(res, isyarat, separa) {
+            const nama = separa ? VJStore.getSolverInput().kelas.filter(k => jdlPilihan.has(k[0])).map(k => k[1]) : [];
+            jdlRumusanTerakhir = { res, tarikh: Date.now(), henti: !!(isyarat && isyarat.henti), semasa: false,
+                skop: nama.length ? (nama.length > 8 ? nama.slice(0, 8).join(', ') + '…' : nama.join(', ')) : '' };
+            const S = jdlRumusanBina(jdlRumusanTerakhir);
+            setTimeout(() => jdlRumusanBuka(true), 80);
+            return S.tahap;
         }
 
         function jdlKosongkan() {

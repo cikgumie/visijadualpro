@@ -3089,7 +3089,7 @@ window.VJSampleData = function () {
                             <label class="text-[10px] font-bold uppercase tracking-wider text-indigo-200">Guru Pengajar</label>
                             <span id="matrixBarGuruLoad" class="text-[10px] text-emerald-400 font-bold">-</span>
                         </div>
-                        <select id="matrixBarGuruSelect" onchange="onMatrixBarGuruChange()" class="w-full text-xs font-bold bg-white text-slate-800 rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-brand-400 border border-transparent shadow-sm">
+                        <select id="matrixBarGuruSelect" onchange="onMatrixBarGuruChange();stageMatrixBarPecahan()" class="w-full text-xs font-bold bg-white text-slate-800 rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-brand-400 border border-transparent shadow-sm">
                             <option value="">-- PILIH GURU --</option>
                         </select>
                     </div>
@@ -3112,7 +3112,7 @@ window.VJSampleData = function () {
                     <!-- Label Elektif (2 cols) -->
                     <div class="sm:col-span-2">
                         <label class="text-[10px] font-bold uppercase tracking-wider text-indigo-200 block mb-1">Label Elektif (Opsyenal)</label>
-                        <input type="text" id="matrixBarLabelInput" placeholder="Cth: G1, G2" class="w-full text-xs font-medium bg-white text-slate-800 rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-brand-400 border border-transparent shadow-sm">
+                        <input type="text" id="matrixBarLabelInput" onchange="stageMatrixBarPecahan()" onkeydown="if(event.key==='Enter'){event.preventDefault();stageMatrixBarPecahan(true);}" placeholder="Cth: G1, G2" class="w-full text-xs font-medium bg-white text-slate-800 rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-brand-400 border border-transparent shadow-sm">
                     </div>
 
                     <!-- Action Buttons (3 cols) -->
@@ -5096,28 +5096,47 @@ window.VJSampleData = function () {
         // ---------------------------------------------------------------------
         // EDIT SEBARIS BILANGAN WAKTU (kumpul perubahan, simpan sekali gus)
         // ---------------------------------------------------------------------
-        let pendingMatrixEdits = {}; // 'KELAS|subjekId' -> { uuid, total, pecahan }
+        let pendingMatrixEdits = {}; // uuid -> { total, pecahan, guruId, guruNama, label }
 
-        function matrixCellOriginalText(allocs) {
-            const a = allocs[0];
-            return (a.label ? '*' : '') + a.masa;
-        }
+        function matrixPendingOf(uuid) { return pendingMatrixEdits[uuid] || null; }
 
         function refreshMatrixCell(td) {
             const cn = td.dataset.className, sid = td.dataset.subjekId;
             const allocs = (matrix[cn] && matrix[cn][sid]) || [];
-            if (allocs.length !== 1) return;
-            const pend = pendingMatrixEdits[cn + '|' + sid];
-            if (pend && pend.uuid === allocs[0].uuid) {
-                td.textContent = (allocs[0].label ? '*' : '') + pend.total;
-                td.classList.add('matrix-cell-pending');
-                td.title = `Diubah: ${pend.pecahan} (${pend.total} waktu) - belum disimpan`;
+            if (!allocs.length) return;
+            const anyPend = allocs.some(a => matrixPendingOf(a.uuid));
+            td.classList.toggle('matrix-cell-pending', anyPend);
+            if (allocs.length === 1) {
+                const a = allocs[0], p = matrixPendingOf(a.uuid);
+                const lbl = p ? p.label : a.label;
+                const tag = td.querySelector('.matrix-link-tag');
+                td.textContent = (lbl ? '*' : '') + (p ? p.total : a.masa);
+                if (tag) td.appendChild(tag);
+                td.title = p ? `Diubah: ${p.pecahan} (${p.total} waktu) ${p.guruNama || a.guruNama} - belum disimpan`
+                             : `${a.guruNama} [${a.pecahan || a.masa}] (${a.masa} waktu) ${a.label ? '[' + a.label + ']' : ''}`;
             } else {
-                td.textContent = matrixCellOriginalText(allocs);
-                td.classList.remove('matrix-cell-pending');
-                const it = allocs[0];
-                td.title = `${it.guruNama} [${it.pecahan || it.masa}] (${it.masa} waktu) ${it.label ? '[' + it.label + ']' : ''}`;
+                allocs.forEach(a => {
+                    const seg = td.querySelector(`.matrix-seg[data-seg-uuid="${a.uuid}"]`);
+                    if (!seg) return;
+                    const p = matrixPendingOf(a.uuid);
+                    seg.querySelector('b').textContent = p ? p.total : a.masa;
+                    const sm = seg.querySelector('small');
+                    if (sm) {
+                        const nm = p ? (p.guruNama || a.guruNama) : a.guruNama;
+                        const ini = nm.split(/\s+/).filter(w => !/^(BIN|BINTI|BT|B|A\/L|A\/P)$/i.test(w)).slice(0, 2).map(w => w.charAt(0)).join('');
+                        sm.textContent = (p ? p.label : a.label) || ini;
+                    }
+                    seg.style.outline = p ? '2px dashed #D97706' : '';
+                    seg.style.outlineOffset = p ? '-2px' : '';
+                });
             }
+        }
+
+        function refreshMatrixCellsOfUuid(uuid, sid) {
+            document.querySelectorAll(`.matrix-cell[data-subjek-id="${sid}"]`).forEach(td => {
+                const allocs = (matrix[td.dataset.className] && matrix[td.dataset.className][sid]) || [];
+                if (allocs.some(a => a.uuid === uuid)) refreshMatrixCell(td);
+            });
         }
 
         function updateMatrixPendingBar() {
@@ -5128,94 +5147,38 @@ window.VJSampleData = function () {
             bar.style.display = n > 0 ? 'flex' : 'none';
         }
 
-        function startMatrixInlineEdit(td) {
-            if (!td || !isEditMode || td.querySelector('input')) return;
-            const cn = td.dataset.className, sid = td.dataset.subjekId;
-            const allocs = (matrix[cn] && matrix[cn][sid]) || [];
-            if (allocs.length !== 1) return; // sel kosong / berbilang guru: guna panel di atas
-            const a = allocs[0];
-            const pend = pendingMatrixEdits[cn + '|' + sid];
-            const startVal = pend && pend.uuid === a.uuid ? pend.pecahan : (a.pecahan || String(a.masa));
-
-            td.textContent = '';
-            const input = document.createElement('input');
-            input.type = 'text';
-            input.inputMode = 'numeric';
-            input.className = 'matrix-inline-input';
-            input.value = startVal;
-            input.title = 'Taip bilangan waktu (cth: 5 atau 2,3)';
-            input.onclick = e => e.stopPropagation();
-            input.ondblclick = e => e.stopPropagation();
-
-            const finish = (cancel) => {
-                if (input._done) return;
-                input._done = true;
-                if (!cancel) commitMatrixInlineEdit(td, a, input.value);
-                refreshMatrixCell(td);
-                updateMatrixPendingBar();
-            };
-            input.onblur = () => finish(false);
-            input.onkeydown = e => {
-                if (e.key === 'Escape') { e.preventDefault(); finish(true); return; }
-                if (e.key === 'Enter' || e.key === 'Tab') {
-                    e.preventDefault();
-                    finish(false);
-                    let next = null;
-                    if (e.key === 'Enter') {
-                        const row = e.shiftKey ? td.parentElement.previousElementSibling : td.parentElement.nextElementSibling;
-                        next = row ? row.children[td.cellIndex] : null;
-                    } else {
-                        next = e.shiftKey ? td.previousElementSibling : td.nextElementSibling;
-                    }
-                    if (next && next.classList.contains('matrix-cell')) next.click();
-                }
-            };
-            td.appendChild(input);
-            input.focus();
-            input.select();
-        }
-
-        function commitMatrixInlineEdit(td, alloc, raw) {
-            raw = (raw || '').trim();
-            if (raw === '') return; // kosong = tiada perubahan
-            const parsed = parseMasaBreakdown(raw);
-            if (parsed.total <= 0) {
-                showToast('Bilangan waktu tidak sah. Taip nombor (cth: 5 atau 2,3).', 'warning');
-                return;
-            }
-            const origBreakdown = parseMasaBreakdown(alloc.pecahan || String(alloc.masa)).breakdown;
-            const row = dbData.transaksi.find(t => t[8] === alloc.uuid);
-            // Rekod kelas gabungan dikongsi beberapa sel: ubah semua sel berkaitan serentak
-            const classNames = row ? String(row[4]).split(',').map(x => x.trim()).filter(Boolean) : [td.dataset.className];
-            const sid = td.dataset.subjekId;
-            classNames.forEach(cn => {
-                const key = cn + '|' + sid;
-                if (parsed.breakdown === origBreakdown) delete pendingMatrixEdits[key];
-                else pendingMatrixEdits[key] = { uuid: alloc.uuid, total: parsed.total, pecahan: parsed.breakdown };
-                const other = document.querySelector(`.matrix-cell[data-class-name="${cn}"][data-subjek-id="${sid}"]`);
-                if (other && other !== td) refreshMatrixCell(other);
-            });
-        }
-
-        // Tukar waktu dari Panel Pengisian: dikumpul (belum simpan) sehingga "Simpan Semua Perubahan"
+        // Kumpul perubahan dari Panel Pengisian (guru / waktu / label) - belum simpan
         function stageMatrixBarPecahan(moveNext) {
             if (!isEditMode || !selectedMatrixSubjectId || selectedMatrixClasses.length === 0) return;
-            const gVal = document.getElementById('matrixBarGuruSelect').value;
-            if (gVal !== '' && gVal !== '__KEEP__') return; // tukar guru: guna butang Simpan panel
-            const raw = document.getElementById('matrixBarPecahanInput').value.trim();
-            if (raw === '' || parseMasaBreakdown(raw).total <= 0) return;
             const sid = selectedMatrixSubjectId;
-            let staged = 0;
+            const gVal = document.getElementById('matrixBarGuruSelect').value;
+            const raw = document.getElementById('matrixBarPecahanInput').value.trim();
+            const labelVal = document.getElementById('matrixBarLabelInput').value.trim();
+            const parsed = raw ? parseMasaBreakdown(raw) : null;
+            if (raw && parsed.total <= 0) return;
+            const guruRow = (gVal !== '' && gVal !== '__KEEP__') ? dbData.guru[gVal] : null;
+
+            const targets = [];
             selectedMatrixClasses.forEach(cn => {
                 const allocs = (matrix[cn] && matrix[cn][sid]) || [];
-                if (allocs.length !== 1) return;
-                const td = document.querySelector(`.matrix-cell[data-class-name="${cn}"][data-subjek-id="${sid}"]`);
-                if (!td) return;
-                commitMatrixInlineEdit(td, allocs[0], raw);
-                refreshMatrixCell(td);
-                staged++;
+                let a = allocs.find(x => x.uuid === activeMatrixAllocationUuid);
+                if (!a && allocs.length === 1) a = allocs[0];
+                if (a && !targets.includes(a)) targets.push(a);
             });
-            if (!staged) return;
+            if (!targets.length) return;
+
+            targets.forEach(a => {
+                const guruNama = guruRow ? guruRow[1] : a.guruNama;
+                const guruId = guruRow ? guruRow[0] : null;
+                const total = parsed ? parsed.total : a.masa;
+                const pecahan = parsed ? parsed.breakdown : (a.pecahan || String(a.masa));
+                const label = labelVal !== '' ? labelVal : a.label;
+                const origPecahan = parseMasaBreakdown(a.pecahan || String(a.masa)).breakdown;
+                const same = (pecahan === origPecahan) && guruNama === a.guruNama && (label || '') === (a.label || '');
+                if (same) delete pendingMatrixEdits[a.uuid];
+                else pendingMatrixEdits[a.uuid] = { total, pecahan, guruId, guruNama, label: label || '' };
+                refreshMatrixCellsOfUuid(a.uuid, sid);
+            });
             updateMatrixPendingBar();
             if (moveNext && selectedMatrixClasses.length === 1) {
                 const td = document.querySelector(`.matrix-cell[data-class-name="${selectedMatrixClasses[0]}"][data-subjek-id="${sid}"]`);
@@ -5227,23 +5190,21 @@ window.VJSampleData = function () {
 
         function discardMatrixPending() {
             pendingMatrixEdits = {};
-            document.querySelectorAll('.matrix-cell-pending').forEach(refreshMatrixCell);
+            document.querySelectorAll('.matrix-cell').forEach(refreshMatrixCell);
             updateMatrixPendingBar();
         }
 
         function saveMatrixPending() {
             if (!ensureEditMode(() => saveMatrixPending())) return;
-            const byUuid = {};
-            Object.values(pendingMatrixEdits).forEach(p => { byUuid[p.uuid] = p; });
             const updatesList = [], oldBackups = [];
-            Object.values(byUuid).forEach(p => {
-                const old = dbData.transaksi.find(t => t[8] === p.uuid);
+            Object.entries(pendingMatrixEdits).forEach(([uuid, p]) => {
+                const old = dbData.transaksi.find(t => t[8] === uuid);
                 if (!old) return;
-                updatesList.push({ uuid: p.uuid, data: {
-                    guruId: old[1], guruNama: old[2], kelasId: old[3], kelasNama: old[4],
-                    subjekId: old[5], subjekNama: old[6], masa: p.total, pecahan: p.pecahan, label: old[9] || ""
+                updatesList.push({ uuid, data: {
+                    guruId: p.guruId || old[1], guruNama: p.guruNama || old[2], kelasId: old[3], kelasNama: old[4],
+                    subjekId: old[5], subjekNama: old[6], masa: p.total, pecahan: p.pecahan, label: p.label || ""
                 }});
-                oldBackups.push({ uuid: p.uuid, data: {
+                oldBackups.push({ uuid, data: {
                     guruId: old[1], guruNama: old[2], kelasId: old[3], kelasNama: old[4],
                     subjekId: old[5], subjekNama: old[6], masa: old[7], pecahan: old[10] || String(old[7]), label: old[9] || ""
                 }});
@@ -5261,8 +5222,8 @@ window.VJSampleData = function () {
                     btn.disabled = false;
                     pendingMatrixEdits = {};
                     updateMatrixPendingBar();
-                    showToast(`${updatesList.length} agihan waktu berjaya dikemaskini!`, 'success');
-                    pushToUndo({ type: 'bulkOperation', updates: oldBackups, newUuids: [], desc: `${updatesList.length} sel waktu (Matriks)` });
+                    showToast(`${updatesList.length} agihan berjaya dikemaskini!`, 'success');
+                    pushToUndo({ type: 'bulkOperation', updates: oldBackups, newUuids: [], desc: `${updatesList.length} agihan (Matriks)` });
                     loadAllData();
                 })
                 .withFailureHandler(err => {
@@ -5848,6 +5809,13 @@ window.VJSampleData = function () {
             tbody.innerHTML = '';
             thead.innerHTML = '';
 
+            // buang pending lapuk (uuid tiada / sudah sama dengan data)
+            Object.keys(pendingMatrixEdits).forEach(u => {
+                const t = dbData.transaksi.find(x => x[8] === u);
+                const p = pendingMatrixEdits[u];
+                if (!t || (p.total === (parseInt(t[7]) || 0) && p.pecahan === (t[10] || String(t[7])) && p.guruNama === t[2] && (p.label || '') === (t[9] || ''))) delete pendingMatrixEdits[u];
+            });
+
             let subjects = dbData.subjek;
             let sortedClasses = [...dbData.kelas].sort(VJStore.cmpKelas);
 
@@ -5929,9 +5897,9 @@ window.VJSampleData = function () {
                         });
 
                         let hasLabel = allocations.some(item => item.label);
-                        let pendEdit = pendingMatrixEdits[className + '|' + subjekID];
-                        let isPending = allocations.length === 1 && pendEdit && pendEdit.uuid === allocations[0].uuid;
-                        let cellText = isPending ? (hasLabel ? `*${pendEdit.total}` : pendEdit.total) : (hasLabel ? `*${cellMasa}` : cellMasa);
+                        let pendEdit = allocations.length === 1 ? pendingMatrixEdits[allocations[0].uuid] : null;
+                        let isPending = allocations.some(a => pendingMatrixEdits[a.uuid]);
+                        let cellText = pendEdit ? ((pendEdit.label ? '*' : '') + pendEdit.total) : (hasLabel ? `*${cellMasa}` : cellMasa);
                         let titleText = allocations.map(item => `${item.guruNama} [${item.pecahan || item.masa}] (${item.masa} waktu) ${item.label ? '[' + item.label + ']' : ''}`).join('\n');
 
                         let borderStyle = `border-left: 3.5px solid ${guruColor};`;
@@ -5945,7 +5913,7 @@ window.VJSampleData = function () {
                             const segWarna = ['#6366F1', '#F59E0B', '#10B981', '#EC4899', '#0EA5E9', '#84CC16'];
                             cellInner = '<div class="matrix-split">' + allocations.map((a, i) => {
                                 const inisial = a.guruNama.split(/\s+/).filter(w => !/^(BIN|BINTI|BT|B|A\/L|A\/P)$/i.test(w)).slice(0, 2).map(w => w.charAt(0)).join('');
-                                return `<span class="matrix-seg" data-seg-uuid="${a.uuid}" style="--seg:${segWarna[i % segWarna.length]}"><b>${a.masa}</b><small>${escapeHtml(a.label || inisial)}</small></span>`;
+                                return `<span class="matrix-seg" data-seg-uuid="${a.uuid}" style="--seg:${segWarna[i % segWarna.length]}"><b>${pendingMatrixEdits[a.uuid] ? pendingMatrixEdits[a.uuid].total : a.masa}</b><small>${escapeHtml(a.label || inisial)}</small></span>`;
                             }).join('') + '</div>';
                         }
 

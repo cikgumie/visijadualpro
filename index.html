@@ -10003,7 +10003,7 @@ window.VJSolver = (function () {
 
             const utama = (async () => {
                 let best = null, awal0 = null, iter = 0, langkah = 0, diterima = 0, hentiBuntu = false;
-                let kitaran = 0;
+                let kitaran = 0, hentiAuto = '', kosTerbaikKitaran = null, kitaranTiadaBaik = 0;
                 do {
                 for (let r = 0; r < R && !tamat; r++) {
                     const pertama = kitaran === 0 && r === 0;
@@ -10029,8 +10029,17 @@ window.VJSolver = (function () {
                     if (tanpaHad && isyarat && isyarat.henti) break;
                 }
                 kitaran++;
+                // Henti automatik: kos sudah sifar (sempurna) atau tiada peningkatan selepas 2 kitaran berturut-turut
+                if (tanpaHad && best && best.stat.optimum) {
+                    const kosKini = best.stat.optimum.kosAkhir;
+                    if (kosKini <= 0) { hentiAuto = 'sempurna'; break; }
+                    if (kosTerbaikKitaran !== null && kosKini >= kosTerbaikKitaran) { kitaranTiadaBaik++; } else { kitaranTiadaBaik = 0; }
+                    kosTerbaikKitaran = kosTerbaikKitaran === null ? kosKini : Math.min(kosTerbaikKitaran, kosKini);
+                    if (kitaranTiadaBaik >= 2) { hentiAuto = 'stabil'; break; }
+                }
                 } while (tanpaHad && !tamat && !(isyarat && isyarat.henti));
                 henti();
+                best.stat.hentiAuto = hentiAuto;
                 best.stat.teras = workers.length;
                 best.stat.pusingan = R;
                 best.stat.ms = Math.round(performance.now() - t0);
@@ -10083,7 +10092,7 @@ window.VJSolver = (function () {
                     if (st.fasa === 'optimum') {
                         if (msMulaOpt === null) msMulaOpt = st.ms;
                         const f = tanpaHad ? 1 : (hadOpt ? Math.min(1, (st.ms - msMulaOpt) / (hadOpt * 1000)) : 1);
-                        jdlOverlayKemas(tanpaHad ? 'Fasa 2/2 · Mengoptimum tanpa had' : 'Fasa 2/2 · Mengoptimum kualiti', `Kos ${Math.round(st.kosAwal)} → ${Math.round(st.kos)} · ${(st.ms / 1000).toFixed(1)} s${tanpaHad ? ' · tekan "Henti & Guna Terbaik" bila berpuas hati' : ''}`, f);
+                        jdlOverlayKemas(tanpaHad ? 'Fasa 2/2 · Mengoptimum tanpa had' : 'Fasa 2/2 · Mengoptimum kualiti', `Kos ${Math.round(st.kosAwal)} → ${Math.round(st.kos)} · ${(st.ms / 1000).toFixed(1)} s${tanpaHad ? ' · berhenti sendiri jika tiada peningkatan, atau tekan "Henti & Guna Terbaik"' : ''}`, f);
                     } else {
                         jdlOverlayKemas(hadOpt ? 'Fasa 1/2 · Meletak sesi' : 'Meletak sesi', `${st.terbaik} / ${st.jumlah} sesi diletak · ${(st.ms / 1000).toFixed(1)} s`, st.jumlah ? st.terbaik / st.jumlah : 0);
                     }
@@ -10107,10 +10116,12 @@ window.VJSolver = (function () {
                 jdlTidakMuat = res.tidakMuat;
                 const s = res.stat, o = s.optimum;
                 const teksDepan = s.kosongDepan ? ` ⚠ ${s.kosongDepan} slot kelas kosong sebelum waktu terakhir (tidak dapat dielak — cuba tambah masa optimum).` : '';
+                const teksAuto = s.hentiAuto === 'sempurna' ? ' Optimum dihentikan automatik: kos sifar (sempurna).'
+                    : s.hentiAuto === 'stabil' ? ' Optimum dihentikan automatik: tiada peningkatan selepas 2 kitaran (30 s setiap satu).' : '';
                 const teksTeras = s.teras > 1 ? ` ${s.teras} teras bekerjasama.` : '';
                 const teksOpt = o ? `${teksTeras} Optimum: slot kosong di depan kelas ${o.awal.kosongDepanKelas}→${o.kosongDepanKelas}, lompong guru ${o.awal.lompongGuru}→${o.lompongGuru}, subjek berulang ${o.awal.subjekBerulang}→${o.subjekBerulang}.` : '';
                 showToast((s.diletak === s.unit ? `Jadual lengkap: semua ${s.unit} sesi diletak (${(s.ms / 1000).toFixed(1)} s).${teksOpt}`
-                    : `${s.diletak}/${s.unit} sesi diletak. ${s.unit - s.diletak} sesi belum muat${s.hentiBuntu ? ' (carian dihentikan awal kerana tiada kemajuan)' : ''} — lihat senarai di bawah jadual.${teksOpt}`) + teksDepan, s.diletak === s.unit && !s.kosongDepan ? 'success' : 'warning', o ? 10000 : 6000);
+                    : `${s.diletak}/${s.unit} sesi diletak. ${s.unit - s.diletak} sesi belum muat${s.hentiBuntu ? ' (carian dihentikan awal kerana tiada kemajuan)' : ''} — lihat senarai di bawah jadual.${teksOpt}${teksAuto}`) + teksDepan, s.diletak === s.unit && !s.kosongDepan ? 'success' : 'warning', o ? 10000 : 6000);
             } catch (e) {
                 console.error(e);
                 showToast('Ralat semasa menyusun: ' + e.message, 'error');

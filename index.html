@@ -4951,6 +4951,17 @@ window.VJSampleData = function () {
                 return;
             }
 
+            // Sel sedia ada (bukan gabungan): perubahan dikumpul terus -> hanya satu butang simpan (bar bawah)
+            {
+                const sidY = selectedMatrixSubjectId;
+                const combY = selectedMatrixClasses.length > 1 && (document.querySelector('input[name="matrixMultiMode"]:checked')?.value === 'combined');
+                const allEx = selectedMatrixClasses.every(cn => {
+                    const al = (matrix[cn] && matrix[cn][sidY]) || [];
+                    return al.some(x => x.uuid === activeMatrixAllocationUuid) || al.length === 1;
+                });
+                saveBtn.style.display = (!combY && allEx) ? 'none' : '';
+            }
+
             const gVal = document.getElementById('matrixBarGuruSelect').value;
             const pecahanVal = document.getElementById('matrixBarPecahanInput').value.trim();
             const parsed = parseMasaBreakdown(pecahanVal);
@@ -5064,6 +5075,7 @@ window.VJSampleData = function () {
             document.getElementById('matrixBarDeleteBtn').classList.add('hidden');
             document.getElementById('matrixBarSaveBtnText').innerText = "Simpan Agihan";
             document.getElementById('matrixBarSaveBtn').setAttribute('disabled', 'true');
+            document.getElementById('matrixBarSaveBtn').style.display = '';
         }
 
         function handleMatrixCellClick(event, classIndex, className, subjekId) {

@@ -381,10 +381,7 @@
                 row[0] = fmtDate(row[0]);
                 return row;
             });
-            const stats = {};
-            transaksi.forEach(row => {
-                stats[row[2]] = (stats[row[2]] || 0) + (parseInt(row[7]) || 0);
-            });
+            const stats = bebanGuruKumpulan().ikutNama;
             return clone({ guru: db.guru, kelas: db.kelas, subjek: db.subjek, transaksi: transaksi.reverse(), stats });
         },
 
@@ -860,6 +857,29 @@
         markDirty();
     }
 
+    // Beban guru ikut logik kumpulan serentak: agihan guru yang sama dengan label huruf sama (G1/G3...), subjek+label sama,
+    // masa sama dan tingkatan sama (cth ASK G1 di 1OP & 1PA) berjalan serentak, jadi dikira sekali sahaja.
+    function bebanGuruKumpulan() {
+        const tingK = {};
+        db.kelas.forEach(k => { const n = parseInt(k[2]); if (n) tingK[k[0]] = n; });
+        const dikira = new Set();
+        const ikutId = {}, ikutNama = {};
+        db.transaksi.forEach(t => {
+            const masa = parseInt(t[7]) || 0;
+            const m = /^[A-Za-z]+/.exec(String(t[9] || '').trim());
+            const huruf = m ? m[0].toUpperCase() : '';
+            if (huruf) {
+                const ting = [...new Set(String(t[3]).split(',').map(x => tingK[x.trim()]).filter(Boolean))].sort().join('+');
+                const key = [t[1], huruf, masa, t[5], String(t[9]).trim().toUpperCase(), ting || String(t[3])].join('|');
+                if (dikira.has(key)) return;
+                dikira.add(key);
+            }
+            ikutId[t[1]] = (ikutId[t[1]] || 0) + masa;
+            ikutNama[t[2]] = (ikutNama[t[2]] || 0) + masa;
+        });
+        return { ikutId, ikutNama };
+    }
+
     // Ringkasan setiap kelas: jumlah slot, slot diblok, slot boleh isi, waktu diagihkan
     function slotSummary() {
         const total = db.slot.hari.length * db.slot.waktu.length;
@@ -893,7 +913,7 @@
     function guruSlotSummary() {
         const total = db.slot.hari.length * db.slot.waktu.length;
         const agihan = {};
-        db.transaksi.forEach(t => { agihan[t[1]] = (agihan[t[1]] || 0) + (parseInt(t[7]) || 0); });
+        Object.assign(agihan, bebanGuruKumpulan().ikutId);
         const out = {};
         db.guru.forEach(g => {
             const blok = Object.keys(db.slot.guru[g[0]] || {}).filter(slotInRange).length;
@@ -3105,7 +3125,7 @@ window.VJSampleData = function () {
                             </span>
                         </div>
                         <div class="relative">
-                            <input type="text" id="matrixBarPecahanInput" oninput="onMatrixBarPecahanInput(event)" onchange="stageMatrixBarPecahan()" onkeydown="if(event.key==='Enter'){event.preventDefault();stageMatrixBarPecahan(true);}" placeholder="Cth: 2,3,3 atau 2,2,2 atau 6" class="w-full text-xs font-bold bg-white text-slate-800 rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-brand-400 border border-transparent shadow-sm font-mono placeholder:font-sans placeholder:text-slate-400">
+                            <input type="text" id="matrixBarPecahanInput" oninput="onMatrixBarPecahanInput(event);stageMatrixBarPecahan()" onchange="stageMatrixBarPecahan()" onkeydown="if(event.key==='Enter'){event.preventDefault();stageMatrixBarPecahan(true);}" placeholder="Cth: 2,3,3 atau 2,2,2 atau 6" class="w-full text-xs font-bold bg-white text-slate-800 rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-brand-400 border border-transparent shadow-sm font-mono placeholder:font-sans placeholder:text-slate-400">
                         </div>
                     </div>
 
@@ -5485,6 +5505,21 @@ window.VJSampleData = function () {
         function saveMatrixBarAllocation() {
             if (!ensureEditMode(() => saveMatrixBarAllocation())) return;
             if (selectedMatrixClasses.length === 0 || !selectedMatrixSubjectId) return;
+
+            // Agihan sedia ada: kumpul dalam senarai perubahan (simpan sekali gus di bar bawah)
+            {
+                const sidX = selectedMatrixSubjectId;
+                const comb = selectedMatrixClasses.length > 1 && (document.querySelector('input[name="matrixMultiMode"]:checked')?.value === 'combined');
+                const allExisting = selectedMatrixClasses.every(cn => {
+                    const al = (matrix[cn] && matrix[cn][sidX]) || [];
+                    return al.some(x => x.uuid === activeMatrixAllocationUuid) || al.length === 1;
+                });
+                if (!comb && allExisting) {
+                    stageMatrixBarPecahan();
+                    showToast(`Perubahan dikumpul (${Object.keys(pendingMatrixEdits).length}). Tekan "Simpan Semua Perubahan" di bawah apabila siap.`, 'success');
+                    return;
+                }
+            }
 
             const gVal = document.getElementById('matrixBarGuruSelect').value;
             const pecahanVal = document.getElementById('matrixBarPecahanInput').value.trim();

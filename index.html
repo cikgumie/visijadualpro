@@ -10210,7 +10210,7 @@ window.VJSolver = (function () {
                     </div>
                     <div id="jdlUj_${l.id}">${h ? h.html : ''}</div></div>`;
             }).join('');
-            const ada = Object.values(jdlUjian.hasil);
+            const ada = Object.values(jdlUjian.hasil).filter(Boolean);
             const banner = document.getElementById('jdlUjianBanner');
             if (!ada.length) { banner.classList.add('hidden'); return; }
             banner.classList.remove('hidden');
@@ -10237,7 +10237,7 @@ window.VJSolver = (function () {
                 jdlUjian.B = B;
                 const fn = { data: jdlUjianData, kelas: jdlUjianKelas, guru: jdlUjianGuru, bilik: jdlUjianBilik, jana: jdlUjianJana }[id];
                 const el = () => document.getElementById('jdlUj_' + id);
-                if (id === 'jana') { jdlUjian.hasil[id] = null; jdlUjianRender(); }
+                if (id === 'jana') { delete jdlUjian.hasil[id]; jdlUjianRender(); }
                 jdlUjian.hasil[id] = await fn(inp, B, t => { const e = el(); if (e) e.innerHTML = `<p class="text-[11px] text-slate-500 mt-2">${escapeHtml(t)}</p>`; });
             } catch (e) {
                 console.error(e);

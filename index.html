@@ -4997,7 +4997,7 @@ window.VJSampleData = function () {
                     const al = (matrix[cn] && matrix[cn][sidY]) || [];
                     return al.some(x => x.uuid === activeMatrixAllocationUuid) || al.length === 1;
                 });
-                saveBtn.style.display = (!combY && allEx) ? 'none' : '';
+                saveBtn.style.display = (!combY && allEx && !matrixSlotBaru) ? 'none' : '';
             }
 
             const gVal = document.getElementById('matrixBarGuruSelect').value;
@@ -5118,6 +5118,7 @@ window.VJSampleData = function () {
 
         function handleMatrixCellClick(event, classIndex, className, subjekId) {
             const clickedTd = event.currentTarget;
+            matrixSlotBaru = false;
             const plainClick = !event.shiftKey && !event.ctrlKey && !event.metaKey;
             const seg = event.target && event.target.closest ? event.target.closest('[data-seg-uuid]') : null;
             if (seg && plainClick) activeMatrixAllocationUuid = seg.dataset.segUuid;
@@ -5219,6 +5220,7 @@ window.VJSampleData = function () {
 
         // Kumpul perubahan dari Panel Pengisian (guru / waktu / label) - belum simpan
         function stageMatrixBarPecahan(moveNext) {
+            if (matrixSlotBaru) return; // slot baharu disimpan dengan butang panel
             if (!isEditMode || !selectedMatrixSubjectId || selectedMatrixClasses.length === 0) return;
             const sid = selectedMatrixSubjectId;
             const gVal = document.getElementById('matrixBarGuruSelect').value;
@@ -5500,6 +5502,7 @@ window.VJSampleData = function () {
         }
 
         function selectMatrixAllocationForEdit(item) {
+            matrixSlotBaru = false;
             activeMatrixAllocationUuid = item.uuid;
             const gIdx = dbData.guru.findIndex(g => g[1] === item.guruNama);
             if (gIdx > -1) {
@@ -5531,7 +5534,10 @@ window.VJSampleData = function () {
             highlightMatrixLinks();
         }
 
+        // true selepas "+ Slot Elektif" / sel kosong: panel mencipta agihan BAHARU, bukan mengedit yang sedia ada
+        var matrixSlotBaru = false;
         function resetMatrixBarForNewSlot() {
+            matrixSlotBaru = true;
             activeMatrixAllocationUuid = null;
             document.getElementById('matrixBarGuruSelect').value = "";
             document.getElementById('matrixBarGuruLoad').innerText = "-";
@@ -5564,7 +5570,7 @@ window.VJSampleData = function () {
                     const al = (matrix[cn] && matrix[cn][sidX]) || [];
                     return al.some(x => x.uuid === activeMatrixAllocationUuid) || al.length === 1;
                 });
-                if (!comb && allExisting) {
+                if (!comb && allExisting && !matrixSlotBaru) {
                     stageMatrixBarPecahan();
                     showToast(`Perubahan dikumpul (${Object.keys(pendingMatrixEdits).length}). Tekan "Simpan Semua Perubahan" di bawah apabila siap.`, 'success');
                     return;

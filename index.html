@@ -3479,6 +3479,7 @@ window.VJSampleData = function () {
                 </div>
                 <div class="p-5 space-y-3 bg-amber-50/30">
                     <p class="text-[11px] text-slate-500">Ujian ini hanya menyemak dan mencuba. <b>Jadual sedia ada tidak diubah atau disimpan.</b> Jalankan setiap langkah satu persatu, atau tekan "Jalankan Semua".</p>
+                    <p id="jdlUjianSkop" class="text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-100 rounded-lg px-3 py-1.5"></p>
                     <div id="jdlUjianBanner" class="hidden rounded-xl px-3 py-2 text-xs font-bold"></div>
                     <div id="jdlUjianLangkah" class="space-y-2"></div>
                 </div>
@@ -10178,7 +10179,22 @@ window.VJSolver = (function () {
                 <tbody>${baris.map(b => `<tr class="border-t border-slate-100 ${warna[b.status] || ''}">${b.sel.map(c => `<td class="px-2 py-1">${escapeHtml(String(c))}</td>`).join('')}<td class="px-2 py-1 text-right font-bold">${ikon[b.status]}${b.catatan ? ' ' + escapeHtml(b.catatan) : ''}</td></tr>`).join('')}</tbody></table></div></div>`;
         }
 
+        // Skop ujian: kelas yang dipilih (Shift/Ctrl + tanda kotak) atau semua kelas
+        function jdlUjianSkop(B) {
+            if (!jdlPilihan.size) return null;
+            const s = new Set();
+            B.kelas.forEach((k, i) => { if (jdlPilihan.has(k.id)) s.add(i); });
+            return s.size ? s : null;
+        }
+        const jdlUjianDalam = (u, skop) => !skop || u.kelas.some(k => skop.has(k));
+
         function jdlUjianRender() {
+            const lbl = document.getElementById('jdlUjianSkop');
+            if (lbl) {
+                const nama = (VJStore.getSolverInput().kelas || []).filter(k => jdlPilihan.has(k[0])).map(k => k[1]);
+                lbl.textContent = nama.length ? `Skop: ${nama.length} kelas dipilih (${nama.length > 8 ? nama.slice(0, 8).join(', ') + '…' : nama.join(', ')}). Tutup panel & ubah tanda kotak kelas (Shift + klik = julat) untuk menukar skop.`
+                    : 'Skop: semua kelas. Pilih kelas (tanda kotak, Shift + klik untuk julat) untuk menguji kelas tertentu sahaja.';
+            }
             const wrap = document.getElementById('jdlUjianLangkah');
             wrap.innerHTML = JDL_UJIAN_LANGKAH.map(l => {
                 const h = jdlUjian.hasil[l.id];
@@ -10255,11 +10271,13 @@ window.VJSolver = (function () {
 
         async function jdlUjianKelas(inp, B) {
             const { K } = jdlUjianBeban(B);
+            const skop = jdlUjianSkop(B);
             const baris = B.kelas.map((k, i) => {
+                if (skop && !skop.has(i)) return null;
                 const boleh = B.N - B.blokK[i].reduce((a, b) => a + b, 0);
                 const status = K[i] > boleh ? 'gagal' : (K[i] === 0 ? 'amaran' : 'ok');
                 return { sel: [k.nama, K[i], boleh], status, catatan: K[i] > boleh ? `lebih ${K[i] - boleh}` : (K[i] === 0 ? 'tiada agihan' : `baki ${boleh - K[i]}`) };
-            });
+            }).filter(Boolean);
             const st = baris.some(b => b.status === 'gagal') ? 'gagal' : baris.some(b => b.status === 'amaran') ? 'amaran' : 'ok';
             return { status: st, html: jdlUjianJadual('Setiap kelas (waktu perlu vs slot boleh isi)', ['Kelas', 'Perlu', 'Boleh isi'], baris) };
         }
@@ -10267,7 +10285,11 @@ window.VJSolver = (function () {
         async function jdlUjianGuru(inp, B) {
             const { G } = jdlUjianBeban(B);
             const maks = {}; inp.guru.forEach(g => { maks[g[0]] = parseInt(g[3]) || 0; });
+            const skopG = jdlUjianSkop(B);
+            const guruSkop = new Set();
+            B.units.forEach(u => { if (jdlUjianDalam(u, skopG)) u.guru.forEach(g => guruSkop.add(g)); });
             const baris = B.guru.map((g, i) => {
+                if (skopG && !guruSkop.has(i)) return null;
                 const boleh = B.N - B.blokG[i].reduce((a, b) => a + b, 0);
                 const had = maks[g.id] || 0;
                 let status = 'ok', catatan = `baki ${boleh - G[i]}`;
@@ -10275,7 +10297,7 @@ window.VJSolver = (function () {
                 else if (had && G[i] > had) { status = 'amaran'; catatan = `melebihi had ${had}`; }
                 else if (G[i] === 0) { status = 'amaran'; catatan = 'tiada agihan'; }
                 return { sel: [g.nama, G[i], boleh, had || '-'], status, catatan };
-            });
+            }).filter(Boolean);
             const st = baris.some(b => b.status === 'gagal') ? 'gagal' : baris.some(b => b.status === 'amaran') ? 'amaran' : 'ok';
             return { status: st, html: jdlUjianJadual('Setiap guru (beban ikut kumpulan serentak)', ['Guru', 'Beban', 'Boleh mengajar', 'Had'], baris) };
         }
@@ -10283,7 +10305,8 @@ window.VJSolver = (function () {
         async function jdlUjianBilik(inp, B) {
             if (!B.bilik.length) return { status: 'ok', html: '<p class="text-[11px] text-slate-500 mt-2">Tiada bilik khas ditetapkan.</p>' };
             const tunggal = B.bilik.map(() => 0), kongsi = B.bilik.map(() => 0);
-            B.units.forEach(T => (T.bilikReq || []).forEach(q => {
+            const skopB = jdlUjianSkop(B);
+            B.units.filter(u => jdlUjianDalam(u, skopB)).forEach(T => (T.bilikReq || []).forEach(q => {
                 if (q.cand.length === 1) tunggal[q.cand[0]] += T.len;
                 else q.cand.forEach(c => { kongsi[c] += T.len; });
             }));
@@ -10299,6 +10322,15 @@ window.VJSolver = (function () {
             const isyarat = { batal: false };
             jdlUjian.isyarat = isyarat;
             lapor('Mencuba menyusun…');
+            const skop = jdlUjianSkop(B);
+            if (skop) {
+                // Hanya agihan kelas dipilih disusun; sesi lain dikunci supaya tidak mengganggu
+                const trx = new Set();
+                inp.transaksi.forEach(t => { if (jdlTrxDipilih(t)) trx.add(String(t[8])); });
+                const adaSesi = new Set(inp.jadual.sesi.map(x => x.uuid));
+                inp.transaksi = inp.transaksi.filter(t => trx.has(String(t[8])) || adaSesi.has(String(t[8])));
+                inp.jadual = Object.assign({}, inp.jadual, { sesi: inp.jadual.sesi.map(x => trx.has(x.uuid) ? Object.assign({}, x, { kunci: false }) : Object.assign({}, x, { kunci: true })) });
+            }
             const res = await jdlSusunSelari(inp, Object.assign({}, jdlOptBina(), { hadSaat: 10, hadOptimumSaat: 0, teras: 1, isyarat }),
                 st => lapor(`${st.terbaik} / ${st.jumlah} sesi diletak · ${(st.ms / 1000).toFixed(1)} s`));
             jdlUjian.isyarat = null;
@@ -10306,7 +10338,8 @@ window.VJSolver = (function () {
             const ada = new Set(res.sesi.map(x => x.uuid + '#' + x.ke));
             const kelasP = B.kelas.map(() => [0, 0]), guruP = B.guru.map(() => [0, 0]);
             let diletak = 0;
-            B.units.forEach(u => {
+            const unitSkop = B.units.filter(u => jdlUjianDalam(u, skop));
+            unitSkop.forEach(u => {
                 const ok = u.ahli.every(id => ada.has(id + '#' + u.ke));
                 if (ok) diletak++;
                 u.kelas.forEach(k => { kelasP[k][0] += u.len; if (ok) kelasP[k][1] += u.len; });
@@ -10318,9 +10351,9 @@ window.VJSolver = (function () {
             res.sesi.forEach(x => { if (x.bilik) bilikGuna[x.bilik] = (bilikGuna[x.bilik] || 0) + (x.panjang || 1); });
             const barisBilik = B.bilik.map(b => ({ sel: [b.nama, bilikGuna[b.id] || 0, B.N], status: 'ok', catatan: '' }));
             const bK = mk(kelasP, B.kelas), bG = mk(guruP, B.guru);
-            const gagal = diletak < B.units.length;
+            const gagal = diletak < unitSkop.length;
             const tm = (res.tidakMuat || []).slice(0, 15).map(t => `<li>✖ ${escapeHtml(t.desc)} (${t.len}w) — ${escapeHtml(t.sebab)}</li>`).join('');
-            const html = `<p class="text-[11px] mt-2 ${gagal ? 'text-rose-700' : 'text-emerald-700'} font-bold">${diletak} / ${B.units.length} sesi berjaya diletak (${((res.stat.ms || 0) / 1000).toFixed(1)} s).</p>`
+            const html = `<p class="text-[11px] mt-2 ${gagal ? 'text-rose-700' : 'text-emerald-700'} font-bold">${diletak} / ${unitSkop.length} sesi${skop ? ' (kelas dipilih)' : ''} berjaya diletak (${((res.stat.ms || 0) / 1000).toFixed(1)} s).</p>`
                 + (gagal ? '<p class="text-[11px] text-amber-700 mt-1">Belum tentu mustahil: penyusun hanya mencari dalam 10 saat. Cuba naikkan had masa / bilangan teras, longgarkan Hubungan, atau semak sebab di bawah dan jalankan semula.</p>' : '')
                 + (tm ? `<ul class="mt-1 text-[11px] text-rose-700 space-y-0.5 list-none max-h-32 overflow-auto">${tm}</ul>` : '')
                 + jdlUjianJadual('Jana — kelas (perlu vs diletak)', ['Kelas', 'Perlu', 'Diletak'], bK)

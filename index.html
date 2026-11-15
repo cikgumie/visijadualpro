@@ -3451,6 +3451,7 @@ window.VJSampleData = function () {
                         <option value="10">Optimum 10 s</option>
                         <option value="30" selected>Optimum 30 s</option>
                         <option value="90">Optimum 90 s</option>
+                        <option value="-1">Optimum tanpa had (henti manual)</option>
                     </select>
                     <button onclick="hubTogglePanel()" class="px-3 py-1.5 border border-slate-200 bg-white hover:bg-slate-100 rounded-lg text-xs font-bold text-slate-700 flex items-center gap-1.5">
                         <i data-lucide="link-2" class="w-3.5 h-3.5"></i> Hubungan <span id="hubCount" class="text-[10px] px-1.5 rounded-full bg-slate-100 text-slate-500"></span>
@@ -3613,6 +3614,7 @@ window.VJSampleData = function () {
                     <div class="h-2 bg-slate-100 rounded-full overflow-hidden mt-3"><div id="jdlOverlayBar" class="h-full bg-brand-600 rounded-full transition-all duration-300" style="width:0%"></div></div>
                     <p id="jdlOverlayTeks" class="text-[11px] text-slate-500 mt-2 tabular-nums min-h-[1rem]"></p>
                     <button id="jdlOverlayBatal" onclick="jdlBatalSusun()" class="mt-4 px-4 py-2 border border-rose-200 bg-rose-50 hover:bg-rose-100 rounded-lg text-xs font-bold text-rose-700 inline-flex items-center gap-1.5 disabled:opacity-60"></button>
+                    <button id="jdlOverlayHenti" onclick="jdlHentiSusun()" class="hidden mt-4 ml-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-xs font-bold items-center gap-1.5 disabled:opacity-60">Henti &amp; Guna Terbaik</button>
                     <p class="text-[10px] text-slate-400 mt-2">Jadual sedia ada tidak diubah jika dibatalkan.</p>
                 </div>
             </div>
@@ -9946,13 +9948,14 @@ window.VJSolver = (function () {
         function jdlSusunSelari(inp, opt, onProgress) {
             const n = Math.max(1, Math.min(JDL_TERAS_MAKS, parseInt(opt.teras) || 1));
             const isyarat = opt.isyarat;
-            const optAsas = Object.assign({}, opt); delete optAsas.isyarat; delete optAsas.teras; delete optAsas.pusingan;
+            const optAsas = Object.assign({}, opt); delete optAsas.tanpaHad; delete optAsas.isyarat; delete optAsas.teras; delete optAsas.pusingan;
             let url;
             try { url = jdlBinaWorkerUrl(); if (typeof Worker === 'undefined') throw new Error('Worker tiada'); }
             catch (e) { console.warn('Web Worker tidak tersedia, guna thread utama:', e); return VJSolver.susun(inp, opt, onProgress); }
 
             const hadOpt = Math.max(0, parseFloat(opt.hadOptimumSaat) || 0);
-            const R = n > 1 && hadOpt > 0 ? (parseInt(opt.pusingan) || Math.max(2, Math.min(12, Math.round(hadOpt / 2.5)))) : 1;
+            const tanpaHad = !!opt.tanpaHad;
+            const R = tanpaHad ? 12 : (n > 1 && hadOpt > 0 ? (parseInt(opt.pusingan) || Math.max(2, Math.min(12, Math.round(hadOpt / 2.5)))) : 1);
             const workers = [];
             for (let i = 0; i < n; i++) { try { workers.push(new Worker(url)); } catch (e) { console.warn('Worker gagal dicipta:', e); } }
             if (!workers.length) return VJSolver.susun(inp, opt, onProgress);
@@ -10000,19 +10003,22 @@ window.VJSolver = (function () {
 
             const utama = (async () => {
                 let best = null, awal0 = null, iter = 0, langkah = 0, diterima = 0, hentiBuntu = false;
+                let kitaran = 0;
+                do {
                 for (let r = 0; r < R && !tamat; r++) {
+                    const pertama = kitaran === 0 && r === 0;
                     const optR = Object.assign({}, optAsas, { hadOptimumSaat: hadOpt / R, suhu: [r / R, (r + 1) / R] });
                     let inpR = inp;
-                    if (r > 0) {
+                    if (!pertama) {
                         optR.sambung = true; optR.hadSaat = 0.05;
                         inpR = Object.assign({}, inp, { jadual: Object.assign({}, inp.jadual, { sesi: best.sesi }) });
                     }
-                    const hasil = await pusingan(inpR, optR, r);
+                    const hasil = await pusingan(inpR, optR, pertama ? 0 : 1);
                     if (tamat) return { batal: true };
                     if (!hasil.length) { if (best) break; throw new Error('Semua worker penyusun gagal.'); }
                     let bestR = null;
                     hasil.forEach(x => { if (jdlLebihBaik(x, bestR)) bestR = x; });
-                    if (r === 0) { awal0 = bestR.stat.optimum ? { awal: bestR.stat.optimum.awal, kosAwal: bestR.stat.optimum.kosAwal } : null; iter = bestR.stat.iter; hentiBuntu = !!bestR.stat.hentiBuntu; }
+                    if (pertama) { awal0 = bestR.stat.optimum ? { awal: bestR.stat.optimum.awal, kosAwal: bestR.stat.optimum.kosAwal } : null; iter = bestR.stat.iter; hentiBuntu = !!bestR.stat.hentiBuntu; }
                     hasil.forEach(x => { if (x.stat.optimum) { langkah += x.stat.optimum.langkah; diterima += x.stat.optimum.diterima; } });
                     // Jangan sekali-kali mundur: kekalkan jadual terbaik setakat ini
                     if (jdlLebihBaik(bestR, best)) {
@@ -10020,14 +10026,17 @@ window.VJSolver = (function () {
                         if (best && bestR.tidakMuat.length === best.tidakMuat.length) bestR.tidakMuat = best.tidakMuat;
                         best = bestR;
                     }
+                    if (tanpaHad && isyarat && isyarat.henti) break;
                 }
+                kitaran++;
+                } while (tanpaHad && !tamat && !(isyarat && isyarat.henti));
                 henti();
                 best.stat.teras = workers.length;
                 best.stat.pusingan = R;
                 best.stat.ms = Math.round(performance.now() - t0);
                 best.stat.iter = iter;
                 best.stat.hentiBuntu = hentiBuntu;
-                if (best.stat.optimum && awal0) Object.assign(best.stat.optimum, awal0, { langkah, diterima, ms: Math.round(hadOpt * 1000) });
+                if (best.stat.optimum && awal0) Object.assign(best.stat.optimum, awal0, { langkah, diterima, ms: tanpaHad ? best.stat.ms : Math.round(hadOpt * 1000) });
                 return best;
             })();
             utama.catch(() => henti());
@@ -10056,8 +10065,10 @@ window.VJSolver = (function () {
             jdlSedang = true;
             const btn = document.getElementById('jdlBtnSusun');
             btn.disabled = true; btn.classList.add('opacity-60');
-            const hadOpt = parseInt(document.getElementById('jdlOptimum').value) || 0;
-            const isyarat = { batal: false };
+            const hadOptPilih = parseInt(document.getElementById('jdlOptimum').value) || 0;
+            const tanpaHad = hadOptPilih < 0;
+            const hadOpt = tanpaHad ? 30 : hadOptPilih;
+            const isyarat = { batal: false, henti: false, tanpaHad };
             jdlOverlay(true, isyarat);
             let msMulaOpt = null;
             try {
@@ -10065,13 +10076,14 @@ window.VJSolver = (function () {
                     ...jdlOptBina(),
                     hadSaat: parseInt(document.getElementById('jdlMasaHad').value) || 30,
                     hadOptimumSaat: hadOpt,
+                    tanpaHad,
                     teras: parseInt(document.getElementById('jdlTeras').value) || 1,
                     isyarat
                 }, st => {
                     if (st.fasa === 'optimum') {
                         if (msMulaOpt === null) msMulaOpt = st.ms;
-                        const f = hadOpt ? Math.min(1, (st.ms - msMulaOpt) / (hadOpt * 1000)) : 1;
-                        jdlOverlayKemas('Fasa 2/2 · Mengoptimum kualiti', `Kos ${Math.round(st.kosAwal)} → ${Math.round(st.kos)} · ${(st.ms / 1000).toFixed(1)} s`, f);
+                        const f = tanpaHad ? 1 : (hadOpt ? Math.min(1, (st.ms - msMulaOpt) / (hadOpt * 1000)) : 1);
+                        jdlOverlayKemas(tanpaHad ? 'Fasa 2/2 · Mengoptimum tanpa had' : 'Fasa 2/2 · Mengoptimum kualiti', `Kos ${Math.round(st.kosAwal)} → ${Math.round(st.kos)} · ${(st.ms / 1000).toFixed(1)} s${tanpaHad ? ' · tekan "Henti & Guna Terbaik" bila berpuas hati' : ''}`, f);
                     } else {
                         jdlOverlayKemas(hadOpt ? 'Fasa 1/2 · Meletak sesi' : 'Meletak sesi', `${st.terbaik} / ${st.jumlah} sesi diletak · ${(st.ms / 1000).toFixed(1)} s`, st.jumlah ? st.terbaik / st.jumlah : 0);
                     }
@@ -10121,6 +10133,8 @@ window.VJSolver = (function () {
             if (on) {
                 const btn = document.getElementById('jdlOverlayBatal');
                 btn.disabled = false; btn.innerHTML = '<i data-lucide="x-circle" class="w-4 h-4"></i> Batal Penyusunan';
+                const bh = document.getElementById('jdlOverlayHenti');
+                bh.disabled = false; bh.classList.toggle('hidden', !(isyarat && isyarat.tanpaHad)); bh.classList.toggle('inline-flex', !!(isyarat && isyarat.tanpaHad));
                 jdlOverlayKemas('Menyediakan…', '', 0);
                 lucide.createIcons();
                 btn.focus();
@@ -10130,6 +10144,12 @@ window.VJSolver = (function () {
             document.getElementById('jdlOverlayFasa').innerText = fasa;
             document.getElementById('jdlOverlayTeks').innerText = teks;
             document.getElementById('jdlOverlayBar').style.width = Math.round(Math.max(0, Math.min(1, f)) * 100) + '%';
+        }
+        function jdlHentiSusun() {
+            if (!jdlIsyaratAktif) return;
+            jdlIsyaratAktif.henti = true;
+            const bh = document.getElementById('jdlOverlayHenti');
+            bh.disabled = true; bh.innerText = 'Menghentikan… (siapkan pusingan semasa)';
         }
         function jdlBatalSusun() {
             if (!jdlIsyaratAktif) return;
@@ -10141,7 +10161,7 @@ window.VJSolver = (function () {
         window.addEventListener('keydown', e => {
             if (!jdlSedang) return;
             if (e.key === 'Escape') jdlBatalSusun();
-            if (e.target && e.target.id === 'jdlOverlayBatal' && (e.key === 'Enter' || e.key === ' ')) return;
+            if (e.target && (e.target.id === 'jdlOverlayBatal' || e.target.id === 'jdlOverlayHenti') && (e.key === 'Enter' || e.key === ' ')) return;
             e.preventDefault(); e.stopImmediatePropagation();
         }, true);
         window.addEventListener('beforeunload', e => { if (jdlSedang) { e.preventDefault(); e.returnValue = ''; } });

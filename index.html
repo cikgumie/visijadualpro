@@ -5126,7 +5126,7 @@ window.VJSampleData = function () {
             if (!allocs.length) return;
             const anyPend = allocs.some(a => matrixPendingOf(a.uuid));
             td.classList.toggle('matrix-cell-pending', anyPend);
-            if (allocs.length === 1) {
+            if (!td.querySelector('.matrix-seg')) {
                 const a = allocs[0], p = matrixPendingOf(a.uuid);
                 const lbl = p ? p.label : a.label;
                 const tag = td.querySelector('.matrix-link-tag');
@@ -5942,7 +5942,7 @@ window.VJSampleData = function () {
                             borderStyle = `border-left: 3.5px double #4F46E5;`;
                         }
 
-                        let isSplit = allocations.length > 1;
+                        let isSplit = allocations.length > 1 || (allocations.length === 1 && !!allocations[0].label);
                         let cellInner = cellText;
                         if (isSplit) {
                             const segWarna = ['#6366F1', '#F59E0B', '#10B981', '#EC4899', '#0EA5E9', '#84CC16'];

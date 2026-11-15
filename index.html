@@ -9027,6 +9027,41 @@ window.VJSolver = (function () {
             return set;
         }
 
+        // Laluan pantas: bolehkah u (yang sedang TIDAK diletak) diletak di s tanpa mengusir sesiapa?
+        // Setara dengan `konflik(u, s)` memulangkan set kosong, tetapi tanpa peruntukan memori & berhenti pada pertembungan pertama.
+        const lambat = units.map((T, u) => T.bilikReq.length > 0 || relU[u].some(ri => relKeras[ri]));
+        function bebas(u, s) {
+            if (lambat[u]) { const c = konflik(u, s); return !!c && c.size === 0; }
+            const T = units[u], len = T.len, d = Math.floor(s / W), ks = T.kelas, gs = T.guru;
+            for (let j = 0; j < ks.length; j++) { const occ = occK[ks[j]]; for (let i = 0; i < len; i++) if (occ[s + i] >= 0) return false; }
+            for (let j = 0; j < gs.length; j++) { const occ = occG[gs[j]]; for (let i = 0; i < len; i++) if (occ[s + i] >= 0) return false; }
+            if (P.sesiSehariSubjek > 0) {
+                const pu = pasang[u];
+                for (let j = 0; j < pu.length; j++) {
+                    const arr = daySub[pu[j][1] + d];
+                    let hidup = 0;
+                    for (let i = 0; i < arr.length; i++) if (arr[i] !== u) hidup++;
+                    if (hidup >= P.sesiSehariSubjek) return false;
+                }
+            }
+            if (P.maxGuruSehari > 0 || P.maxGuruBerturut > 0) {
+                const d0 = d * W, a0 = s - d0, b0 = a0 + len - 1;
+                for (let j = 0; j < gs.length; j++) {
+                    const occ = occG[gs[j]];
+                    let n = 0;
+                    for (let q = 0; q < W; q++) if (occ[d0 + q] >= 0) n++;
+                    if (P.maxGuruSehari > 0 && n + len > P.maxGuruSehari) { if (n > 0) return false; }
+                    else if (P.maxGuruBerturut > 0) {
+                        let a = a0, b = b0;
+                        while (a > 0 && occ[d0 + a - 1] >= 0) a--;
+                        while (b < W - 1 && occ[d0 + b + 1] >= 0) b++;
+                        if (b - a + 1 > P.maxGuruBerturut && (a < a0 || b > b0)) return false;
+                    }
+                }
+            }
+            return true;
+        }
+
         // Hubungan keras: tambah unit yang mesti diusir jika u diletak di s
         function konflikHubungan(ri, u, s, set) {
             const R = B.hubUnit[ri], J = R.h.jenis, n = R.h.nilai, T = units[u], d = Math.floor(s / W);
@@ -9276,13 +9311,22 @@ window.VJSolver = (function () {
 
         // Alih satu sesi ke kedudukan lain yang sah. Pulangkan delta kos jika diterima, null jika ditolak.
         function cubaAlih(u, T, sasaran) {
-            const lama = pos[u], baru = sasaran !== undefined ? sasaran : domain[u][Math.floor(Math.random() * domain[u].length)];
+            const lama = pos[u];
+            let baru = sasaran;
+            if (baru === undefined) {
+                // Cuba beberapa kedudukan rawak; ambil yang slot pertamanya kosong bagi kelas pertama (tapisan murah)
+                const dm = domain[u], occ = occK[units[u].kelas[0]];
+                for (let c = 0; c < 6; c++) {
+                    const x = dm[Math.floor(Math.random() * dm.length)], o = occ[x];
+                    if (x !== lama && (o < 0 || o === u)) { baru = x; break; }
+                }
+                if (baru === undefined) return null;
+            }
             if (baru === lama) return null;
             const kw = kawasan([[u, lama], [u, baru]]);
             const sebelum = kosBahagian(...kw);
             angkat(u);
-            const set = konflik(u, baru);
-            if (!set || set.size) { letak(u, lama); return null; }
+            if (!bebas(u, baru)) { letak(u, lama); return null; }
             letak(u, baru);
             const delta = kosBahagian(...kw) - sebelum;
             if (terima(delta, T)) return delta;
@@ -9294,9 +9338,11 @@ window.VJSolver = (function () {
         // kemudian cuba alih salah satu sesi kelas itu (yang terletak lebih ke belakang) ke dalam lubang tersebut.
         const unitKelas = B.kelas.map(() => []);
         units.forEach((Tu, u) => Tu.kelas.forEach(k => unitKelas[k].push(u)));
+        // Diisi oleh mulaOptimum: kelas yang masih ada slot kosong, rakan tukar setiap unit, unit setiap guru
+        let kelasBerlubang = B.kelas.map((_, k) => k), rakanTukar = null, unitGuru = null, guruAktif = [];
         function cubaIsiLubang(T) {
             for (let cuba = 0; cuba < 12; cuba++) {
-                const k = Math.floor(Math.random() * B.kelas.length), d = Math.floor(Math.random() * H);
+                const k = kelasBerlubang[Math.floor(Math.random() * kelasBerlubang.length)], d = Math.floor(Math.random() * H);
                 const occ = occK[k], blok = blokK[k];
                 let akhir = -1, lubang = -1;
                 for (let p = 0; p < W; p++) if (occ[d * W + p] >= 0) akhir = p;
@@ -9333,8 +9379,7 @@ window.VJSolver = (function () {
             for (const x of usir) {
                 let best = -1, bk = Infinity;
                 for (const s of domain[x]) {
-                    const c = konflik(x, s);
-                    if (!c || c.size) continue;
+                    if (!bebas(x, s)) continue;
                     const kk = kosLembut(x, s);
                     if (kk < bk) { bk = kk; best = s; }
                 }
@@ -9355,25 +9400,96 @@ window.VJSolver = (function () {
         function cubaTukar(T, boleh) {
             const u = boleh[Math.floor(Math.random() * boleh.length)];
             const Tu = units[u];
-            const k = Tu.kelas[Math.floor(Math.random() * Tu.kelas.length)];
-            const d = Math.floor(Math.random() * H), p = Math.floor(Math.random() * W);
-            const v = occK[k][d * W + p];
-            if (v < 0 || v === u || kunci[v] || units[v].len !== Tu.len || pos[v] !== d * W + p) return null;
+            let v;
+            if (rakanTukar) {
+                // Rakan = sesi sama panjang yang berkongsi kelas (disenarai awal), bukan slot rawak
+                const R = rakanTukar[u];
+                if (!R.length) return null;
+                v = R[Math.floor(Math.random() * R.length)];
+            } else {
+                const k = Tu.kelas[Math.floor(Math.random() * Tu.kelas.length)];
+                const d = Math.floor(Math.random() * H), p = Math.floor(Math.random() * W);
+                v = occK[k][d * W + p];
+                if (v < 0 || v === u || kunci[v] || units[v].len !== Tu.len || pos[v] !== d * W + p) return null;
+            }
             const su = pos[u], sv = pos[v];
             if (!domainSet[u].has(sv) || !domainSet[v].has(su)) return null;
             const kw = kawasan([[u, su], [u, sv], [v, su], [v, sv]]);
             const sebelum = kosBahagian(...kw);
             angkat(u); angkat(v);
             const pulih = () => { if (pos[u] >= 0) angkat(u); if (pos[v] >= 0) angkat(v); letak(u, su); letak(v, sv); return null; };
-            let set = konflik(u, sv);
-            if (!set || set.size) return pulih();
+            if (!bebas(u, sv)) return pulih();
             letak(u, sv);
-            set = konflik(v, su);
-            if (!set || set.size) return pulih();
+            if (!bebas(v, su)) return pulih();
             letak(v, su);
             const delta = kosBahagian(...kw) - sebelum;
             if (terima(delta, T)) return delta;
             return pulih();
+        }
+
+        // Tukar susunan dua sesi BERSEBELAHAN yang berlainan panjang dalam kelas & hari yang sama (cth 3+2 -> 2+3).
+        // Blok kelas kekal; hanya waktu guru berubah — berguna untuk merapatkan lompong guru dalam kelas yang penuh.
+        function cubaTukarSebelah(T, boleh) {
+            const u = boleh[Math.floor(Math.random() * boleh.length)];
+            const Tu = units[u], su = pos[u], d = Math.floor(su / W);
+            const k = Tu.kelas[Math.floor(Math.random() * Tu.kelas.length)];
+            let v;
+            const depan = Math.random() < 0.5;
+            if (depan) {
+                const x = su + Tu.len;
+                if (x >= (d + 1) * W) return null;
+                v = occK[k][x];
+                if (v < 0 || pos[v] !== x) return null;
+            } else {
+                if (su === d * W) return null;
+                v = occK[k][su - 1];
+                if (v < 0 || pos[v] + units[v].len !== su || Math.floor(pos[v] / W) !== d) return null;
+            }
+            if (v === u || kunci[v] || units[v].len === Tu.len) return null;
+            const A = depan ? u : v, Bx = depan ? v : u;       // A di depan, Bx selepasnya
+            const a = pos[A], lamaB = pos[Bx], baruB = a, baruA = a + units[Bx].len;
+            if (!domainSet[Bx].has(baruB) || !domainSet[A].has(baruA)) return null;
+            const kw = kawasan([[A, a], [A, baruA], [Bx, lamaB], [Bx, baruB]]);
+            const sebelum = kosBahagian(...kw);
+            angkat(A); angkat(Bx);
+            const pulih = () => { if (pos[A] >= 0) angkat(A); if (pos[Bx] >= 0) angkat(Bx); letak(A, a); letak(Bx, lamaB); return null; };
+            if (!bebas(Bx, baruB)) return pulih();
+            letak(Bx, baruB);
+            if (!bebas(A, baruA)) return pulih();
+            letak(A, baruA);
+            const delta = kosBahagian(...kw) - sebelum;
+            if (terima(delta, T)) return delta;
+            return pulih();
+        }
+
+        // Rapatkan lompong guru: pilih satu lompong dalam hari seorang guru, kemudian cuba bawa salah satu sesinya
+        // ke dalam lompong itu (sesi kelas yang menghalang dialih oleh rantaiIsi).
+        function cubaRapatGuru(T) {
+            if (!guruAktif.length) return null;
+            const g = guruAktif[Math.floor(Math.random() * guruAktif.length)], d = Math.floor(Math.random() * H);
+            const occ = occG[g], blok = blokG[g], d0 = d * W;
+            let a = -1, b = -1;
+            for (let q = 0; q < W; q++) if (occ[d0 + q] >= 0) { if (a < 0) a = q; b = q; }
+            if (a < 0 || b - a < 2) return null;
+            // Lubang pertama selepas titik mula rawak (pusing balik sekali)
+            const mulaCari = a + 1 + Math.floor(Math.random() * (b - a - 1));
+            let h1 = -1;
+            for (let c = 0; c < b - a - 1; c++) {
+                const q = a + 1 + ((mulaCari - a - 1 + c) % (b - a - 1));
+                if (occ[d0 + q] < 0 && !blok[d0 + q]) { h1 = q; break; }
+            }
+            if (h1 < 0) return null;
+            let h2 = h1;
+            while (h1 > a + 1 && occ[d0 + h1 - 1] < 0 && !blok[d0 + h1 - 1]) h1--;
+            while (h2 < b - 1 && occ[d0 + h2 + 1] < 0 && !blok[d0 + h2 + 1]) h2++;
+            const run = h2 - h1 + 1;
+            const senarai = unitGuru[g];
+            const x = senarai[Math.floor(Math.random() * senarai.length)];
+            const len = units[x].len;
+            if (pos[x] < 0 || kunci[x] || len > run) return null;
+            const s0 = d0 + (Math.random() < 0.5 ? h1 : h2 - len + 1);
+            if (s0 === pos[x] || !domainSet[x].has(s0)) return null;
+            return rantaiIsi(x, s0, T);
         }
 
         function tetapkanKedudukan(akhir) {
@@ -9397,7 +9513,7 @@ window.VJSolver = (function () {
         function rantaiLetak(u, kedalaman, tabu, tamat) {
             if (performance.now() > tamat) return false;
             let best = -1, bk = Infinity;
-            for (const s of domain[u]) { const c = konflik(u, s); if (c && c.size === 0) { const k = kosLembut(u, s); if (k < bk) { bk = k; best = s; } } }
+            for (const s of domain[u]) { if (bebas(u, s)) { const k = kosLembut(u, s); if (k < bk) { bk = k; best = s; } } }
             if (best >= 0) { letak(u, best); return true; }
             if (kedalaman <= 0) return false;
             const cand = [];
@@ -9502,8 +9618,35 @@ window.VJSolver = (function () {
             function mulaOptimum(msFasa1) {
                 const boleh = units.map((_, u) => u).filter(u => pos[u] >= 0 && !kunci[u] && domain[u].length > 1);
                 if (!boleh.length) { resolve(hasil(pos, msFasa1)); return; }
-                const awal = kosSemua();
-                fasa2 = { boleh, kini: awal, awal, terbaik: awal, posTerbaik: salinPos(), mula: performance.now(), msFasa1, langkah: 0, diterima: 0, T0: 4, T1: 0.05, kualitiAwal: ukurKualiti() };
+                // Senarai bantuan supaya setiap langkah memilih calon yang berpeluang berjaya
+                const bolehSet = new Uint8Array(U); boleh.forEach(u => { bolehSet[u] = 1; });
+                const bebasK = B.kelas.map((_, k) => { let n = 0; for (let x = 0; x < N; x++) if (occK[k][x] < 0 && !blokK[k][x]) n++; return n; });
+                kelasBerlubang = B.kelas.map((_, k) => k).filter(k => bebasK[k] > 0);
+                const bolehAlih = boleh.filter(u => units[u].kelas.every(k => bebasK[k] > 0));
+                rakanTukar = units.map(() => []);
+                B.kelas.forEach((_, k) => {
+                    const ahli = unitKelas[k].filter(u => bolehSet[u]);
+                    for (let i = 0; i < ahli.length; i++) for (let j = 0; j < ahli.length; j++) {
+                        const u = ahli[i], v = ahli[j];
+                        if (u !== v && units[u].len === units[v].len && !rakanTukar[u].includes(v)) rakanTukar[u].push(v);
+                    }
+                });
+                unitGuru = B.guru.map(() => []);
+                boleh.forEach(u => units[u].guru.forEach(g => unitGuru[g].push(u)));
+                guruAktif = B.guru.map((_, g) => g).filter(g => unitGuru[g].length > 0);
+                // Lantai kos: komponen imbangan beban harian yang tidak boleh dikurangkan — ditolak supaya kos mencerminkan apa yang boleh diperbaiki
+                let lantai = 0;
+                B.kelas.forEach((_, k) => {
+                    let L = 0; for (let d = 0; d < H; d++) L += dayLoadK[k][d];
+                    const q = Math.floor(L / H), r = L % H;
+                    lantai += BERAT.beban * (r * (q + 1) * (q + 1) + (H - r) * q * q);
+                });
+                // Campuran langkah (kumulatif): isi lubang, alih, tukar sama panjang, tukar bersebelahan, rapat guru
+                const w = [kelasBerlubang.length ? 0.12 : 0, bolehAlih.length ? 0.13 : 0, 0.35, 0.15, guruAktif.length ? 0.25 : 0];
+                const jw = w.reduce((x, y) => x + y, 0);
+                const kum = []; w.reduce((acc, x, i) => (kum[i] = acc + x / jw), 0);
+                const awal = kosSemua() - lantai;
+                fasa2 = { boleh, bolehAlih, kum, lantai, kini: awal, awal, terbaik: awal, posTerbaik: salinPos(), mula: performance.now(), msFasa1, langkah: 0, diterima: 0, T0: 4, T1: 0.05, kualitiAwal: ukurKualiti() };
                 seterusnya(langkahOptimum);
             }
 
@@ -9520,7 +9663,12 @@ window.VJSolver = (function () {
                     for (let n = 0; n < 256; n++) {
                         O.langkah++;
                         const r = Math.random();
-                        const d = r < 0.3 ? cubaIsiLubang(T) : r < 0.7 ? cubaAlih(O.boleh[Math.floor(Math.random() * O.boleh.length)], T) : cubaTukar(T, O.boleh);
+                        const K = O.kum;
+                        const d = r < K[0] ? cubaIsiLubang(T)
+                            : r < K[1] ? cubaAlih(O.bolehAlih[Math.floor(Math.random() * O.bolehAlih.length)], T)
+                            : r < K[2] ? cubaTukar(T, O.boleh)
+                            : r < K[3] ? cubaTukarSebelah(T, O.boleh)
+                            : cubaRapatGuru(T);
                         if (d === null) continue;
                         O.diterima++;
                         O.kini += d;

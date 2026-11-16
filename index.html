@@ -10489,6 +10489,33 @@ window.VJSolver = (function () {
         const suhuA = opt.suhu ? +opt.suhu[0] : 0, suhuB = opt.suhu ? +opt.suhu[1] : 1;
         const mula = performance.now();
         const maxIter = 50000000;
+        // Statistik konflik (Conflict-Based Statistics, Müller): bilangan kali penempatan (u di s) mengusir penempatan (x di p).
+        // Pengusiran yang kerap berulang jadi semakin mahal, supaya carian tidak berpusing pada pasangan sesi yang sama.
+        const cbs = new Map();
+        const CBS_W = opt.cbsW === undefined ? 80 : +opt.cbsW;
+        const CBS_M = U * N;
+        const RECENT_W = opt.recentW === undefined ? 0 : +opt.recentW;
+        // Serpihan: larian slot kosong kelas yang lebih pendek daripada sesi terpendek kelas itu tidak boleh diisi lagi.
+        // Penempatan yang meninggalkan serpihan begitu didenda supaya kelas yang hampir penuh tidak "bocor" slot.
+        const FRAG_W = opt.fragW === undefined ? 500 : +opt.fragW;
+        const minLenK = B.kelas.map(() => 99);
+        units.forEach(T => T.kelas.forEach(k => { if (T.len < minLenK[k]) minLenK[k] = T.len; }));
+        function serpihan(u, s0, set) {
+            const T = units[u], d = Math.floor(s0 / W), a0 = d * W, z0 = a0 + W - 1, e0 = s0 + T.len - 1;
+            let n = 0;
+            for (const k of T.kelas) {
+                const m = minLenK[k];
+                if (m < 2) continue;
+                const occ = occK[k], blk = blokK[k];
+                let L = 0;
+                for (let x = s0 - 1; x >= a0 && L < m; x--) { if (blk[x]) break; const o = occ[x]; if (o >= 0 && !(set && set.has(o))) break; L++; }
+                if (L > 0 && L < m) n++;
+                let R = 0;
+                for (let x = e0 + 1; x <= z0 && R < m; x++) { if (blk[x]) break; const o = occ[x]; if (o >= 0 && !(set && set.has(o))) break; R++; }
+                if (R > 0 && R < m) n++;
+            }
+            return n;
+        }
 
         // MessageChannel tidak diperlahankan seperti setTimeout apabila tab berada di latar belakang
         const saluran = new MessageChannel();
@@ -10737,8 +10764,16 @@ window.VJSolver = (function () {
 
         // ---------- Pembaikan terarah sesi tidak muat (rantaian pengusiran dengan undur) ----------
         // Letak u pada slot bebas; jika tiada, usir 1-2 sesi lalu letak semula sesi yang diusir (secara rekursif, ke kedalaman terhad).
+        // Had rantaian (ala "recursive swapping" FET): bil. sesi diusir setiap langkah, calon dicuba, kedalaman asas, bajet panggilan
+        const R_KONF = opt.rKonf === undefined ? 2 : +opt.rKonf;
+        const R_CAND = opt.rCand === undefined ? 12 : +opt.rCand;
+        const R_DEPTH = opt.rDepth === undefined ? 2 : +opt.rDepth;
+        const R_CALLS = opt.rCalls === undefined ? 0 : +opt.rCalls;
+        const R_SORT = opt.rSort === undefined ? 0 : +opt.rSort;
+        let rPanggil = 0;
         function rantaiLetak(u, kedalaman, tabu, tamat) {
             if (performance.now() > tamat) return false;
+            if (R_CALLS && ++rPanggil > R_CALLS) return false;
             let best = -1, bk = Infinity;
             for (const s of domain[u]) { if (bebas(u, s)) { const k = kosLembut(u, s); if (k < bk) { bk = k; best = s; } } }
             if (best >= 0) { letak(u, best); return true; }
@@ -10746,14 +10781,16 @@ window.VJSolver = (function () {
             const cand = [];
             for (const s of domain[u]) {
                 const c = konflik(u, s);
-                if (!c || c.size === 0 || c.size > 2) continue;
+                if (!c || c.size === 0 || c.size > R_KONF) continue;
                 let ok = true;
                 for (const x of c) if (tabu.has(x)) { ok = false; break; }
                 if (ok) cand.push([s, c]);
             }
             for (let i = cand.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = cand[i]; cand[i] = cand[j]; cand[j] = t; }
+            // Paling sedikit sesi diusir dahulu (susunan rawak dikekalkan antara yang seri)
+            if (R_SORT) cand.sort((x, y) => x[1].size - y[1].size);
             tabu.add(u);
-            for (const [s, c] of cand.slice(0, 12)) {
+            for (const [s, c] of cand.slice(0, R_CAND)) {
                 const snap = salinPos();
                 const ev = [...c];
                 ev.forEach(x => angkat(x));
@@ -10763,11 +10800,84 @@ window.VJSolver = (function () {
                 if (ok) { tabu.delete(u); return true; }
                 tetapkanKedudukan(snap);
                 if (performance.now() > tamat) break;
+                if (R_CALLS && rPanggil > R_CALLS) break;
+            }
+            tabu.delete(u);
+            return false;
+        }
+        // Rantaian berbajet: setiap panggilan menerima bilangan cubaan, dibahagi kepada calon mengikut
+        // pemberat (calon yang sesi diusirnya masih ada slot bebas diutamakan); calon di bawah minimum dilangkau.
+        const R_BUDGET = opt.rBudget === undefined ? 0 : +opt.rBudget;
+        const R_BKONF = opt.rBKonf === undefined ? 3 : +opt.rBKonf;
+        function rantaiBajet(u, cubaan, tabu, tamat) {
+            if (performance.now() > tamat) return false;
+            let best = -1, bk = Infinity;
+            for (const s of domain[u]) { if (bebas(u, s)) { const k = kosLembut(u, s); if (k < bk) { bk = k; best = s; } } }
+            if (best >= 0) { letak(u, best); return true; }
+            let baki = cubaan - 1;
+            if (baki < 1) return false;
+            const cand = [];
+            let jumlah = 0;
+            for (const s of domain[u]) {
+                const c = konflik(u, s);
+                if (!c || c.size === 0 || c.size > R_BKONF) continue;
+                let ok = true, w = 1;
+                for (const x of c) {
+                    if (tabu.has(x) || kunci[x]) { ok = false; break; }
+                    let f = 0;
+                    for (const t of domain[x]) if (t !== pos[x] && bebas(x, t)) f++;
+                    w *= 0.15 + f;
+                }
+                if (!ok) continue;
+                w = w / (c.size * c.size) * (0.7 + Math.random() * 0.6);
+                cand.push({ s, c, w, min: c.size, t: 0 });
+                jumlah += w;
+            }
+            if (!cand.length) return false;
+            cand.sort((a, b) => b.w - a.w);
+            for (const k of cand) {
+                let t = baki > 0 ? Math.floor(k.w / jumlah * baki + 0.5) : 0;
+                if (t < k.min && k.min <= baki) t = k.min;
+                if (t > baki) t = baki;
+                jumlah -= k.w; baki -= t; k.t = t;
+            }
+            tabu.add(u);
+            for (const k of cand) {
+                if (k.t < k.min) continue;
+                const snap = salinPos();
+                const ev = [...k.c];
+                ev.forEach(x => angkat(x));
+                letak(u, k.s);
+                let ok = true, t = k.t;
+                for (let i = 0; i < ev.length; i++) {
+                    const bahagian = Math.max(1, Math.floor(t / (ev.length - i)));
+                    t -= bahagian;
+                    if (!rantaiBajet(ev[i], bahagian, tabu, tamat)) { ok = false; break; }
+                }
+                if (ok) { tabu.delete(u); return true; }
+                tetapkanKedudukan(snap);
+                if (performance.now() > tamat) break;
             }
             tabu.delete(u);
             return false;
         }
         function baikiTakMuat(ms) {
+            if (R_BUDGET) {
+                const tamat = performance.now() + ms;
+                let tak = units.map((_, u) => u).filter(u => pos[u] < 0 && !kunci[u] && !sebabMati[u] && domain[u].length);
+                let pusingan = 0;
+                while (tak.length && performance.now() < tamat) {
+                    // bajet kecil dahulu, besar kemudian (murah untuk yang mudah, mahal untuk yang sukar)
+                    const bajet = R_BUDGET * Math.pow(4, pusingan % 4);
+                    const u = tak[pusingan % tak.length];
+                    pusingan++;
+                    const snap = salinPos();
+                    if (rantaiBajet(u, bajet, new Set(), tamat)) tak = tak.filter(x => pos[x] < 0);
+                    else tetapkanKedudukan(snap);
+                }
+                diletak = units.filter((_, u) => pos[u] >= 0).length;
+                return;
+            }
             const tamat = performance.now() + ms;
             let tak = units.map((_, u) => u).filter(u => pos[u] < 0 && !kunci[u] && !sebabMati[u] && domain[u].length);
             let pusingan = 0;
@@ -10775,7 +10885,8 @@ window.VJSolver = (function () {
                 pusingan++;
                 const u = tak[Math.floor(Math.random() * tak.length)];
                 const snap = salinPos();
-                if (rantaiLetak(u, 2 + (pusingan % 3), new Set(), tamat)) tak = tak.filter(x => pos[x] < 0);
+                rPanggil = 0;
+                if (rantaiLetak(u, R_DEPTH + (pusingan % 3), new Set(), tamat)) tak = tak.filter(x => pos[x] < 0);
                 else tetapkanKedudukan(snap);
             }
             diletak = units.filter((_, u) => pos[u] >= 0).length;
@@ -10797,10 +10908,14 @@ window.VJSolver = (function () {
                         const set = konflik(u, s);
                         if (!set) continue;
                         let kos;
-                        if (set.size === 0) kos = kosLembut(u, s);
+                        if (set.size === 0) kos = kosLembut(u, s) + (FRAG_W ? FRAG_W * serpihan(u, s, null) : 0);
                         else {
                             kos = 1000 + Math.random() * 300 + kosHubunganLembut(u, s, set) + BERAT_DEPAN * lompatDepan(units[u], s);
-                            for (const x of set) kos += 200 * units[x].len + (iter - placedAt[x] < 25 ? 2000 : 0);
+                            if (FRAG_W) kos += FRAG_W * serpihan(u, s, set);
+                            for (const x of set) {
+                                kos += 200 * units[x].len + (iter - placedAt[x] < 25 ? RECENT_W : 0);
+                                if (CBS_W) { const c = cbs.get((u * N + s) * CBS_M + x * N + pos[x]); if (c) kos += CBS_W * c; }
+                            }
                             // Sebaran subjek (dari enjin Jadual Guru): elak subjek sama berulang pada hari yang sama walaupun perlu mengusir
                             const dd = Math.floor(s / W);
                             for (const pg of pasang[u]) { const arr = daySub[pg[1] + dd]; for (let i = 0; i < arr.length; i++) if (!set.has(arr[i])) kos += 10; }
@@ -10809,7 +10924,10 @@ window.VJSolver = (function () {
                     }
                     if (best < 0) { sebabMati[u] = 'Semua kedudukan bertembung dengan sesi berkunci.'; continue; }
                     // Unit yang diusir masuk ke hujung barisan supaya dua unit tidak saling mengusir tanpa henti
-                    for (const x of bestSet) { angkat(x); pending.unshift(x); diletak--; }
+                    for (const x of bestSet) {
+                        if (CBS_W) { const key = (u * N + best) * CBS_M + x * N + pos[x]; cbs.set(key, (cbs.get(key) || 0) + 1); }
+                        angkat(x); pending.unshift(x); diletak--;
+                    }
                     letak(u, best);
                     placedAt[u] = iter;
                     diletak++;

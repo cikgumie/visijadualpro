@@ -1955,6 +1955,8 @@ window.VJSampleData = function () {
 
         /* High-Density Grid Table */
         /* Matriks: panel rapat ke atas, tanpa bingkai dalaman, panel kekal semasa scroll */
+        main.jdl-flush { padding: 0 !important; }
+        main.jdl-flush > #view-jadual { border-radius: 0; box-shadow: none; }
         main.matrix-flush { padding: 0 !important; overflow: hidden !important; display: flex; flex-direction: column; }
         main.matrix-flush > #view-matrix { flex: 1 1 auto; min-height: 0; border: 0; border-radius: 0; box-shadow: none; }
         main.matrix-flush > #view-matrix #matrixScroll { max-height: none; flex: 1 1 auto; min-height: 0; }
@@ -3579,7 +3581,7 @@ window.VJSampleData = function () {
 
             <div class="flex flex-col lg:flex-row jdl-fokus-keep">
 
-                <div id="jdlKolum" class="flex-1 min-w-0 px-2 py-2 space-y-2">
+                <div id="jdlKolum" class="flex-1 min-w-0 px-1 py-1 space-y-1">
                     <div id="jdlEmpty" class="hidden text-center text-xs text-slate-400 py-16"></div>
                     <div id="jdlSemuaBox" class="hidden">
                         <div class="flex flex-wrap items-center gap-1.5 mb-1.5">
@@ -3609,7 +3611,7 @@ window.VJSampleData = function () {
                             <button id="jdlBtnFokus" onclick="jdlFokus()" class="px-2.5 py-1 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-[11px] font-bold flex items-center gap-1" title="Paparkan jadual memenuhi skrin (tekan F atau Esc untuk keluar)"><i data-lucide="maximize" class="w-3 h-3"></i> <span id="jdlBtnFokusTeks">Fokus</span></button>
                             <span class="text-slate-400 cursor-help" title="Klik nama untuk lihat jadual penuh.&#10;Seret sesi ke petak lain untuk alih (lepas atas sesi sama panjang untuk tukar tempat).&#10;Seret sesi ke kotak di bawah untuk keluarkan; seret dari kotak bawah ke jadual untuk letak.&#10;Klik petak sesi untuk kunci / buka kunci.&#10;Mod Blok Slot: klik / seret petak kosong untuk blok, klik petak berblok untuk buka.&#10;Tandakan kotak kelas untuk susun kelas itu sahaja (Shift + klik untuk pilih julat)."><i data-lucide="circle-help" class="w-4 h-4"></i></span>
                         </div>
-                        <div id="jdlGridWrap" class="overflow-auto max-h-[calc(100vh-330px)] min-h-[220px] border border-slate-200 rounded-xl">
+                        <div id="jdlGridWrap" class="overflow-auto max-h-[calc(100vh-330px)] min-h-[220px] border border-slate-200">
                             <table id="jdlSemuaGrid" class="text-[10px] border-separate border-spacing-0"></table>
                         </div>
                         <!-- Tray: sesi belum diletak / dikeluarkan -->
@@ -6267,6 +6269,7 @@ window.VJSampleData = function () {
             const target = document.getElementById(`view-${tabName}`);
             if (target) target.classList.remove('hidden');
             document.querySelector('main')?.classList.toggle('matrix-flush', tabName === 'matrix');
+            document.querySelector('main')?.classList.toggle('jdl-flush', tabName === 'jadual');
 
             document.querySelectorAll('.nav-tab').forEach(btn => btn.classList.remove('active'));
             const activeNav = document.getElementById(`nav-${tabName}`);

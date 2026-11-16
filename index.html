@@ -277,6 +277,8 @@ window.VJI18N = (function () {
         "Pembahagian Waktu": "Period Split",
         "Pemberat": "Weight",
         "Peraturan Susunan": "Scheduling Rules",
+        "Semua hari (lalai)": "All days (default)",
+        "Guna masa tersendiri untuk hari ini": "Use a separate schedule for this day",
         "Peraturan ini digunakan semasa jadual disusun secara automatik. Isi": "These rules are used when the timetable is built automatically. Fill in",
         "Perincian Guru": "Teacher Details",
         "Perincian Mengikut Guru": "Details by Teacher",
@@ -1420,11 +1422,34 @@ window.VJI18N = (function () {
         };
     }
 
+    // Masa waktu khas bagi hari tertentu (pilihan): { "4": [{mula,tamat}, ...] } — hari tanpa entri guna waktu lalai.
+    function cleanWaktuHari(raw, nHari, waktu) {
+        const out = {};
+        if (!raw || typeof raw !== 'object') return out;
+        Object.keys(raw).forEach(k => {
+            const d = parseInt(k);
+            if (!(d >= 0 && d < nHari) || !Array.isArray(raw[k])) return;
+            const arr = waktu.map((def, p) => {
+                const w = raw[k][p] || def;
+                return { mula: String(w.mula || '').trim(), tamat: String(w.tamat || '').trim() };
+            });
+            if (arr.some((w, p) => w.mula !== waktu[p].mula || w.tamat !== waktu[p].tamat)) out[d] = arr;
+        });
+        return out;
+    }
+
+    // Masa waktu p pada hari d (guna masa khas hari itu jika ada)
+    function waktuDi(cfg, d, p) {
+        const w = ((cfg.waktuHari || {})[d] || cfg.waktu)[p] || cfg.waktu[p] || { mula: '', tamat: '' };
+        return w;
+    }
+
     function normalizeSlot(raw) {
         const out = defaultSlot();
         if (!raw || typeof raw !== 'object') return out;
         if (Array.isArray(raw.hari) && raw.hari.length) out.hari = raw.hari.map(String);
         if (Array.isArray(raw.waktu) && raw.waktu.length) out.waktu = raw.waktu.map(w => ({ mula: String((w && w.mula) || ''), tamat: String((w && w.tamat) || '') }));
+        out.waktuHari = cleanWaktuHari(raw.waktuHari, out.hari.length, out.waktu);
         if (Array.isArray(raw.label) && raw.label.length) out.label = raw.label.filter(l => l && l.nama).map(l => ({ nama: String(l.nama), warna: String(l.warna || 'slate') }));
         ['kelas', 'guru'].forEach(jenis => {
             if (!raw[jenis] || typeof raw[jenis] !== 'object') return;
@@ -2001,6 +2026,7 @@ window.VJI18N = (function () {
         if (hari.length > 7 || waktu.length > 20) throw new Error('Maksimum 7 hari dan 20 waktu sehari.');
         db.slot.hari = hari;
         db.slot.waktu = waktu;
+        db.slot.waktuHari = cleanWaktuHari(cfg.waktuHari, hari.length, waktu);
         // Buang blok & sesi jadual yang kini di luar julat
         [db.slot.kelas, db.slot.guru].forEach(map => Object.values(map).forEach(blok => Object.keys(blok).forEach(k => { if (!slotInRange(k)) delete blok[k]; })));
         db.jadual.sesi = db.jadual.sesi.filter(x => slotInRange(`${x.hari}-${x.waktu}`));
@@ -2147,7 +2173,7 @@ window.VJI18N = (function () {
 
     window.VJStore = {
         getHubungan, setHubungan, getGantian, setGantian, getBilik, setBilik,
-        getSlot, setSlotConfig, addSlotLabel, setKelasBlok, setGuruBlok, copyKelasBlok, slotSummary, guruSlotSummary, genWaktu,
+        getSlot, setSlotConfig, waktuDi, addSlotLabel, setKelasBlok, setGuruBlok, copyKelasBlok, slotSummary, guruSlotSummary, genWaktu,
         getPeraturan, setPeraturan, PERATURAN_DEFAULT, getJadual, setJadual,
         getSolverInput() { return clone({ guru: db.guru, kelas: db.kelas, subjek: db.subjek, transaksi: db.transaksi, slot: db.slot, peraturan: db.peraturan, jadual: db.jadual, hubungan: db.hubungan, bilik: db.bilik }); },
         getStatus, onChange: fn => listeners.push(fn),
@@ -5046,38 +5072,9 @@ window.VJSampleData = function () {
                     <span id="slotOverview" class="text-[11px] text-slate-500"></span>
                 </div>
                 <div class="flex flex-wrap gap-1.5">
-                    <button onclick="slotTogglePeraturan()" class="px-3 py-1.5 border border-slate-200 bg-white hover:bg-slate-100 rounded-lg text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                        <i data-lucide="list-checks" class="w-3.5 h-3.5"></i> Peraturan Susunan
-                    </button>
                     <button onclick="slotToggleSettings()" class="px-3 py-1.5 border border-slate-200 bg-white hover:bg-slate-100 rounded-lg text-xs font-bold text-slate-700 flex items-center gap-1.5">
                         <i data-lucide="settings-2" class="w-3.5 h-3.5"></i> Tetapan Hari & Waktu
                     </button>
-                </div>
-            </div>
-
-            <!-- Peraturan susunan jadual -->
-            <div id="slotPeraturan" class="hidden p-4 border-b border-slate-200 bg-emerald-50/40">
-                <p class="text-xs text-slate-600 mb-3">Peraturan ini digunakan semasa jadual disusun secara automatik. Isi <strong>0</strong> untuk tiada had. Rehat dan slot lain yang diblok sentiasa memutuskan sesi berturut-turut.</p>
-                <div class="grid sm:grid-cols-3 gap-3">
-                    <label class="block bg-white border border-slate-200 rounded-xl p-3">
-                        <span class="block text-xs font-bold text-slate-700">Sesi subjek sama sehari</span>
-                        <span class="block text-[10px] text-slate-500 mb-1.5">Bil. sesi maksimum satu subjek bagi satu kelas dalam sehari</span>
-                        <input id="perSesiSehariSubjek" type="number" min="0" max="10" class="w-24 border border-slate-300 rounded-lg px-2 py-1.5 text-xs">
-                    </label>
-                    <label class="block bg-white border border-slate-200 rounded-xl p-3">
-                        <span class="block text-xs font-bold text-slate-700">Waktu guru sehari</span>
-                        <span class="block text-[10px] text-slate-500 mb-1.5">Waktu mengajar maksimum seorang guru dalam sehari</span>
-                        <input id="perMaxGuruSehari" type="number" min="0" max="20" class="w-24 border border-slate-300 rounded-lg px-2 py-1.5 text-xs">
-                    </label>
-                    <label class="block bg-white border border-slate-200 rounded-xl p-3">
-                        <span class="block text-xs font-bold text-slate-700">Waktu guru berturut-turut</span>
-                        <span class="block text-[10px] text-slate-500 mb-1.5">Waktu mengajar maksimum tanpa slot kosong di antaranya</span>
-                        <input id="perMaxGuruBerturut" type="number" min="0" max="20" class="w-24 border border-slate-300 rounded-lg px-2 py-1.5 text-xs">
-                    </label>
-                </div>
-                <div class="flex justify-end gap-2 mt-3">
-                    <button onclick="slotTogglePeraturan()" class="px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600">Batal</button>
-                    <button onclick="slotSavePeraturan()" class="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-bold shadow flex items-center gap-1.5"><i data-lucide="check" class="w-3.5 h-3.5"></i> Simpan Peraturan</button>
                 </div>
             </div>
 
@@ -5093,7 +5090,7 @@ window.VJSampleData = function () {
                     <div class="space-y-3">
                         <div>
                             <label class="block text-xs font-bold text-slate-700 mb-1">Hari persekolahan <span class="font-normal text-slate-400">(asingkan dengan koma)</span></label>
-                            <input id="slotCfgHari" type="text" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs outline-none focus:border-brand-600 bg-white">
+                            <input id="slotCfgHari" type="text" oninput="slotRenderProfil()" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs outline-none focus:border-brand-600 bg-white">
                             <div class="flex gap-1.5 mt-1.5">
                                 <button onclick="slotPresetHari('Isnin, Selasa, Rabu, Khamis, Jumaat')" class="px-2 py-1 text-[11px] font-bold bg-white border border-slate-200 rounded-lg hover:bg-slate-100">Isnin – Jumaat</button>
                                 <button onclick="slotPresetHari('Ahad, Isnin, Selasa, Rabu, Khamis')" class="px-2 py-1 text-[11px] font-bold bg-white border border-slate-200 rounded-lg hover:bg-slate-100">Ahad – Khamis</button>
@@ -5111,6 +5108,10 @@ window.VJSampleData = function () {
                     </div>
                     <div>
                         <label class="block text-xs font-bold text-slate-700 mb-1">Senarai waktu <span class="font-normal text-slate-400">(boleh ubah masa setiap waktu)</span></label>
+                        <div id="slotCfgProfil" class="flex flex-wrap gap-1.5 mb-2"></div>
+                        <label id="slotCfgHariBox" class="hidden items-center gap-2 mb-2 text-[11px] font-bold text-slate-700 cursor-pointer">
+                            <input id="slotCfgHariGuna" type="checkbox" onchange="slotToggleHariKhas(this.checked)" class="accent-brand-600"> <span>Guna masa tersendiri untuk hari ini</span>
+                        </label>
                         <div id="slotCfgWaktu" class="grid grid-cols-1 sm:grid-cols-2 gap-1.5 max-h-[50vh] overflow-y-auto p-1"></div>
                     </div>
                 </div>
@@ -9425,12 +9426,21 @@ window.VJSampleData = function () {
             lucide.createIcons();
         }
 
+        // Masa waktu untuk pengepala lajur: masa lalai; jika ada hari bermasa khas, tambah * dan senarai masa setiap hari dalam tooltip
+        function slotHdrMasa(cfg, p) {
+            const w = cfg.waktu[p];
+            const lbl = (x) => escapeHtml(x.mula) + (x.tamat ? '–' + escapeHtml(x.tamat) : '');
+            const beza = cfg.hari.some((h, d) => { const x = VJStore.waktuDi(cfg, d, p); return x.mula !== w.mula || x.tamat !== w.tamat; });
+            const tip = beza ? ` title="${cfg.hari.map((h, d) => escapeHtml(h) + ': ' + lbl(VJStore.waktuDi(cfg, d, p))).join(' | ')}"` : '';
+            return `<div class="text-[9px] font-medium text-slate-400"${tip}>${lbl(w)}${beza ? ' *' : ''}</div>`;
+        }
+
         function renderSlotGrid(cfg) {
             cfg = cfg || VJStore.getSlot();
             let html = `<thead><tr class="bg-slate-50"><th class="px-2 py-2 text-left text-[11px] font-bold text-slate-500 w-20 border-b border-slate-200">Hari</th>`;
             cfg.waktu.forEach((w, p) => {
                 html += `<th data-col="${p}" class="slot-colhead px-1 py-1.5 border-b border-l border-slate-200 cursor-pointer hover:bg-brand-50 min-w-[56px]" title="Klik untuk isi seluruh lajur">
-                    <div class="text-xs font-bold text-slate-700">${p + 1}</div><div class="text-[9px] font-medium text-slate-400">${escapeHtml(w.mula)}${w.tamat ? '–' + escapeHtml(w.tamat) : ''}</div></th>`;
+                    <div class="text-xs font-bold text-slate-700">${p + 1}</div>${slotHdrMasa(cfg, p)}</th>`;
             });
             html += `</tr></thead><tbody>`;
             cfg.hari.forEach((h, d) => {
@@ -9599,27 +9609,6 @@ window.VJSampleData = function () {
             } catch (e) { showToast(e.message, 'error'); }
         }
 
-        // ---- Peraturan susunan ----
-        const PERATURAN_INPUT = { sesiSehariSubjek: 'perSesiSehariSubjek', maxGuruSehari: 'perMaxGuruSehari', maxGuruBerturut: 'perMaxGuruBerturut' };
-
-        function slotTogglePeraturan() {
-            const box = document.getElementById('slotPeraturan');
-            if (box.classList.contains('hidden')) {
-                if (!isEditMode) { ensureEditMode(() => slotTogglePeraturan()); return; }
-                const p = VJStore.getPeraturan();
-                Object.entries(PERATURAN_INPUT).forEach(([k, id]) => { document.getElementById(id).value = p[k]; });
-            }
-            box.classList.toggle('hidden');
-        }
-
-        function slotSavePeraturan() {
-            const p = {};
-            Object.entries(PERATURAN_INPUT).forEach(([k, id]) => { p[k] = Math.max(0, parseInt(document.getElementById(id).value) || 0); });
-            VJStore.setPeraturan(p);
-            document.getElementById('slotPeraturan').classList.add('hidden');
-            showToast('Peraturan susunan disimpan.', 'success');
-        }
-
         // ---- Tetapan hari & waktu ----
         function slotToggleSettings() {
             const box = document.getElementById('slotSettings');
@@ -9630,7 +9619,9 @@ window.VJSampleData = function () {
                 document.getElementById('slotGenBil').value = cfg.waktu.length;
                 if (cfg.waktu[0] && cfg.waktu[0].mula) document.getElementById('slotGenMula').value = cfg.waktu[0].mula;
                 slotCfgWaktuDraft = cfg.waktu;
-                slotRenderWaktuDraft();
+                slotCfgWaktuHariDraft = cfg.waktuHari || {};
+                slotCfgProfil = 'lalai';
+                slotRenderProfil();
                 box.classList.remove('hidden'); box.classList.add('flex');
                 document.addEventListener('keydown', slotSettingsEsc);
                 setTimeout(() => document.getElementById('slotCfgHari').focus(), 0);
@@ -9643,21 +9634,74 @@ window.VJSampleData = function () {
 
         function slotPresetHari(txt) { document.getElementById('slotCfgHari').value = txt; }
 
-        function slotGenerate() {
-            const bil = Math.min(20, Math.max(1, parseInt(document.getElementById('slotGenBil').value) || 1));
-            const tempoh = Math.max(5, parseInt(document.getElementById('slotGenTempoh').value) || 30);
-            slotCfgWaktuDraft = VJStore.genWaktu(document.getElementById('slotGenMula').value, tempoh, bil);
+        // Draf masa waktu: 'lalai' = semua hari; nombor = masa khas hari itu (slotCfgWaktuHariDraft[hari])
+        let slotCfgWaktuHariDraft = {};
+        let slotCfgProfil = 'lalai';
+
+        function slotDraftHari() { return document.getElementById('slotCfgHari').value.split(',').map(s => s.trim()).filter(Boolean); }
+
+        // Pastikan setiap masa khas hari sepanjang senarai lalai (bil. waktu mungkin diubah)
+        function slotSelaraskanHariDraft() {
+            const n = slotDraftHari().length;
+            Object.keys(slotCfgWaktuHariDraft).forEach(k => {
+                if (+k >= n) { delete slotCfgWaktuHariDraft[k]; return; }
+                slotCfgWaktuHariDraft[k] = slotCfgWaktuDraft.map((def, p) => slotCfgWaktuHariDraft[k][p] || { mula: def.mula, tamat: def.tamat });
+            });
+            if (slotCfgProfil !== 'lalai' && slotCfgProfil >= n) slotCfgProfil = 'lalai';
+        }
+
+        function slotPilihProfil(p) { slotCfgProfil = p; slotRenderProfil(); }
+
+        function slotRenderProfil() {
+            slotSelaraskanHariDraft();
+            const hari = slotDraftHari();
+            const chip = (key, label, on, khas) => '<button type="button" onclick="slotPilihProfil(' + (key === 'lalai' ? "'lalai'" : key) + ')" class="px-2 py-1 text-[11px] font-bold rounded-lg border ' + (on ? 'bg-brand-600 text-white border-brand-600' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100') + '">' + escapeHtml(label) + (khas ? ' •' : '') + '</button>';
+            document.getElementById('slotCfgProfil').innerHTML = chip('lalai', 'Semua hari (lalai)', slotCfgProfil === 'lalai', false)
+                + hari.map((h, d) => chip(d, h, slotCfgProfil === d, !!slotCfgWaktuHariDraft[d])).join('');
+            const box = document.getElementById('slotCfgHariBox');
+            box.classList.toggle('hidden', slotCfgProfil === 'lalai'); box.classList.toggle('flex', slotCfgProfil !== 'lalai');
+            document.getElementById('slotCfgHariGuna').checked = slotCfgProfil !== 'lalai' && !!slotCfgWaktuHariDraft[slotCfgProfil];
+            const cur = slotCurList();
+            if (cur[0] && cur[0].mula) document.getElementById('slotGenMula').value = cur[0].mula;
             slotRenderWaktuDraft();
         }
 
+        function slotCurList() { return slotCfgProfil === 'lalai' ? slotCfgWaktuDraft : (slotCfgWaktuHariDraft[slotCfgProfil] || slotCfgWaktuDraft); }
+
+        function slotToggleHariKhas(on) {
+            if (slotCfgProfil === 'lalai') return;
+            if (on) slotCfgWaktuHariDraft[slotCfgProfil] = slotCfgWaktuDraft.map(w => ({ mula: w.mula, tamat: w.tamat }));
+            else delete slotCfgWaktuHariDraft[slotCfgProfil];
+            slotRenderProfil();
+        }
+
+        function slotSetMasa(i, k, v) { slotCurList()[i][k] = v; }
+
+        function slotGenerate() {
+            const tempoh = Math.max(5, parseInt(document.getElementById('slotGenTempoh').value) || 30);
+            const mula = document.getElementById('slotGenMula').value;
+            if (slotCfgProfil === 'lalai') {
+                const bil = Math.min(20, Math.max(1, parseInt(document.getElementById('slotGenBil').value) || 1));
+                slotCfgWaktuDraft = VJStore.genWaktu(mula, tempoh, bil);
+                slotSelaraskanHariDraft();
+            } else {
+                // masa khas hari: bil. waktu sama dengan senarai lalai
+                slotCfgWaktuHariDraft[slotCfgProfil] = VJStore.genWaktu(mula, tempoh, slotCfgWaktuDraft.length);
+            }
+            slotRenderProfil();
+        }
+
         function slotRenderWaktuDraft() {
-            document.getElementById('slotCfgWaktu').innerHTML = slotCfgWaktuDraft.map((w, i) =>
-                `<div class="flex items-center gap-1 bg-white border border-slate-200 rounded-lg px-1.5 py-1">
-                    <span class="text-[11px] font-bold text-slate-500 w-5 text-right">${i + 1}</span>
-                    <input type="time" value="${escapeHtml(w.mula)}" onchange="slotCfgWaktuDraft[${i}].mula=this.value" class="text-[11px] outline-none w-full min-w-0">
-                    <span class="text-slate-300">–</span>
-                    <input type="time" value="${escapeHtml(w.tamat)}" onchange="slotCfgWaktuDraft[${i}].tamat=this.value" class="text-[11px] outline-none w-full min-w-0">
-                </div>`).join('');
+            const ikut = slotCfgProfil !== 'lalai' && !slotCfgWaktuHariDraft[slotCfgProfil];
+            const el = document.getElementById('slotCfgWaktu');
+            el.classList.toggle('opacity-50', ikut); el.classList.toggle('pointer-events-none', ikut);
+            el.innerHTML = slotCurList().map((w, i) =>
+                '<div class="flex items-center gap-1 bg-white border border-slate-200 rounded-lg px-1.5 py-1">' +
+                '<span class="text-[11px] font-bold text-slate-500 w-5 text-right">' + (i + 1) + '</span>' +
+                '<input type="time" value="' + escapeHtml(w.mula) + '" onchange="slotSetMasa(' + i + ',\'mula\',this.value)" class="text-[11px] outline-none w-full min-w-0">' +
+                '<span class="text-slate-300">–</span>' +
+                '<input type="time" value="' + escapeHtml(w.tamat) + '" onchange="slotSetMasa(' + i + ',\'tamat\',this.value)" class="text-[11px] outline-none w-full min-w-0">' +
+                '</div>').join('');
         }
 
         function slotSaveSettings() {
@@ -9669,7 +9713,7 @@ window.VJSampleData = function () {
             }).length, 0);
             if (lost && !confirm(`${lost} slot diblok berada di luar hari/waktu baharu dan akan dibuang. Teruskan?`)) return;
             try {
-                VJStore.setSlotConfig({ hari, waktu: slotCfgWaktuDraft });
+                VJStore.setSlotConfig({ hari, waktu: slotCfgWaktuDraft, waktuHari: slotCfgWaktuHariDraft });
                 slotToggleSettings();
                 showToast('Tetapan hari & waktu disimpan.', 'success');
                 renderSlotView();
@@ -11098,7 +11142,7 @@ window.VJSolver = (function () {
             html += `</tr><tr>`;
             cfg.hari.forEach((h, d) => {
                 cfg.waktu.forEach((w, p) => {
-                    html += `<th class="sticky top-[25px] z-10 bg-slate-50 px-0.5 py-0.5 text-[9px] font-bold text-slate-500 border-b border-slate-300 ${p === 0 ? bL(d) : 'border-l border-l-slate-200'}" title="${escapeHtml(w.mula)}${w.tamat ? '–' + escapeHtml(w.tamat) : ''}">${p + 1}</th>`;
+                    html += `<th class="sticky top-[25px] z-10 bg-slate-50 px-0.5 py-0.5 text-[9px] font-bold text-slate-500 border-b border-slate-300 ${p === 0 ? bL(d) : 'border-l border-l-slate-200'}" title="${escapeHtml(VJStore.waktuDi(cfg, d, p).mula)}${VJStore.waktuDi(cfg, d, p).tamat ? '–' + escapeHtml(VJStore.waktuDi(cfg, d, p).tamat) : ''}">${p + 1}</th>`;
                 });
             });
             html += `</tr></thead><tbody>`;
@@ -11277,7 +11321,7 @@ window.VJSolver = (function () {
 
                 let html = `<thead><tr class="bg-slate-50"><th class="px-2 py-2 text-left text-[11px] font-bold text-slate-500 w-20 border-b border-slate-200">Hari</th>`;
                 cfg.waktu.forEach((w, p) => {
-                    html += `<th class="px-1 py-1.5 border-b border-l border-slate-200 min-w-[64px]"><div class="text-xs font-bold text-slate-700">${p + 1}</div><div class="text-[9px] font-medium text-slate-400">${escapeHtml(w.mula)}${w.tamat ? '–' + escapeHtml(w.tamat) : ''}</div></th>`;
+                    html += `<th class="px-1 py-1.5 border-b border-l border-slate-200 min-w-[64px]"><div class="text-xs font-bold text-slate-700">${p + 1}</div>${slotHdrMasa(cfg, p)}</th>`;
                 });
                 html += `</tr></thead><tbody>`;
                 cfg.hari.forEach((h, d) => {
@@ -12625,10 +12669,11 @@ window.VJGanti = (function () {
 
     // Julat minit setiap waktu (fallback 30 minit jika masa tidak diisi)
     function julatWaktu(slot) {
-        return slot.waktu.map((w, p) => {
+        return (d, p) => {
+            const w = VJStore.waktuDi(slot, d, p);
             const a = minit(w.mula), b = minit(w.tamat);
             return a !== null && b !== null && b > a ? [a, b] : [p * 30, p * 30 + 30];
-        });
+        };
     }
 
     function konteks(inp) {
@@ -12650,7 +12695,7 @@ window.VJGanti = (function () {
     }
 
     function tidakHadir(K, guru, tarikh, p) {
-        const [a, b] = K.J[p];
+        const [a, b] = K.J(indeksHari(tarikh, K.slot.hari), p);
         return K.g.tidakHadir.find(x => x.guru === guru && x.tarikh === tarikh &&
             bertindih(a, b, minit(x.mula) ?? 0, minit(x.tamat) ?? 24 * 60)) || null;
     }
@@ -12679,14 +12724,14 @@ window.VJGanti = (function () {
     }
 
     function layak(K, tarikh, d, p, baris, sudah) {
-        const [a, b] = K.J[p];
+        const [a, b] = K.J(d, p);
         return K.guru.map(r => String(r[0])).filter(id => {
             const tg = K.g.guru[id] || {};
             if (tg.layak === false) return false;
             if (id === baris.guru) return false;
             if (tidakHadir(K, id, tarikh, p)) return false;
             if (((K.slot.guru || {})[id] || {})[`${d}-${p}`]) return false;                 // slot guru diblok
-            if (K.pelajaran.some(x => x.hari === d && x.guru === id && bertindih(a, b, ...K.J[x.waktu]))) return false; // sedang mengajar
+            if (K.pelajaran.some(x => x.hari === d && x.guru === id && bertindih(a, b, ...K.J(d, x.waktu)))) return false; // sedang mengajar
             if (sudah.some(x => x.ganti === id && bertindih(a, b, x.mulaM, x.tamatM))) return false;   // sudah ganti waktu ini
             const had = tg.maksSehari === undefined ? 2 : tg.maksSehari;
             if (had > 0 && sudah.filter(x => x.ganti === id).length >= had) return false;
@@ -12714,10 +12759,10 @@ window.VJGanti = (function () {
         perlu.sort((a, b) => a.waktu - b.waktu || (K.kelasNama[a.kelas[0]] || '').localeCompare(K.kelasNama[b.kelas[0]] || '', 'ms', { numeric: true }));
         const out = [];
         perlu.forEach(x => {
-            const [mulaM, tamatM] = K.J[x.waktu];
+            const [mulaM, tamatM] = K.J(d, x.waktu);
             const kunci = `${d}|${x.waktu}|${x.uuid}|${x.guru}`;
             const baris = {
-                kunci, hari: d, waktu: x.waktu, mula: K.slot.waktu[x.waktu].mula, tamat: K.slot.waktu[x.waktu].tamat, mulaM, tamatM, minit: tamatM - mulaM,
+                kunci, hari: d, waktu: x.waktu, mula: VJStore.waktuDi(K.slot, d, x.waktu).mula, tamat: VJStore.waktuDi(K.slot, d, x.waktu).tamat, mulaM, tamatM, minit: tamatM - mulaM,
                 guru: x.guru, guruNama: K.guruNama[x.guru] || x.guru, kelas: x.kelas.join(', '), kelasNama: x.kelas.map(k => K.kelasNama[k] || k).join(', '),
                 subjek: x.subjek, subjekNama: K.kod[x.subjek] || x.subjekNama, sebab: x.sebab, ganti: '', gantiNama: ''
             };
@@ -12827,7 +12872,7 @@ window.VJGanti = (function () {
             selG.innerHTML = inp.guru.slice().sort((a, b) => String(a[1]).localeCompare(String(b[1]), 'ms'))
                 .map(r => `<option value="${escapeHtml(r[0])}">${escapeHtml(r[1])}</option>`).join('');
             if (prevG) selG.value = prevG;
-            const opsWaktu = inp.slot.waktu.map((w, p) => `<option value="${p}">W${p + 1} · ${escapeHtml(w.mula)}–${escapeHtml(w.tamat)}</option>`).join('');
+            const opsWaktu = inp.slot.waktu.map((w0, p) => { const w = VJStore.waktuDi(inp.slot, di, p); return `<option value="${p}">W${p + 1} · ${escapeHtml(w.mula)}–${escapeHtml(w.tamat)}</option>`; }).join('');
             const sM = document.getElementById('gtThMula'), sT = document.getElementById('gtThTamat');
             const pm = sM.value, pt = sT.value;
             sM.innerHTML = opsWaktu; sT.innerHTML = opsWaktu;
@@ -12879,12 +12924,13 @@ window.VJGanti = (function () {
             const guru = document.getElementById('gtThGuru').value;
             if (!guru) { showToast('Tambah guru di "Data Induk" dahulu.', 'warning'); return; }
             const slot = VJStore.getSlot();
+            const di = VJGanti.indeksHari(gtTarikh, slot.hari);
             const a = parseInt(document.getElementById('gtThMula').value) || 0, b = parseInt(document.getElementById('gtThTamat').value) || 0;
             if (b < a) { showToast('Waktu tamat mesti selepas waktu mula.', 'warning'); return; }
             const sebab = document.getElementById('gtThSebab').value.trim();
             const ok = gtUbah(g => {
                 g.tidakHadir.push({ id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()), tarikh: gtTarikh, guru,
-                    mula: a === 0 ? '' : slot.waktu[a].mula, tamat: b === slot.waktu.length - 1 ? '' : slot.waktu[b].tamat, sebab });
+                    mula: a === 0 ? '' : VJStore.waktuDi(slot, di, a).mula, tamat: b === slot.waktu.length - 1 ? '' : VJStore.waktuDi(slot, di, b).tamat, sebab });
             });
             if (ok) { document.getElementById('gtThSebab').value = ''; showToast('Rekod guru tidak hadir ditambah.', 'success'); }
         }

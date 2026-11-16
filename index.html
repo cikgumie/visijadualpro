@@ -5,7 +5,7 @@
   Dilarang menyalin, mengubah suai, menghos semula atau mengedarkan kod ini tanpa kebenaran bertulis.
   Lihat fail LICENSE: https://github.com/cikgumie/visijadualpro/blob/main/LICENSE
 -->
-<html lang="ms">
+<html lang="en">
 
 <head>
     <meta charset="UTF-8">
@@ -75,6 +75,1184 @@
     <!-- SheetJS Library for Excel Operations -->
     <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script>
+/**
+ * VISIJADUAL PRO V2 — i18n (English default, Bahasa Melayu optional)
+ * Source strings in the app are Bahasa Melayu. This layer translates the DOM (text nodes + title/placeholder/
+ * aria-label), toasts and native dialogs to English at runtime. Choose the language in Settings > Language.
+ * Add a missing string: put it in D (exact text) or P (pattern) below. Strings without a match stay in Malay.
+ */
+window.VJI18N = (function () {
+    'use strict';
+    var KEY = 'vj_lang', lang = 'en';
+    try { var sv = localStorage.getItem(KEY); if (sv === 'ms' || sv === 'en') lang = sv; } catch (e) { }
+
+    // ---------- helpers ----------
+    function pl(n, w, ww) { n = +n; return n + ' ' + (n === 1 ? w : (ww || w + 's')); }
+
+    // ---------- exact dictionary (Malay -> English) ----------
+    var D = {
+        // ===== static UI =====
+        "(asingkan dengan koma)": "(separate with commas)",
+        "(boleh pilih lebih dari satu jika gabung)": "(you can pick more than one if combining)",
+        "(boleh ubah masa setiap waktu)": "(you can change the time of each period)",
+        "(cth: 2,3,3)": "(e.g. 2,3,3)",
+        "*Elektif / Kongsi Masa": "*Elective / Shared Time",
+        "*Klik nama guru untuk urus slot": "*Click a teacher's name to manage slots",
+        "*Klik sel untuk isi di Option Bar di atas": "*Click a cell to fill it in the Option Bar above",
+        "*Rekod arkib adalah simpanan sejarah (read-only) dan boleh dipulihkan bila-bila masa": "*Archive records are a read-only history and can be restored at any time",
+        "*Subjek berlabel sama dalam satu masa dikira satu sesi waktu sahaja dalam rumusan kelas.": "*Subjects with the same label at the same time count as one period only in the class summary.",
+        "*Termasuk slot tetap Kokurikulum (4), Perhimpunan (1), & Bina Insan (1)": "*Includes fixed slots: Co-curriculum (4), Assembly (1), & Character Building (1)",
+        "+ Klik untuk tambah kelas": "+ Click to add a class",
+        "-- PILIH DATA --": "-- SELECT DATA --",
+        "-- PILIH GURU --": "-- SELECT TEACHER --",
+        "-- PILIH SUBJEK --": "-- SELECT SUBJECT --",
+        "-- Pilih Guru --": "-- Select Teacher --",
+        "-- KEKALKAN GURU SEDIA ADA --": "-- KEEP EXISTING TEACHER --",
+        ". Satu baris = satu rekod. ID akan dijana automatik.": ". One row = one record. IDs are generated automatically.",
+        "/ buka kunci. Sesi berkunci kekal di tempatnya apabila jadual disusun semula.": "/ unlock. Locked sessions stay in place when the timetable is rearranged.",
+        "0 Kelas Dipilih": "0 classes selected",
+        "0 Waktu": "0 periods",
+        "0 rekod": "0 records",
+        "1. Data Asal (Rujukan / Versi Lama)": "1. Original Data (Reference / Old Version)",
+        "2. Data Baharu (Versi Kemaskini)": "2. New Data (Updated Version)",
+        "Ada guru tidak hadir": "A teacher is absent",
+        "Agih berasingan ke setiap kelas (1 slot setiap kelas)": "Allocate separately to each class (1 slot per class)",
+        "Agregat keseluruhan waktu mengajar bagi setiap panitia": "Total teaching periods for each subject panel",
+        "Ahad – Khamis": "Sunday – Thursday",
+        "Aktifkan Mod Edit": "Enable Edit Mode",
+        "Alih / Kunci": "Move / Lock",
+        "Analisis Beban Mengikut Mata Pelajaran": "Workload Analysis by Subject",
+        "Analisis Subjek": "Subject Analysis",
+        "Arkib / Reset": "Archive / Reset",
+        "Arkib Data": "Data Archive",
+        "Arkibkan Agihan (Snapshot Salinan)": "Archive Allocations (Snapshot Copy)",
+        "Arkibkan Sekarang": "Archive Now",
+        "Banding Jadual": "Compare Timetables",
+        "Baru": "New",
+        "Batal": "Cancel",
+        "Batal Pengesahan": "Cancel Confirmation",
+        "Beban Guru Ganti": "Relief Teacher Load",
+        "Berhubung": "Linked",
+        "Berubah Masa": "Time Changed",
+        "Berus:": "Brush:",
+        "Bil. Sesi / Kumpulan": "No. of Sessions / Group",
+        "Bil. sesi maksimum satu subjek bagi satu kelas dalam sehari": "Maximum sessions of one subject for one class in a day",
+        "Bil. tugas": "No. of duties",
+        "Bil. waktu sehari": "Periods per day",
+        "Bilik": "Room",
+        "Bilik Khas": "Special Rooms",
+        "Blok Slot": "Block Slots",
+        "Buang Semua": "Remove All",
+        "Buka": "Open",
+        "Buka Fail ZIP": "Open ZIP File",
+        "Buka dari Drive": "Open from Drive",
+        "Buka dari Google Drive": "Open from Google Drive",
+        "Cadangan disusun ikut jumlah minit ganti terendah (adil). Hanya rekod disahkan dikira dalam beban.": "Suggestions are sorted by the fewest relief minutes (fair). Only confirmed records count toward the load.",
+        "Cadangan guru ganti": "Relief teacher suggestions",
+        "Cepat · 10 s": "Fast · 10 s",
+        "Cetak": "Print",
+        "Cetak / PDF": "Print / PDF",
+        "Cipta salinan baharu (fail lama tidak diubah)": "Create a new copy (the old file is unchanged)",
+        "Ctrl + Klik": "Ctrl + Click",
+        "Ctrl/Shift + klik untuk pilih berbilang. Agihan dipilih jika sepadan dengan SEMUA penapis yang diisi; penapis kosong bermaksud semua.": "Ctrl/Shift + click to select multiple. An allocation is chosen if it matches ALL filled filters; an empty filter means all.",
+        "Cuba Data Contoh": "Try Sample Data",
+        "Cukup Kuota": "Within Quota",
+        "Cuti": "Holiday",
+        "Cuti / hari tiada persekolahan": "Holiday / no-school day",
+        "Cuti rehat khas": "Special rest leave",
+        "Cuti sakit": "Sick leave",
+        "Dari waktu": "From period",
+        "Data Induk": "Master Data",
+        "Data Induk (Setup)": "Master Data (Setup)",
+        "Data anda disimpan dalam": "Your data is saved in a",
+        "Dicipta di Google Cloud Console (Drive API + Picker API). Asal JavaScript dibenarkan mesti termasuk alamat laman ini. Tetapan disimpan dalam pelayar ini sahaja.": "Created in Google Cloud Console (Drive API + Picker API). Authorized JavaScript origins must include this site's address. Settings are saved in this browser only.",
+        "Dipadam": "Deleted",
+        "Disediakan oleh": "Prepared by",
+        "Ditambah": "Added",
+        "Eksport Excel": "Export Excel",
+        "Enjin Perbandingan Jadual Waktu (Diff Engine)": "Timetable Comparison Engine (Diff Engine)",
+        "Enter = sel bawah · Tab = sel kanan · Esc = batal": "Enter = cell below · Tab = cell right · Esc = cancel",
+        "Fail Excel": "Excel File",
+        "Fail VisiJadual di Drive": "VisiJadual files on Drive",
+        "Fokus": "Focus",
+        "Guru": "Teacher",
+        "Guru Ganti": "Relief Teacher",
+        "Guru Pengajar": "Teaching Teacher",
+        "Guru ganti": "Relief teacher",
+        "Guru ganti disahkan": "Relief teacher confirmed",
+        "Guru tidak hadir": "Absent teacher",
+        "Had/hari": "Limit/day",
+        "Hanya fail yang dicipta atau pernah dibuka oleh VisiJadual dipaparkan. Untuk memilih fail lain, pentadbir laman perlu menetapkan Kunci API (Google Picker).": "Only files created or previously opened by VisiJadual are shown. To pick other files, the site administrator must set an API Key (Google Picker).",
+        "Hari persekolahan": "School days",
+        "Henti & Guna Terbaik": "Stop & Use Best",
+        "Hingga tarikh (tidak termasuk)": "Until date (exclusive)",
+        "Hingga waktu": "Until period",
+        "Hubungan Antara Sesi": "Relations Between Sessions",
+        "Import Excel": "Import Excel",
+        "Input Agihan Jadual": "Timetable Allocation Input",
+        "Isnin – Jumaat": "Monday – Friday",
+        "Isu & sesi belum dijadualkan": "Issues & unscheduled sessions",
+        "Jadual Aktif Semasa": "Current Active Timetable",
+        "Jadual Guru": "Teacher Timetable",
+        "Jadual Matriks Kelas vs Subjek": "Class vs Subject Matrix",
+        "Jadual sedia ada tidak diubah jika dibatalkan.": "The existing timetable is unchanged if cancelled.",
+        "Jalankan Semua": "Run All",
+        "Jana": "Generate",
+        "Jana Laporan": "Generate Report",
+        "Jana waktu secara automatik": "Generate periods automatically",
+        "Jenis": "Type",
+        "Jumlah Beban: -": "Total Workload: -",
+        "Jumlah Beban:": "Total Workload:",
+        "Jumlah Waktu": "Total Periods",
+        "Jumlah Waktu:": "Total Periods:",
+        "Jumlah minit": "Total minutes",
+        "Kaedah Agihan:": "Allocation Method:",
+        "Kalendar": "Calendar",
+        "Kata Laluan Baharu": "New Password",
+        "Kata Laluan Pentadbir": "Administrator Password",
+        "Kata Laluan Semasa": "Current Password",
+        "Kelas": "Class",
+        "Kelas gabungan (1 slot kongsi bersama)": "Combined classes (1 shared slot)",
+        "Kelas · agihan / slot boleh isi": "Classes · allocation / fillable slots",
+        "Kelayakan guru ganti": "Relief teacher eligibility",
+        "Kemas kini fail Drive yang sama, atau cipta fail baharu": "Update the same Drive file, or create a new file",
+        "Ketat": "Strict",
+        "Klik atau heret fail Excel ke sini": "Click or drag an Excel file here",
+        "Klik bilik untuk tetapkan subjek itu ke bilik tersebut. Jika lebih daripada satu bilik dipilih, penyusun memilih mana-mana bilik yang kosong.": "Click a room to assign that subject to it. If more than one room is chosen, the builder picks any free room.",
+        "Kod": "Code",
+        "Kosongkan": "Clear",
+        "Kumpulan sama serentak": "Same group simultaneous",
+        "Kunci API (Picker, pilihan)": "API Key (Picker, optional)",
+        "Kurang Waktu": "Under Periods",
+        "Kursus": "Course",
+        "Label": "Label",
+        "Label / Kumpulan Elektif": "Label / Elective Group",
+        "Label Elektif (Opsyenal)": "Elective Label (Optional)",
+        "Lalai:": "Default:",
+        "Laporan Agihan Peruntukan Mengikut Kelas": "Allocation Report by Class",
+        "Layak": "Eligible",
+        "Lebih Kuota": "Over Quota",
+        "Lesen": "License",
+        "Lihat cara sistem berfungsi dengan data rekaan": "See how the system works with sample data",
+        "Log keluar Google": "Sign out of Google",
+        "Longgar": "Relaxed",
+        "Makmal, bengkel, bilik komputer… Subjek yang ditetapkan akan disusun di bilik itu tanpa bertindih.": "Labs, workshops, computer rooms… Assigned subjects will be scheduled in that room without overlapping.",
+        "Masukkan kata laluan untuk mengubah data": "Enter the password to change data",
+        "Masukkan senarai guru, kelas & subjek sekolah anda": "Enter your school's list of teachers, classes & subjects",
+        "Mata Pelajaran": "Subject",
+        "Mata Pelajaran (Kod)": "Subject (Code)",
+        "Matriks Kelas": "Class Matrix",
+        "Melebihi Had": "Over Limit",
+        "Memuatkan VisiJadual": "Loading VisiJadual",
+        "Memuatkan data arkib...": "Loading archive data...",
+        "Menunggu Simpanan": "Waiting to Save",
+        "Menyelaraskan data pengkalan data...": "Syncing database...",
+        "Mesyuarat": "Meeting",
+        "Minit / waktu": "Minutes / period",
+        "Minit bawa": "Carried minutes",
+        "Mod Ujian": "Test Mode",
+        "Muat Naik Excel": "Upload Excel",
+        "Muat Naik Fail Excel Asal": "Upload Original Excel File",
+        "Muat Naik Fail Excel Baharu": "Upload New Excel File",
+        "Mula": "Start",
+        "Mula Baru (Kosong)": "Start New (Blank)",
+        "Mula Susun": "Start Building",
+        "Mula pengiraan beban": "Start counting load from",
+        "Mulakan Perbandingan": "Start Comparison",
+        "Nama (pilihan)": "Name (optional)",
+        "Nama Guru": "Teacher Name",
+        "Nama Guru Pengajar": "Teaching Teacher Name",
+        "Nama Kelas": "Class Name",
+        "Nama Mata Pelajaran": "Subject Name",
+        "Nama sekolah (untuk cetakan)": "School name (for printing)",
+        "Nombor Projek (Picker)": "Project Number (Picker)",
+        "Nyahpilih": "Deselect",
+        "OAuth Client ID (wajib)": "OAuth Client ID (required)",
+        "Padam rekod guru yang dipilih dari jadual aktif. Pastikan telah dibuat arkib terlebih dahulu.": "Delete the selected teachers' records from the active timetable. Make sure you have archived first.",
+        "Panel Pengisian Matriks:": "Matrix Fill Panel:",
+        "Paparan & Data": "View & Data",
+        "Paparan Guru": "Teacher View",
+        "Paparan Kelas": "Class View",
+        "Pembahagian Waktu": "Period Split",
+        "Pemberat": "Weight",
+        "Peraturan Susunan": "Scheduling Rules",
+        "Peraturan ini digunakan semasa jadual disusun secara automatik. Isi": "These rules are used when the timetable is built automatically. Fill in",
+        "Perincian Guru": "Teacher Details",
+        "Perincian Mengikut Guru": "Details by Teacher",
+        "Peruntukan slot guru mengikut kelas & subjek": "Teacher slot allocation by class & subject",
+        "Petua: seret & lepas fail ZIP ke halaman ini untuk membukanya.": "Tip: drag & drop a ZIP file onto this page to open it.",
+        "Pilih Guru Sasaran": "Select Target Teachers",
+        "Pilih Semua": "Select All",
+        "Pilih Sumber Dalam Sistem": "Select Source in System",
+        "Pilih berus, kemudian klik atau seret pada petak. Klik nama hari / nombor waktu untuk isi satu baris / lajur. Klik semula petak berlabel sama untuk membuka semula slot.": "Choose a brush, then click or drag on the cells. Click a day name / period number to fill a whole row / column. Click a cell with the same label again to reopen the slot.",
+        "Pilih dua sumber data (Fail Excel, Jadual Aktif, atau Arkib) untuk menyemak perbezaan": "Choose two data sources (Excel File, Active Timetable, or Archive) to check for differences",
+        "Pilih fail ZIP VisiJadual di Google Drive": "Choose a VisiJadual ZIP file on Google Drive",
+        "Pilih fail ZIP VisiJadual yang disimpan di Drive": "Choose a VisiJadual ZIP file saved on Drive",
+        "Pilih guru kelas rasmi bagi kelas:": "Choose the official class teacher for the class:",
+        "Pilih kelas": "Select class",
+        "Pilih mana-mana sel subjek": "Select any subject cell",
+        "Pilihan jika kelas berkongsi waktu (Cth: G1, G2, ASK, RBT)": "Optional if classes share a period (e.g. G1, G2, ASK, RBT)",
+        "Rumusan Analisis Perubahan Jadual": "Timetable Change Analysis Summary",
+        "Rumusan Jadual": "Timetable Summary",
+        "Rumusan Kelas": "Class Summary",
+        "Sahkan & Buka": "Confirm & Open",
+        "Sahkan & Simpan": "Confirm & Save",
+        "Sahkan & Simpan Semua": "Confirm & Save All",
+        "Sahkan Kata Laluan Baharu": "Confirm New Password",
+        "Sahkan Reset Agihan": "Confirm Allocation Reset",
+        "Salin": "Copy",
+        "Salin agihan ke arkib (dalam fail ZIP) untuk sandaran. Rekod aktif": "Copy allocations to the archive (inside the ZIP file) as a backup. Active records",
+        "Salin ke Kelas Pilihan": "Copy to Selected Classes",
+        "Salin ke Semua Kelas": "Copy to All Classes",
+        "Salin ke Tingkatan Sama": "Copy to Same Form",
+        "Salin lajur dari Excel dan tampal di bawah. Susunan lajur:": "Copy columns from Excel and paste below. Column order:",
+        "Salin susunan slot": "Copy slot layout",
+        "Sambung kerja dari fail yang telah disimpan": "Continue working from a saved file",
+        "Sebab": "Reason",
+        "Sedang menyusun jadual…": "Building timetable…",
+        "Seimbang · 30 s": "Balanced · 30 s",
+        "Sejarah": "History",
+        "Sel Dipilih": "Selected Cell",
+        "Semua": "All",
+        "Senarai Sesi Arkib Agihan": "Allocation Archive Sessions",
+        "Senarai bilik": "Room list",
+        "Senarai guru, kelas, bilik & subjek sekolah": "School list of teachers, classes, rooms & subjects",
+        "Senarai hubungan": "Relations list",
+        "Senarai peruntukan waktu mengajar aktif": "List of active teaching period allocations",
+        "Senarai waktu": "Period list",
+        "Seret": "Drag",
+        "Sesi belum diletak": "Unplaced sessions",
+        "Sesi subjek sama sehari": "Same-subject sessions in a day",
+        "Set Semula": "Reset",
+        "Set Semula Pilihan": "Reset Selection",
+        "Shift + Klik": "Shift + Click",
+        "Simpan": "Save",
+        "Simpan & buka fail ZIP di Drive anda": "Save & open ZIP files on your Drive",
+        "Simpan Agihan": "Save Allocation",
+        "Simpan Guru Kelas": "Save Class Teacher",
+        "Simpan Peraturan": "Save Rules",
+        "Simpan Sebagai fail baharu di Drive": "Save As a new file on Drive",
+        "Simpan Semua Perubahan": "Save All Changes",
+        "Simpan Senarai": "Save List",
+        "Simpan Tetapan": "Save Settings",
+        "Simpan ke Drive": "Save to Drive",
+        "Sistem / Arkib": "System / Archive",
+        "Sistem Agihan Waktu & Kawalan Beban Guru": "Period Allocation & Teacher Workload Control System",
+        "Slot Masa": "Time Slots",
+        "Subjek": "Subject",
+        "Subjek → Bilik": "Subject → Room",
+        "Susun": "Build",
+        "Susun Jadual": "Build Timetable",
+        "Taburan": "Distribution",
+        "Tambah": "Add",
+        "Tambah Bilik": "Add Room",
+        "Tambah Hubungan": "Add Relation",
+        "Tambah bilik": "Add room",
+        "Tambah hubungan": "Add relation",
+        "Tambah ke Senarai": "Add to List",
+        "Tambah ke Senarai Simpan": "Add to Save List",
+        "Tampal dari Excel": "Paste from Excel",
+        "Tapis Beban:": "Filter Load:",
+        "Templat": "Template",
+        "Terbaik · sehingga stabil": "Best · until stable",
+        "Tetapan": "Settings",
+        "Tetapan & Cuti": "Settings & Holidays",
+        "Tetapan Hari & Waktu": "Days & Periods Settings",
+        "Tetapan Sistem": "System Settings",
+        "Tetapan laporan": "Report settings",
+        "Tetapan sambungan Google": "Google connection settings",
+        "Tetapkan Guru Kelas": "Set Class Teacher",
+        "Tetapkan Semula (Reset Agihan Aktif)": "Reset (Clear Active Allocations)",
+        "Tiada kelas dipilih": "No class selected",
+        "Tugas terakhir": "Last duty",
+        "Tukar Kata Laluan": "Change Password",
+        "Tukar kata laluan pentadbir": "Change administrator password",
+        "Tutup": "Close",
+        "Urus Arkib & Penetapan Semula": "Manage Archive & Reset",
+        "Urusan rasmi": "Official duty",
+        "Waktu": "Period",
+        "Waktu guru berturut-turut": "Consecutive teacher periods",
+        "Waktu guru sehari": "Teacher periods per day",
+        "Waktu mengajar maksimum seorang guru dalam sehari": "Maximum teaching periods for one teacher in a day",
+        "Waktu mengajar maksimum tanpa slot kosong di antaranya": "Maximum teaching periods with no empty slot in between",
+        "Waktu/minggu": "Periods/week",
+        "di komputer sendiri — tiada pelayan atau Google Sheet.": "on your own computer — no server or Google Sheet.",
+        "fail ZIP": "ZIP file",
+        "ke kelas berikut:": "to the following classes:",
+        "kunci": "lock",
+        "pilih berbilang": "select multiple",
+        "pilih julat kelas": "select a range of classes",
+        "sel waktu diubah, belum disimpan": "period cells changed, not saved yet",
+        "sesi ke petak lain untuk alih. Klik petak sesi untuk": "a session to another cell to move it. Click a session cell to",
+        "tidak dipadam": "are not deleted",
+        "untuk tiada had. Rehat dan slot lain yang diblok sentiasa memutuskan sesi berturut-turut.": "for no limit. Breaks and other blocked slots always interrupt consecutive sessions.",
+        "© 2026 cikgumie. Hak cipta terpelihara.": "© 2026 cikgumie. All rights reserved.",
+        "· semak & cuba tanpa mengubah jadual": "· check & try without changing the timetable",
+        "· seret ke jadual untuk letak · seret sesi dari jadual ke sini untuk keluarkan": "· drag to the timetable to place · drag a session from the timetable here to remove it",
+        "← Kembali": "← Back",
+        "Hak cipta terpelihara.": "All rights reserved.",
+        // ===== tooltips / placeholders =====
+        "Agihan berlabel huruf kumpulan yang sama (cth K1, K2, K3), bilangan waktu sama dan tingkatan sama diletak pada masa yang sama walaupun kelas berlainan": "Allocations with the same group-letter label (e.g. K1, K2, K3), the same number of periods and the same form are placed at the same time even though the classes differ",
+        "Batal Tindakan Terakhir (Ctrl+Z)": "Undo Last Action (Ctrl+Z)",
+        "Batal pilihan": "Clear selection",
+        "Buat Semula (Ctrl+Y)": "Redo (Ctrl+Y)",
+        "Buka fail ZIP (Ctrl+O)": "Open ZIP file (Ctrl+O)",
+        "Bulan seterusnya": "Next month",
+        "Bulan terdahulu": "Previous month",
+        "Cari guru / subjek / kelas...": "Search teacher / subject / class...",
+        "Cari subjek…": "Search subject…",
+        "Cari...": "Search...",
+        "Catatan pengesahan (pilihan)": "Confirmation note (optional)",
+        "Cth: 2,3,3 atau 2,2,2 atau 6": "e.g. 2,3,3 or 2,2,2 or 6",
+        "Cth: Cuti sakit": "e.g. Sick leave",
+        "Cth: G1, G2": "e.g. G1, G2",
+        "Cth: G1, G2, Kumpulan A": "e.g. G1, G2, Group A",
+        "Cth: Hari Kebangsaan": "e.g. National Day",
+        "Cth: Makmal Sains, BM pagi sahaja": "e.g. Science Lab, Malay only in the morning",
+        "Cth: Sesi Akhir Tahun 2025 (Versi 1.0)": "e.g. End of Year 2025 Session (Version 1.0)",
+        "Eksport ke fail Excel": "Export to Excel file",
+        "Fail baharu (kosong)": "New file (blank)",
+        "Had tugas ganti sehari": "Daily relief duty limit",
+        "Hubungan": "Relation",
+        "Hubungan antara sesi": "Relations between sessions",
+        "Import jadual dari fail Excel": "Import timetable from an Excel file",
+        "Kata laluan semasa...": "Current password...",
+        "Kecilkan / besarkan menu": "Collapse / expand menu",
+        "Kembali ke bulan ini": "Back to this month",
+        "Klik / seret pada petak kosong untuk blok slot": "Click / drag on empty cells to block slots",
+        "Klik nama untuk lihat jadual penuh. Seret sesi ke petak lain untuk alih (lepas atas sesi sama panjang untuk tukar tempat). Seret sesi ke kotak di bawah untuk keluarkan; seret dari kotak bawah ke jadual untuk letak. Klik petak sesi untuk kunci / buka kunci. Mod Blok Slot: klik / seret petak kosong untuk blok, klik petak berblok untuk buka. Tandakan kotak kelas untuk susun kelas itu sahaja (Shift + klik untuk pilih julat).": "Click a name to see the full timetable. Drag a session to another cell to move it (drop on a session of the same length to swap). Drag a session to the box below to remove it; drag from the box below to the timetable to place it. Click a session cell to lock / unlock. Block Slot mode: click / drag empty cells to block, click a blocked cell to open it. Tick a class box to build that class only (Shift + click to select a range).",
+        "Kosongkan jadual (kelas dipilih sahaja jika ada)": "Clear timetable (selected classes only, if any)",
+        "Label blok": "Block label",
+        "Lihat penggunaan bilik khas": "View special room usage",
+        "Masukkan kata laluan...": "Enter password...",
+        "Minit dibawa dari rekod terdahulu": "Minutes carried over from earlier records",
+        "Muat naik fail Excel yang telah diisi (semua sheet sekaligus)": "Upload the filled Excel file (all sheets at once)",
+        "Muat turun templat Excel (Guru, Kelas, Bilik, Subjek)": "Download the Excel template (Teachers, Classes, Rooms, Subjects)",
+        "Nama (cth: Makmal Sains 1)": "Name (e.g. Science Lab 1)",
+        "Padam Agihan dari Sel Ini": "Delete Allocation from This Cell",
+        "Paparkan jadual memenuhi skrin (tekan F atau Esc untuk keluar)": "Show the timetable full-screen (press F or Esc to exit)",
+        "Rumusan": "Summary",
+        "Rumusan kualiti jadual: sesi tidak muat, hubungan, lompong, beban guru": "Timetable quality summary: sessions that don't fit, relations, gaps, teacher workload",
+        "Sedang menyusun jadual": "Building timetable",
+        "Sekurang-kurangnya 3 aksara...": "At least 3 characters...",
+        "Seret sesi untuk alih; klik sesi untuk kunci / buka kunci": "Drag a session to move it; click a session to lock / unlock",
+        "Setup nama guru, kelas, bilik & subjek": "Set up teacher, class, room & subject names",
+        "Simpan / Buka di Google Drive": "Save / Open on Google Drive",
+        "Simpan Sebagai fail ZIP baharu (Ctrl+Shift+S)": "Save As a new ZIP file (Ctrl+Shift+S)",
+        "Simpan ke fail ZIP (Ctrl+S)": "Save to ZIP file (Ctrl+S)",
+        "Susun jadual / Mod Ujian": "Build timetable / Test Mode",
+        "Tambah Agihan Baharu (Tekan +)": "Add New Allocation (Press +)",
+        "Tampal banyak baris sekaligus dari Excel": "Paste many rows at once from Excel",
+        "Tampal di sini (Ctrl+V)...": "Paste here (Ctrl+V)...",
+        "Tutup (Esc)": "Close (Esc)",
+        "Ulang kata laluan baharu...": "Repeat new password...",
+        "Urus Arkib dan Reset": "Manage Archive and Reset",
+        "Urus senarai Guru, Kelas, Bilik & Subjek": "Manage the Teacher, Class, Room & Subject lists",
+        "Cth: 2,3,3 atau 2,2,2 atau 6 ": "e.g. 2,3,3 or 2,2,2 or 6",
+        "cth: 1": "e.g. 1", "cth: 1 ARIF": "e.g. 1 ARIF", "cth: AHMAD": "e.g. AHMAD", "cth: AHMAD BIN ALI": "e.g. AHMAD BIN ALI",
+        "cth: BM": "e.g. BM", "cth: Bahasa Melayu": "e.g. Malay Language", "cth: MS1": "e.g. SL1", "cth: Makmal Sains 1": "e.g. Science Lab 1",
+        "Nama Bilik | Kod": "Room Name | Code", "Nama Bilik [Tab] Kod": "Room Name [Tab] Code",
+        "Nama Guru | Singkatan | Maks. Waktu": "Teacher Name | Abbreviation | Max. Periods", "Nama Guru [Tab] Singkatan [Tab] Maks. Waktu": "Teacher Name [Tab] Abbreviation [Tab] Max. Periods",
+        "Nama Kelas | Tingkatan | Guru Kelas | No. Susunan": "Class Name | Form | Class Teacher | Order No.", "Nama Kelas [Tab] Tingkatan [Tab] Guru Kelas [Tab] No. Susunan": "Class Name [Tab] Form [Tab] Class Teacher [Tab] Order No.",
+        "Nama Subjek | Kod | Waktu/Minggu": "Subject Name | Code | Periods/Week", "Nama Subjek [Tab] Kod [Tab] Waktu/Minggu": "Subject Name [Tab] Code [Tab] Periods/Week",
+        "Subjek | Nama Subjek | Kod | Waktu/Minggu": "Subject | Subject Name | Code | Periods/Week",
+        // ===== days / months =====
+        "Isnin": "Monday", "Selasa": "Tuesday", "Rabu": "Wednesday", "Khamis": "Thursday", "Jumaat": "Friday", "Sabtu": "Saturday", "Ahad": "Sunday",
+        "Januari": "January", "Februari": "February", "Mac": "March", "Mei": "May", "Jun": "June", "Julai": "July", "Ogos": "August", "Oktober": "October", "Disember": "December",
+        // ===== JS messages: toasts, confirms, prompts, summaries =====
+        "No. Susunan (Kelas) menentukan urutan kelas di semua paparan. Kosongkan jika tidak perlu (kelas tanpa nombor diletak di hujung).": "Order No. (Class) sets the order of classes in every view. Leave blank if not needed (classes without a number go last).",
+        "Optimum dihentikan automatik: kos sifar (sempurna).": "Optimum stopped automatically: zero cost (perfect).",
+        "Optimum dihentikan automatik: tiada peningkatan selepas 2 kitaran (30 s setiap satu).": "Optimum stopped automatically: no improvement after 2 cycles (30 s each).",
+        "(lembut)": "(soft)",
+        "— klik petak / nama hari / nombor waktu": "— click a cell / day name / period number",
+        "+ Slot Elektif": "+ Elective Slot",
+        "+ Tambah Slot Baru": "+ Add New Slot",
+        "1. Isi data pada sheet Guru, Kelas, Bilik dan Subjek (satu baris = satu rekod). Jangan ubah baris tajuk (baris 1).": "1. Fill in the data on the Teacher, Class, Room and Subject sheets (one row = one record). Do not change the header row (row 1).",
+        "1. Semakan data & peraturan": "1. Data & rules check",
+        "2. Hanya \"Nama\" yang wajib. Lajur lain boleh dikosongkan. ID dijana automatik.": "2. Only \"Name\" is required. Other columns can be left blank. IDs are generated automatically.",
+        "2. Ujian Kelas": "2. Class test",
+        "3. Sheet yang tidak diisi akan diabaikan. Nama yang sudah wujud dalam sistem akan dilangkau (tiada pendua).": "3. Sheets left empty are ignored. Names that already exist in the system are skipped (no duplicates).",
+        "3. Ujian Guru": "3. Teacher test",
+        "4. Simpan fail, kemudian klik \"Muat Naik Excel\" dalam Data Induk.": "4. Save the file, then click \"Upload Excel\" in Master Data.",
+        "4. Ujian Bilik": "4. Room test",
+        "A mesti bersebelahan B (jika sehari)": "A must be adjacent to B (if on the same day)",
+        "A mesti sebelum B dalam sehari": "A must come before B within a day",
+        "A mesti sebelum B dalam seminggu": "A must come before B within a week",
+        "A tidak boleh diikuti terus oleh B": "A must not be directly followed by B",
+        "Ada kelas yang mula lewat atau berlompong di tengah hari, bukan di hujung hari.": "Some classes start late or have gaps mid-day instead of at the end of the day.",
+        "Ada masalah yang perlu dibetulkan sebelum Susun Automatik penuh.": "There are problems to fix before the full automatic build.",
+        "Agihan berbeza yang dipilih tidak jatuh pada hari yang sama. Cth: Matematik & Matematik Tambahan bagi satu kelas.": "The selected different allocations do not fall on the same day. E.g. Mathematics & Additional Mathematics for one class.",
+        "Agihan berjaya dikemaskini!": "Allocation updated successfully!",
+        "Agihan berjaya disalin ke arkib!": "Allocation copied to the archive successfully!",
+        "Agihan telah di-reset.": "Allocations have been reset.",
+        "Agihkan semula sebahagian waktu kepada guru lain di Matriks.": "Reallocate some of the periods to other teachers in the Matrix.",
+        "Analisis perbandingan selesai!": "Comparison analysis complete!",
+        "BELUM DISAHKAN": "NOT CONFIRMED",
+        "BINA INSAN": "CHARACTER BUILDING",
+        "BUAT SEMULA (UNDO)": "REDO",
+        "Bina Insan": "Character Building",
+        "Beban (logik kumpulan serentak) vs slot boleh mengajar & had maksimum": "Workload (simultaneous-group logic) vs teachable slots & maximum limit",
+        "Beban Asal": "Original Load",
+        "Beban Baharu": "New Load",
+        "Beban waktu setiap kelas vs slot boleh isi": "Period load of each class vs fillable slots",
+        "Belum dijadualkan.": "Not scheduled yet.",
+        "Belum dipilih": "Not selected",
+        "Berturut & lompong": "Consecutive & gaps",
+        "Bilangan sesi (bukan waktu) yang dipilih dalam sehari tidak melebihi nilai ini.": "The number of selected sessions (not periods) in a day does not exceed this value.",
+        "Bilangan sesi yang berlangsung serentak tidak melebihi nilai ini. Cth: 1 makmal → maks 1 kelas Sains pada satu masa.": "The number of sessions running at the same time does not exceed this value. E.g. 1 lab → max 1 Science class at a time.",
+        "Bilik bertindih": "Overlapping rooms",
+        "Blok slot yang guru TIDAK boleh mengajar (cth: separuh masa, mesyuarat, tugas khas). Pilih berus, kemudian klik atau seret pada petak.": "Block the slots when the teacher can NOT teach (e.g. part-time, meetings, special duties). Choose a brush, then click or drag on the cells.",
+        "Boleh Isi": "Fillable",
+        "Boleh isi": "Fillable",
+        "Boleh mengajar": "Can teach",
+        "Boleh pilih": "Selectable",
+        "Boleh teruskan Susun Automatik penuh (ada amaran).": "You can continue with the full automatic build (with warnings).",
+        "Buka fail ZIP ini melalui butang \"Buka\" dalam aplikasi VisiJadual.": "Open this ZIP file with the \"Open\" button in the VisiJadual app.",
+        "Bukan hari persekolahan.": "Not a school day.",
+        "Cipta fail baharu di Drive": "Create a new file on Drive",
+        "Client ID mesti berakhir dengan \".apps.googleusercontent.com\".": "Client ID must end with \".apps.googleusercontent.com\".",
+        "Cth: guru yang mengajar waktu terakhir tidak mengajar waktu pertama keesokan harinya.": "E.g. a teacher who teaches the last period does not teach the first period the next day.",
+        "Cuba tahap Strict. Semak slot diblok, hubungan \"ketat\" dan kumpulan serentak. Jalankan Mod Ujian untuk lihat kelas/guru yang padat.": "Try the Strict level. Check blocked slots, \"strict\" relations and simultaneous groups. Run Test Mode to see which classes/teachers are overloaded.",
+        "Dari sesi pertama hingga terakhir dalam sehari tidak melebihi sekian waktu.": "From the first to the last session in a day does not exceed this many periods.",
+        "Data Mentah": "Raw Data",
+        "Data arkib berjaya dipulihkan!": "Archive data restored successfully!",
+        "Data belum pernah disimpan ke fail ZIP": "Data has never been saved to a ZIP file",
+        "Data contoh dimuatkan. Kata laluan Mod Edit: admin123": "Sample data loaded. Edit Mode password: admin123",
+        "Data dikemaskini!": "Data updated!",
+        "Data ditambah sebagai rekod baharu.": "Data added as a new record.",
+        "Data sesi terakhir dipulihkan dari pelayar. Ada perubahan belum disimpan ke ZIP.": "Last session's data restored from the browser. There are changes not yet saved to the ZIP.",
+        "Data tidak dijumpai.": "Data not found.",
+        "Diusahakan jika mudah. Kekangan lain lebih diutamakan.": "Attempted if easy. Other constraints take priority.",
+        "Diusahakan sekuat mungkin, tetapi boleh dilanggar jika tiada pilihan lain.": "Attempted as hard as possible, but may be broken if there is no other option.",
+        "Draf simpanan telah dikosongkan.": "Saved drafts have been cleared.",
+        "Elektif Khusus": "Specific Elective",
+        "Fail Data VisiJadual (ZIP)": "VisiJadual Data File (ZIP)",
+        "Fail Excel berjaya dieksport!": "Excel file exported successfully!",
+        "Fail baharu dicipta. Mulakan dengan menambah Guru, Kelas & Subjek di \"Data Induk\". Kata laluan lalai: admin123": "New file created. Start by adding Teachers, Classes & Subjects in \"Master Data\". Default password: admin123",
+        "Fail belum disimpan": "File not saved",
+        "Fail data VisiJadual Pro v2": "VisiJadual Pro v2 data file",
+        "Fail ini dicipta oleh versi VisiJadual yang lebih baharu. Sila kemaskini aplikasi.": "This file was created by a newer version of VisiJadual. Please update the app.",
+        "Fasa 1/2 · Meletak sesi": "Phase 1/2 · Placing sessions",
+        "Fasa 2/2 · Mengoptimum kualiti": "Phase 2/2 · Optimizing quality",
+        "Fasa 2/2 · Mengoptimum tanpa had": "Phase 2/2 · Optimizing without limit",
+        "Format fail Excel tidak sah. Sila gunakan fail yang dieksport dari VisiJadual.": "Invalid Excel file format. Please use a file exported from VisiJadual.",
+        "Gagal memuatkan skrip Google. Semak sambungan Internet.": "Failed to load the Google script. Check your Internet connection.",
+        "Gagal mengemaskini kata laluan.": "Failed to update the password.",
+        "Guru Kelas": "Class Teacher",
+        "Guru Tidak Hadir": "Absent Teachers",
+        "Guru ganti disahkan. Ingat untuk Simpan fail ZIP.": "Relief teacher confirmed. Remember to save the ZIP file.",
+        "Guru kelas berjaya dikemaskini!": "Class teacher updated successfully!",
+        "Guru perlu menunggu antara dua sesi pada hari yang sama.": "The teacher has to wait between two sessions on the same day.",
+        "Guru · agihan / slot boleh mengajar": "Teachers · allocation / teachable slots",
+        "Hanya pada slot terpilih": "Only on selected slots",
+        "Hari A mesti sebelum hari B": "Day A must be before day B",
+        "Hari bagi sesi A mesti lebih awal daripada hari bagi sesi B (tidak boleh hari yang sama).": "The day of session A must be earlier than the day of session B (not the same day).",
+        "Hubungan tidak dipenuhi sepenuhnya": "Relation not fully satisfied",
+        "Import Excel berjaya!": "Excel import successful!",
+        "JADUAL GURU GANTI": "RELIEF TEACHER TIMETABLE",
+        "Jadual belum disusun. Susun jadual di tab \"Susun Jadual\" dahulu.": "The timetable has not been built. Build it in the \"Build Timetable\" tab first.",
+        "Jana — bilik (slot digunakan)": "Generate — rooms (slots used)",
+        "Jana — guru (perlu vs diletak)": "Generate — teachers (needed vs placed)",
+        "Jana — kelas (perlu vs diletak)": "Generate — classes (needed vs placed)",
+        "Jarak hari tanpa sesi di antara dua hari bersesi tidak melebihi nilai ini. Cth: BM tidak lebih 1 hari tanpa kelas.": "The number of days without sessions between two days with sessions does not exceed this value. E.g. Malay has no more than 1 day without a class.",
+        "Jenis ini memerlukan Kumpulan B.": "This type requires Group B.",
+        "Jika A dan B pada hari yang sama, semua sesi A mesti lebih awal daripada sesi B.": "If A and B are on the same day, all sessions of A must be earlier than sessions of B.",
+        "Jika A dan B pada hari yang sama, sesi A mesti bersambung terus dengan sesi B.": "If A and B are on the same day, session A must continue directly into session B.",
+        "Jika ada sesi pada sesuatu hari, julat dari sesi pertama hingga terakhir sekurang-kurangnya sekian waktu.": "If there are sessions on a day, the range from the first to the last session is at least this many periods.",
+        "Jika ada sesi pada sesuatu hari, jumlahnya sekurang-kurangnya sekian waktu.": "If there are sessions on a day, their total is at least this many periods.",
+        "Jika belum puas hati, jalankan semula Optimum tanpa had dan biar ia berhenti sendiri.": "If you are not satisfied, run Optimum without limit again and let it stop by itself.",
+        "Jika subjek 4+ waktu, pecahan 2,2 membantu menyebarkannya.": "If a subject has 4+ periods, a 2,2 split helps spread it out.",
+        "Jumlah waktu bagi sesi yang dipilih dalam sehari tidak melebihi nilai ini.": "The total periods of the selected sessions in a day do not exceed this value.",
+        "Jumlah waktu kosong di antara sesi sepanjang minggu tidak melebihi nilai ini.": "The total empty periods between sessions across the week do not exceed this value.",
+        "Kata laluan baharu dan pengesahan tidak sepadan.": "The new password and confirmation do not match.",
+        "Kata laluan baharu mestilah sekurang-kurangnya 3 aksara.": "The new password must be at least 3 characters.",
+        "Kata laluan berjaya dikemaskini!": "Password updated successfully!",
+        "Kata laluan disahkan. Mod Edit aktif!": "Password verified. Edit Mode is on!",
+        "Kata laluan pentadbir berjaya dikemaskini!": "Administrator password updated successfully!",
+        "Kata laluan salah.": "Wrong password.",
+        "Kata laluan semasa tidak tepat.": "The current password is incorrect.",
+        "Kata laluan tidak tepat. Sila cuba lagi.": "Incorrect password. Please try again.",
+        "Kebenaran akses Google Drive tidak diberikan.": "Google Drive access permission was not granted.",
+        "Kekal Waktu Sedia Ada": "Keep Existing Periods",
+        "Kekalkan waktu sedia ada setiap kelas (atau taip baru)": "Keep the existing periods of each class (or type new)",
+        "Kelas ada slot kosong di antara sesi.": "The class has empty slots between sessions.",
+        "Kelas tidak dijumpai dalam pangkalan data.": "Class not found in the database.",
+        "Kelayakan guru ganti disimpan.": "Relief teacher eligibility saved.",
+        "Keluar Fokus": "Exit Focus",
+        "Kemaskini Agihan": "Update Allocation",
+        "Kemaskini Agihan Jadual": "Update Timetable Allocation",
+        "Kemaskini Waktu": "Update Periods",
+        "Kosongkan semua draf yang belum disimpan?": "Clear all unsaved drafts?",
+        "Kumpulan A": "Group A",
+        "Kumpulan B": "Group B",
+        "Kumpulan B (pilihan — kosongkan untuk guna Kumpulan A sahaja)": "Group B (optional — leave empty to use Group A only)",
+        "Laporan perbandingan berjaya dieksport!": "Comparison report exported successfully!",
+        "Lebih had": "Over limit",
+        "Letak sesi maks 10 s, optimum 10 s. Sesuai untuk semakan pantas.": "Place sessions max 10 s, optimum 10 s. Good for quick checks.",
+        "Letak sesi maks 30 s, optimum 30 s. Sesuai untuk kegunaan biasa.": "Place sessions max 30 s, optimum 30 s. Good for normal use.",
+        "Letak sesi maks 90 s, optimum tanpa had sehingga stabil (boleh dihentikan manual). Hasil terbaik.": "Place sessions max 90 s, optimum without limit until stable (can be stopped manually). Best result.",
+        "Log keluar daripada Google Drive.": "Signed out of Google Drive.",
+        "Maks hari": "Max days",
+        "Maks hari berturut-turut": "Max consecutive days",
+        "Maks hari lapang": "Max free days",
+        "Maks hari lapang di antara sesi": "Max free days between sessions",
+        "Maks hari seminggu": "Max days per week",
+        "Maks julat": "Max range",
+        "Maks lompong": "Max gaps",
+        "Maks lompong sehari": "Max gaps per day",
+        "Maks lompong sehari (waktu kosong di akhir dikira)": "Max gaps per day (trailing empty periods counted)",
+        "Maks lompong sehari (waktu kosong di awal dikira)": "Max gaps per day (leading empty periods counted)",
+        "Maks lompong seminggu": "Max gaps per week",
+        "Maks serentak": "Max simultaneous",
+        "Maks sesi": "Max sessions",
+        "Maks sesi pada satu waktu": "Max sessions at one time",
+        "Maks sesi sehari": "Max sessions per day",
+        "Maks waktu": "Max periods",
+        "Maks waktu + lompong sehari": "Max periods + gaps per day",
+        "Maks waktu berturut-turut": "Max consecutive periods",
+        "Maks waktu sehari": "Max periods per day",
+        "Maks. Waktu": "Max. Periods",
+        "Maksimum 7 hari dan 20 waktu sehari.": "Maximum 7 days and 20 periods per day.",
+        "Masa Diperuntukkan": "Allocated Time",
+        "Masukkan Waktu Kelas": "Enter Class Periods",
+        "Masukkan nama bilik.": "Enter the room name.",
+        "Matematik PVMA": "Mathematics PVMA",
+        "Meletak sesi": "Placing sessions",
+        "Mencuba menyusun…": "Trying to build…",
+        "Mengesahkan kata laluan...": "Verifying password...",
+        "Menghentikan… (siapkan pusingan semasa)": "Stopping… (finishing the current round)",
+        "Menyelaraskan data terkini...": "Syncing the latest data...",
+        "Menyimpan kata laluan baharu...": "Saving the new password...",
+        "Menyimpan ke Google Drive...": "Saving to Google Drive...",
+        "Mesti serentak (waktu sama)": "Must be simultaneous (same period)",
+        "Min hari": "Min days",
+        "Min hari seminggu": "Min days per week",
+        "Min julat": "Min range",
+        "Min waktu": "Min periods",
+        "Min waktu + lompong sehari (hari kosong dibenarkan)": "Min periods + gaps per day (empty days allowed)",
+        "Min waktu sehari": "Min periods per day",
+        "Min waktu sehari (hari kosong dibenarkan)": "Min periods per day (empty days allowed)",
+        "Mod Edit berjaya diaktifkan!": "Edit Mode enabled successfully!",
+        "Mod Edit ditutup. Anda kini dalam mod paparan sahaja.": "Edit Mode closed. You are now in view-only mode.",
+        "Mula Susun": "Start Building",
+        "NAMA GURU": "TEACHER NAME",
+        "Naikkan masa Optimum (atau guna Optimum tanpa had) supaya lompong dialihkan ke hujung hari.": "Increase the Optimum time (or use Optimum without limit) so that gaps are moved to the end of the day.",
+        "Nama Bilik": "Room Name",
+        "Nama bilik sudah ada.": "That room name already exists.",
+        "Nama fail ZIP untuk dimuat turun:": "Name of the ZIP file to download:",
+        "Nama fail di Google Drive:": "File name on Google Drive:",
+        "Nama label blok baharu (cth: Mesyuarat, Pendidikan Moral):": "New block label name (e.g. Meeting, Moral Education):",
+        "Nama label tidak boleh kosong.": "The label name cannot be empty.",
+        "Nama sesi arkib tidak boleh kosong.": "The archive session name cannot be empty.",
+        "Nilai mesti sekurang-kurangnya 1.": "The value must be at least 1.",
+        "No. Susunan": "Order No.",
+        "Nyatakan sebab pembatalan:": "State the reason for cancelling:",
+        "Optimum lebih lama biasanya mengurangkannya.": "A longer Optimum usually reduces it.",
+        "PANDUAN TEMPLAT DATA INDUK — VisiJadual": "MASTER DATA TEMPLATE GUIDE — VisiJadual",
+        "Pecahan Masa": "Time Split",
+        "Pecahan waktu, kumpulan serentak, hubungan": "Period split, simultaneous groups, relations",
+        "Pendidikan Moral": "Moral Education",
+        "Pentadbir Sekolah": "School Administrator",
+        "Penyusunan dibatalkan. Jadual sedia ada tidak diubah.": "Build cancelled. The existing timetable is unchanged.",
+        "Peraturan susunan disimpan.": "Scheduling rules saved.",
+        "Perbezaan Guru": "Teacher Differences",
+        "Perhatian data": "Data warning",
+        "Perincian Mengikut Kelas": "Details by Class",
+        "Permintaan bilik khas vs slot seminggu": "Special room demand vs weekly slots",
+        "Perubahan Data Induk belum disimpan. Tutup tanpa simpan?": "Master Data changes are not saved. Close without saving?",
+        "Perubahan pada senarai ini belum disimpan. Tukar tab dan buang perubahan?": "Changes to this list are not saved. Switch tab and discard the changes?",
+        "Perubahan pada senarai semasa belum disimpan dan akan dibuang. Teruskan muat naik?": "Changes to the current list are not saved and will be discarded. Continue uploading?",
+        "Petak yang ada sesi tidak diblok. Alih atau kosongkan sesi itu dahulu.": "A cell with a session cannot be blocked. Move or clear that session first.",
+        "Pilih Guru & Waktu Gabungan": "Choose Combined Teacher & Periods",
+        "Pilih Guru Bagi Kelas Baharu": "Choose Teacher for New Class",
+        "Pilih agihan": "Select allocation",
+        "Pilih fail ZIP VisiJadual": "Choose a VisiJadual ZIP file",
+        "Pilih kelas ini untuk disusun (Shift + klik: pilih julat)": "Select this class to build (Shift + click: select a range)",
+        "Pilih sekurang-kurangnya satu kelas.": "Select at least one class.",
+        "Pilih sekurang-kurangnya satu subjek, guru atau kelas.": "Select at least one subject, teacher or class.",
+        "Pilih tarikh cuti.": "Select the holiday date.",
+        "Pop-up disekat. Benarkan pop-up untuk mencetak.": "Pop-up blocked. Allow pop-ups to print.",
+        "Pustaka Excel belum dimuatkan. Semak sambungan internet.": "The Excel library has not loaded. Check your internet connection.",
+        "Ralat data": "Data error",
+        "Rekod berjaya disimpan!": "Record saved successfully!",
+        "Rekod guru tidak hadir ditambah.": "Absent teacher record added.",
+        "Rumusan beban guru:": "Teacher workload summary:",
+        "Salin susunan slot": "Copy slot layout",
+        "Semua Bilik": "All Rooms",
+        "Semua Guru": "All Teachers",
+        "Semua Kelas": "All Classes",
+        "Semua agihan yang dipilih diletak pada waktu yang sama. Masa & pecahan mesti sama. Cth: dua kumpulan elektif.": "All selected allocations are placed at the same time. The time & split must be the same. E.g. two elective groups.",
+        "Semua kedudukan bertembung dengan sesi berkunci.": "Every position clashes with a locked session.",
+        "Semua kelas · tanda kotak untuk pilih": "All classes · tick the box to select",
+        "Semua sesi A berlaku lebih awal dalam minggu berbanding semua sesi B.": "All sessions of A happen earlier in the week than all sessions of B.",
+        "Semua ujian lulus — sedia untuk Susun Automatik penuh.": "All tests passed — ready for the full automatic build.",
+        "Semua worker penyusun gagal.": "All builder workers failed.",
+        "Seperti maks lompong sehari, tetapi waktu kosong sebelum sesi pertama turut dikira.": "Like max gaps per day, but empty periods before the first session are also counted.",
+        "Seperti maks lompong sehari, tetapi waktu kosong selepas sesi terakhir turut dikira.": "Like max gaps per day, but empty periods after the last session are also counted.",
+        "Sesi B tidak boleh bermula sejurus selepas sesi A tamat (hari yang sama). Cth: PJ tidak diikuti terus oleh Sains.": "Session B cannot start right after session A ends (same day). E.g. PE is not directly followed by Science.",
+        "Sesi diletak & dikunci.": "Session placed & locked.",
+        "Sesi ini tidak lagi sepadan dengan agihan semasa.": "This session no longer matches the current allocation.",
+        "Sesi melepasi hujung hari.": "The session runs past the end of the day.",
+        "Sesi tidak boleh berakhir pada slot yang ditanda.": "A session cannot end on a marked slot.",
+        "Sesi tidak boleh bermula pada slot yang ditanda. Cth: sesi 2 waktu tidak bermula sebelum rehat.": "A session cannot start on a marked slot. E.g. a 2-period session does not start before break.",
+        "Sesi yang dipilih (A dan B jika diisi) tidak berturut-turut melebihi sekian waktu.": "The selected sessions (A and B if filled) are not consecutive for more than this many periods.",
+        "Sesi yang dipilih hanya boleh diletak dalam slot yang ditanda. Cth: PJ waktu pagi sahaja.": "The selected sessions can only be placed in the marked slots. E.g. PE in the morning only.",
+        "Sesi yang dipilih hanya pada sekian hari seminggu. Cth: guru separuh masa 3 hari sahaja.": "The selected sessions are only on this many days per week. E.g. a part-time teacher 3 days only.",
+        "Sesi yang dipilih tersebar sekurang-kurangnya pada sekian hari.": "The selected sessions are spread over at least this many days.",
+        "Sesi yang dipilih tidak berlaku lebih daripada sekian hari berturut-turut.": "The selected sessions do not happen on more than this many consecutive days.",
+        "Sesi yang dipilih tidak boleh berlangsung serentak. Jika Kumpulan B diisi, hanya A dengan B yang dihalang.": "The selected sessions cannot run simultaneously. If Group B is filled, only A with B is prevented.",
+        "Sesi yang dipilih tidak boleh bersambung (sebelum atau selepas). Jika Kumpulan B diisi, hanya A dengan B.": "The selected sessions cannot be adjacent (before or after). If Group B is filled, only A with B.",
+        "Sesi yang dipilih tidak boleh menyentuh slot yang ditanda.": "The selected sessions cannot touch the marked slots.",
+        "Setakat ini tiada masalah. Teruskan langkah seterusnya.": "No problems so far. Continue to the next step.",
+        "Setiap bilik (waktu wajib / boleh dikongsi vs slot seminggu)": "Each room (required / shareable periods vs weekly slots)",
+        "Setiap guru (beban ikut kumpulan serentak)": "Each teacher (load by simultaneous group)",
+        "Setiap hari sekurang-kurangnya sekian waktu. Cth: guru mengajar sekurang-kurangnya 2 waktu setiap hari.": "At least this many periods every day. E.g. a teacher teaches at least 2 periods every day.",
+        "Setiap kelas (waktu perlu vs slot boleh isi)": "Each class (periods needed vs fillable slots)",
+        "Sila buat perbandingan terlebih dahulu.": "Please run a comparison first.",
+        "Sila masukkan nama sesi arkib.": "Please enter an archive session name.",
+        "Sila masukkan pembahagian waktu bagi kelas gabungan.": "Please enter the period split for the combined classes.",
+        "Sila masukkan pembahagian waktu yang sah (cth: 2,3,3 atau 6).": "Please enter a valid period split (e.g. 2,3,3 or 6).",
+        "Sila pilih Guru dan Mata Pelajaran.": "Please select a Teacher and a Subject.",
+        "Sila pilih guru bagi kelas gabungan.": "Please select a teacher for the combined classes.",
+        "Sila pilih guru baharu atau masukkan waktu baharu untuk disimpan.": "Please choose a new teacher or enter new periods to save.",
+        "Sila pilih guru pengajar yang sah.": "Please choose a valid teaching teacher.",
+        "Sila pilih nama guru kelas.": "Please choose the class teacher's name.",
+        "Sila pilih sekurang-kurangnya satu kelas.": "Please select at least one class.",
+        "Sila pilih sekurang-kurangnya seorang guru untuk di-reset.": "Please select at least one teacher to reset.",
+        "Sila pilih sekurang-kurangnya seorang guru.": "Please select at least one teacher.",
+        "Skop: semua kelas": "Scope: all classes",
+        "Skop: semua kelas. Pilih kelas (tanda kotak, Shift + klik untuk julat) untuk menguji kelas tertentu sahaja.": "Scope: all classes. Select classes (tick boxes, Shift + click for a range) to test specific classes only.",
+        "Slot A (hari ini)": "Slot A (today)",
+        "Slot B (hari esok)": "Slot B (tomorrow)",
+        "Slot dibenarkan": "Allowed slots",
+        "Slot dilarang": "Forbidden slots",
+        "Slot dilarang berakhir": "Forbidden end slots",
+        "Slot dilarang bermula": "Forbidden start slots",
+        "Subjek yang sama muncul lebih daripada satu sesi pada hari yang sama bagi sesuatu kelas.": "The same subject appears in more than one session on the same day for a class.",
+        "Susun Automatik & Kosongkan hanya untuk kelas ini; kelas lain tidak diubah.": "Automatic Build & Clear apply only to this class; other classes are unchanged.",
+        "Susun semula jadual? Semua sesi yang tidak dikunci akan disusun semula.": "Rebuild the timetable? All unlocked sessions will be rearranged.",
+        "Susunan A & B": "Arrangement A & B",
+        "Tambah bilik untuk subjek berkenaan atau kurangkan sesi serentak.": "Add a room for that subject or reduce simultaneous sessions.",
+        "Tambah guru di \"Data Induk\" dahulu.": "Add teachers in \"Master Data\" first.",
+        "Tanda sekurang-kurangnya satu slot B.": "Mark at least one B slot.",
+        "Tanda sekurang-kurangnya satu slot.": "Mark at least one slot.",
+        "Tandakan kotak kelas untuk susun kelas tertentu sahaja (Shift + klik untuk pilih julat).": "Tick the class boxes to build specific classes only (Shift + click to select a range).",
+        "Tarikh ini bukan hari persekolahan.": "This date is not a school day.",
+        "Tarikh mula pengiraan tidak sah.": "Invalid start date for counting.",
+        "Telah log masuk ke Google": "Signed in to Google",
+        "Templat dimuat turun. Isi, simpan, kemudian \"Muat Naik Excel\".": "Template downloaded. Fill it in, save, then \"Upload Excel\".",
+        "Tetapan Google Drive disimpan.": "Google Drive settings saved.",
+        "Tetapan guru ganti disimpan.": "Relief teacher settings saved.",
+        "Tetapan hari & waktu disimpan.": "Days & periods settings saved.",
+        "Tetapkan OAuth Client ID Google dahulu (Tetapan sambungan Google).": "Set the Google OAuth Client ID first (Google connection settings).",
+        "Tetingkap log masuk Google disekat. Benarkan pop-up untuk laman ini dan cuba lagi.": "The Google sign-in window was blocked. Allow pop-ups for this site and try again.",
+        "Tetingkap log masuk Google ditutup sebelum selesai.": "The Google sign-in window was closed before finishing.",
+        "Tiada Kelas": "No Classes",
+        "Tiada agihan bagi kelas yang dipilih.": "No allocations for the selected classes.",
+        "Tiada agihan sepadan dengan Kumpulan B.": "No allocations match Group B.",
+        "Tiada agihan sepadan dengan pilihan ini.": "No allocations match this selection.",
+        "Tiada agihan untuk dianalisis.": "No allocations to analyze.",
+        "Tiada agihan untuk dijadualkan.": "No allocations to schedule.",
+        "Tiada agihan untuk diuji.": "No allocations to test.",
+        "Tiada bilik khas. Tambah bilik di menu \"Bilik Khas\" dahulu.": "No special rooms. Add rooms in the \"Special Rooms\" menu first.",
+        "Tiada data jadual untuk dieksport.": "No timetable data to export.",
+        "Tiada guru.": "No teachers.",
+        "Tiada guru. Tambah guru di \"Data Induk\" dahulu.": "No teachers. Add teachers in \"Master Data\" first.",
+        "Tiada kelas lain untuk disalin.": "No other classes to copy to.",
+        "Tiada kelas. Tambah kelas di \"Data Induk\" dahulu.": "No classes. Add classes in \"Master Data\" first.",
+        "Tiada perubahan.": "No changes.",
+        "Tiada rekod guru ganti yang DISAHKAN pada tarikh ini.": "No CONFIRMED relief teacher records on this date.",
+        "Tiada rekod sah untuk diimport.": "No valid records to import.",
+        "Tiada rekod sejarah bagi tarikh ini.": "No history records for this date.",
+        "Tiada rekod untuk guru yang dipilih.": "No records for the selected teachers.",
+        "Tiada rekod untuk sesi arkib ini.": "No records for this archive session.",
+        "Tiada ruang tanpa bertembung dengan sesi lain / peraturan.": "No space without clashing with other sessions / rules.",
+        "Tiada sesi di slot A hari ini DAN slot B hari esok": "No session in slot A today AND slot B tomorrow",
+        "Tiada sesi tidak berkunci bagi kelas dipilih.": "No unlocked sessions for the selected classes.",
+        "Tiada sheet Guru / Kelas / Bilik / Subjek ditemui. Gunakan templat yang disediakan.": "No Teacher / Class / Room / Subject sheet found. Use the provided template.",
+        "Tiada slot berturut-turut yang cukup panjang (slot diblok / rehat / hubungan slot).": "No consecutive run of slots long enough (blocked slots / breaks / slot relations).",
+        "Tiada tindakan untuk dibatalkan (Pintasan: Ctrl+Z)": "Nothing to undo (Shortcut: Ctrl+Z)",
+        "Tiada tindakan untuk dibatalkan (Senarai Undo kosong).": "Nothing to undo (Undo list is empty).",
+        "Tiada tindakan untuk dibuat semula (Ctrl+Y)": "Nothing to redo (Ctrl+Y)",
+        "Tiada tindakan untuk dibuat semula (Senarai Redo kosong).": "Nothing to redo (Redo list is empty).",
+        "Tiada waktu perlu diganti pada tarikh ini.": "No periods need cover on this date.",
+        "Tidak boleh berakhir pada slot terpilih": "Cannot end on selected slots",
+        "Tidak boleh bermula pada slot terpilih": "Cannot start on selected slots",
+        "Tidak boleh bersebelahan": "Cannot be adjacent",
+        "Tidak boleh pada hari yang sama": "Cannot be on the same day",
+        "Tidak boleh pada slot terpilih": "Cannot be on selected slots",
+        "Tidak boleh pada waktu yang sama": "Cannot be at the same time",
+        "Tidak hadir": "Absent",
+        "Tukar Guru": "Change Teacher",
+        "Tunggu ujian siap atau tutup popup dahulu.": "Wait for the test to finish or close the popup first.",
+        "Ubah pemberat hubungan itu kepada \"Longgar\", atau semak sesi yang dihubungkan.": "Change the relation weight to \"Relaxed\", or check the linked sessions.",
+        "WAKTU BERUBAH": "PERIOD CHANGED",
+        "Wajib bilik ini": "Must use this room",
+        "Wajib dipatuhi. Sesi tidak akan diletak jika melanggar.": "Must be obeyed. A session will not be placed if it breaks this.",
+        "Waktu & serentak": "Periods & simultaneous",
+        "Waktu kosong di antara sesi dalam sehari tidak melebihi nilai ini. Cth: guru tiada lebih 2 waktu terbiar.": "Empty periods between sessions in a day do not exceed this value. E.g. a teacher has no more than 2 idle periods.",
+        "Waktu tamat mesti selepas waktu mula.": "The end period must be after the start period.",
+        "Worker tiada": "No worker",
+        "belum disimpan": "not saved",
+        "dihentikan automatik (kos sifar)": "stopped automatically (zero cost)",
+        "dihentikan automatik (tiada peningkatan)": "stopped automatically (no improvement)",
+        "dihentikan oleh anda": "stopped by you",
+        "mesti serentak": "must be simultaneous",
+        "tamat had masa": "time limit reached",
+        "tiada agihan": "no allocation",
+        "tidak muat": "does not fit",
+        "· belum disusun": "· not built yet",
+        "⚠ Jadual lengkap tetapi ada kompromi / amaran.": "⚠ Timetable is complete but has compromises / warnings.",
+        "✔ Jadual lengkap dan baik — tiada masalah dikesan.": "✔ Timetable is complete and good — no problems detected.",
+        "✖ Jadual belum lengkap atau ada masalah serius.": "✖ Timetable is incomplete or has serious problems.",
+        "⚠️ Ada perubahan yang BELUM disimpan ke fail ZIP.\n\nTeruskan dan buang perubahan tersebut?": "⚠️ There are changes NOT yet saved to the ZIP file.\n\nContinue and discard those changes?",
+        "⚠️ PERINGATAN RESET KESELURUHAN:\n\nSemua rekod jadual aktif akan DIPADAM.\nPastikan anda telah membuat ARKIB terlebih dahulu!\n\nAdakah anda pasti mahu teruskan?": "⚠️ FULL RESET WARNING:\n\nAll active timetable records will be DELETED.\nMake sure you have made an ARCHIVE first!\n\nAre you sure you want to continue?",
+        "mempunyai perubahan jadual. (🌱 Kelas Baharu:": "have timetable changes. (🌱 New Class:",
+        "mempunyai perubahan jadual. (🌱 Guru Baharu:": "have timetable changes. (🌱 New Teacher:",
+        "| 🍂 Tiada Agihan:": "| 🍂 No Allocation:",
+        "| ⚙️ Agihan Berubah:": "| ⚙️ Allocation Changed:",
+        "Kosongkan jadual?": "Clear the timetable?",
+        "Berubah Masa:": "Time Changed:",
+        "Tiada sebarang perbezaan dikesan di antara kedua-dua sumber untuk paparan": "No differences were detected between the two sources for the",
+        "Kedua-dua versi jadual adalah sama.": "Both timetable versions are the same.",
+        "Kelas ": "Class ",
+        "Skop:": "Scope:",
+        "Jumlah Beban": "Total Workload",
+        "Jumlah Waktu": "Total Periods",
+        // ===== dynamic HTML fragments =====
+        "Paparan Sahaja": "View Only",
+        "Batal Penyusunan": "Cancel Build", "Kemaskini Rekod": "Update Record", "Memadam...": "Deleting...", "Mengemaskini...": "Updating...",
+        "Menyimpan ke Arkib...": "Saving to Archive...", "Menyimpan...": "Saving...", "Tambah guru di": "Add teachers in",
+        "Aktif": "Active", "Cadangan:": "Suggestions:", "Guna": "Use", "JUM": "TOTAL", "Jalankan": "Run", "Kemaskini": "Update",
+        "Kod ringkas (dipapar dalam jadual)": "Short code (shown in the timetable)", "Kunci Semula": "Lock Again", "LEMBUT": "SOFT",
+        "Memuatkan perincian snapshot...": "Loading snapshot details...", "Pulihkan": "Restore",
+        "Tiada perubahan agihan dikesan.": "No allocation changes detected.",
+        "agihan sepadan": "matching allocations", "amaran.": "warnings.", "⚠ amaran": "⚠ warning", "✔ lulus": "✔ passed", "✖ ada masalah": "✖ has problems",
+        "sesi": "sessions", "rekod": "records", "minit": "minutes", "teras": "cores", "daripada": "of", "oleh": "by", "guru": "teachers",
+        "sesi belum muat": "sessions did not fit", "sesi diletak.": "sessions placed.", "baris ditambah": "rows added", "dalam ZIP rosak:": "in the ZIP is corrupt:",
+        "kelas dipilih?": "classes selected?", "rekod jadual dari fail \"": "timetable records from the file \"",
+        "waktu perlu dijadualkan tetapi hanya": "periods need scheduling but only",
+        "melebihi slot": "over slots",
+        "RALAT": "ERROR",
+        "· Tandakan kotak kelas untuk susun kelas tertentu sahaja (": "· Tick the class boxes to build specific classes only (",
+        "untuk pilih julat).": "to select a range).",
+        "· Susun Automatik & Kosongkan hanya untuk kelas ini; kelas lain tidak diubah.": "· Automatic Build & Clear apply only to this class; other classes are unchanged.",
+        "Bil": "No.", "T/tangan": "Signature", "SEKOLAH": "SCHOOL", "Disediakan oleh:": "Prepared by:",
+        "AGIHAN BERUBAH": "ALLOCATION CHANGED",
+        "Ada perubahan belum disimpan": "Unsaved changes",
+        "Arkib:": "Archive:",
+        "Belum ada bilik. Tambah bilik di atas.": "No rooms yet. Add a room above.",
+        "Belum ada hubungan.": "No relations yet.",
+        "Belum tentu mustahil: penyusun hanya mencari dalam 10 saat. Cuba naikkan had masa / bilangan teras, longgarkan Hubungan, atau semak sebab di bawah dan jalankan semula.": "Not necessarily impossible: the builder only searched for 10 seconds. Try raising the time limit / number of cores, relax the Relations, or check the reasons below and run again.",
+        "Bilangan subjek": "Number of subjects",
+        "Buka Mod Edit untuk mengubah data jadual": "Turn on Edit Mode to change timetable data",
+        "GURU BAHARU": "NEW TEACHER",
+        "Hari": "Day",
+        "JUM WAKTU": "TOTAL PERIODS",
+        "Jadual Guru Ganti": "Relief Teacher Timetable",
+        "KELAS": "CLASS",
+        "KELAS BAHARU": "NEW CLASS",
+        "STATUS BEBAN": "WORKLOAD STATUS",
+        "TIADA AGIHAN": "NO ALLOCATION",
+        "Kekalkan guru sedia ada": "Keep existing teacher",
+        "Kekangan lembut: diusahakan, tidak dijamin.": "Soft constraint: attempted, not guaranteed.",
+        "Klik untuk isi seluruh baris": "Click to fill the whole row",
+        "Klik untuk isi seluruh lajur": "Click to fill the whole column",
+        "Kunci semula mod paparan sahaja": "Lock back to view-only mode",
+        "Masa": "Time",
+        "Memuatkan arkib...": "Loading archive...",
+        "Memuatkan senarai fail...": "Loading file list...",
+        "Mod Edit Aktif": "Edit Mode On",
+        "Mod Edit": "Edit Mode",
+        "Nama bilik": "Room name",
+        "Padam": "Delete",
+        "Pilih / nyahpilih semua kelas tingkatan ini": "Select / deselect all classes of this form",
+        "Pulihkan data ini ke senarai aktif": "Restore this data to the active list",
+        "Shift + klik": "Shift + click",
+        "Slot kosong di depan — sepatutnya diisi": "Empty slot at the front — should be filled",
+        "Tetap Guru Kelas": "Fix Class Teacher",
+        "Tiada": "None",
+        "Tiada apa-apa untuk dilaporkan.": "Nothing to report.",
+        "Tiada bilik khas ditetapkan.": "No special rooms assigned.",
+        "Tiada cuti direkodkan.": "No holidays recorded.",
+        "Tiada fail ZIP VisiJadual ditemui. Simpan ke Drive dahulu.": "No VisiJadual ZIP file found. Save to Drive first.",
+        "Tiada guru lapang": "No free teachers",
+        "Tiada guru tidak hadir direkodkan.": "No absent teachers recorded.",
+        "Tiada guru yang sepadan dengan kriteria carian/penapis.": "No teachers match the search/filter criteria.",
+        "Tiada kelas lain.": "No other classes.",
+        "Tiada padanan": "No match",
+        "Tiada peruntukan mata pelajaran.": "No subject allocations.",
+        "Tiada rekod dijumpai.": "No records found.",
+        "Tiada rumusan.": "No summary.",
+        "Tiada sesi arkib disimpan setakat ini.": "No archive sessions saved yet.",
+        "Tiada subjek diperuntukkan": "No subjects allocated",
+        "Tiada subjek.": "No subjects.",
+        "Tiada — semua sesi telah diletak.": "None — all sessions have been placed.",
+        "Tidak diisi — kekangan dikenakan sesama Kumpulan A.": "Not filled — the constraint applies within Group A.",
+        "Tingkatan": "Form",
+        "Ujian dibatalkan.": "Test cancelled.",
+        "agihan": "allocation",
+        "belum dijalankan": "not run yet",
+        "buka di Drive": "open on Drive",
+        "slot boleh isi ·": "fillable slots ·",
+        "slot boleh mengajar ·": "teachable slots ·",
+        "untuk kelas": "for class",
+        "waktu telah diagihkan": "periods allocated",
+        "| Waktu:": "| Periods:",
+        "— Belum dipilih —": "— Not selected —"
+    };
+
+    // ---------- prefixes (Malay prefix + free text) ----------
+    var PFX = [
+        ['Ralat import:', 'Import error:'], ['Ralat kemaskini guru kelas:', 'Error updating class teacher:'],
+        ['Ralat kemaskini:', 'Update error:'], ['Ralat memadam:', 'Delete error:'], ['Ralat membaca fail Excel:', 'Error reading Excel file:'],
+        ['Ralat memuatkan arkib:', 'Error loading archive:'], ['Ralat mengarkib:', 'Archive error:'], ['Ralat menyimpan:', 'Save error:'],
+        ['Ralat pemulihan:', 'Restore error:'], ['Ralat reset:', 'Reset error:'], ['Ralat sambungan:', 'Connection error:'],
+        ['Ralat semasa menyusun:', 'Error while building:'], ['Ralat:', 'Error:'],
+        ['Gagal membuka fail dari Google Drive:', 'Failed to open file from Google Drive:'], ['Gagal membuka fail:', 'Failed to open file:'],
+        ['Gagal menyimpan ke Google Drive:', 'Failed to save to Google Drive:'], ['Gagal menyimpan fail ZIP:', 'Failed to save ZIP file:'],
+        ['Gagal memadam draf:', 'Failed to delete draft:'], ['Gagal memadam:', 'Failed to delete:'],
+        ['Gagal membaca draf dari localStorage:', 'Failed to read draft from localStorage:'],
+        ['Gagal memulihkan autosimpan:', 'Failed to restore autosave:'], ['Gagal menganalisis:', 'Analysis failed:'],
+        ['Gagal menyimpan draf ke localStorage:', 'Failed to save draft to localStorage:'], ['Autosimpan ke pelayar gagal:', 'Browser autosave failed:'],
+        ['Muat naik gagal:', 'Upload failed:'], ['Log masuk Google gagal:', 'Google sign-in failed:'], ['Log masuk Google gagal (', 'Google sign-in failed ('],
+        ['Jadual tidak sah:', 'Invalid timetable:'], ['Tidak boleh alih:', 'Cannot move:'], ['Tidak boleh letak:', 'Cannot place:'],
+        ['Web Worker tidak tersedia, guna thread utama:', 'Web Worker unavailable, using main thread:'], ['Worker gagal dicipta:', 'Worker failed to start:'],
+        ['Worker penyusun:', 'Builder worker:'], ['Jumlah Beban:', 'Total Workload:'], ['Jumlah Waktu:', 'Total Periods:'], ['Guru:', 'Teacher:'], ['Kelas:', 'Class:'], ['Subjek:', 'Subject:'], ['Fail:', 'File:']
+    ];
+
+    // ---------- patterns (dynamic strings) ----------
+    var P = [
+        [/^(\d+) Kelas Dipilih$/i, function (m) { return pl(m[1], 'class', 'classes') + ' selected'; }],
+        [/^(\d+) kelas dipilih$/i, function (m) { return pl(m[1], 'class', 'classes') + ' selected'; }],
+        [/^(\d+) Waktu$/, function (m) { return pl(m[1], 'period'); }],
+        [/^(\d+) waktu$/, function (m) { return pl(m[1], 'period'); }],
+        [/^(\d+) Waktu \((\d+) sesi\)$/, function (m) { return pl(m[1], 'period') + ' (' + pl(m[2], 'session') + ')'; }],
+        [/^(\d+) rekod$/, function (m) { return pl(m[1], 'record'); }],
+        [/^(\d+) rekod dipadam\.$/, function (m) { return pl(m[1], 'record') + ' deleted.'; }],
+        [/^(\d+) rekod dikemaskini$/, function (m) { return pl(m[1], 'record') + ' updated'; }],
+        [/^(\d+) rekod baharu ditambah$/, function (m) { return pl(m[1], 'new record') + ' added'; }],
+        [/^(\d+) baris ditambah(.*)$/, function (m) { return pl(m[1], 'row') + ' added' + tr(m[2]); }],
+        [/^(\d+) draf agihan$/, function (m) { return pl(m[1], 'allocation draft'); }],
+        [/^(\d+) agihan \(Matriks\)$/, function (m) { return pl(m[1], 'allocation') + ' (Matrix)'; }],
+        [/^(\d+) agihan berjaya dikemaskini!$/, function (m) { return pl(m[1], 'allocation') + ' updated successfully!'; }],
+        [/^(\d+) kelas berjaya dikemaskini!$/, function (m) { return pl(m[1], 'class', 'classes') + ' updated successfully!'; }],
+        [/^(\d+) rekod dikemaskini & (\d+) rekod baharu ditambah!$/, function (m) { return pl(m[1], 'record') + ' updated & ' + pl(m[2], 'new record') + ' added!'; }],
+        [/^(\d+) sesi tidak dapat diletak$/, function (m) { return pl(m[1], 'session') + ' could not be placed'; }],
+        [/^(\d+) waktu diisi$/, function (m) { return pl(m[1], 'period') + ' filled'; }],
+        [/^(\d+) cukup kuota$/, function (m) { return m[1] + ' within quota'; }],
+        [/^(\d+) guru melebihi had beban$/, function (m) { return pl(m[1], 'teacher') + ' over workload limit'; }],
+        [/^(\d+) slot kelas kosong sebelum waktu terakhir$/, function (m) { return pl(m[1], 'empty class slot') + ' before the last period'; }],
+        [/^(\d+) daripada (\d+) guru dipilih$/, function (m) { return m[1] + ' of ' + pl(m[2], 'teacher') + ' selected'; }],
+        [/^(\d+) daripada (\d+) waktu telah dijadualkan$/, function (m) { return m[1] + ' of ' + pl(m[2], 'period') + ' scheduled'; }],
+        [/^(\d+) (kelas|guru) · (\d+) daripada (\d+) waktu telah dijadualkan$/, function (m) { return pl(m[1], m[2] === 'kelas' ? 'class' : 'teacher', m[2] === 'kelas' ? 'classes' : 'teachers') + ' · ' + m[3] + ' of ' + pl(m[4], 'period') + ' scheduled'; }],
+        [/^(\d+) bilik · (\d+) waktu digunakan$/, function (m) { return pl(m[1], 'room') + ' · ' + pl(m[2], 'period') + ' used'; }],
+        [/^(\d+) guru tidak hadir · (\d+) waktu perlu diganti$/, function (m) { return pl(m[1], 'teacher') + ' absent · ' + pl(m[2], 'period') + ' need cover'; }],
+        [/^(\d+) kelas \((.*)\)$/, function (m) { return pl(m[1], 'class', 'classes') + ' (' + m[2] + ')'; }],
+        [/^⚠️ PERINGATAN IMPORT:\n\nAdakah anda pasti mahu mengimport (\d+) rekod jadual dari fail "(.*)"\?\n\nTindakan ini akan menggantikan semua rekod aktif sedia ada\.$/, function (m) { return '⚠️ IMPORT WARNING:\n\nAre you sure you want to import ' + pl(m[1], 'timetable record') + ' from the file "' + m[2] + '"?\n\nThis will replace all existing active records.'; }],
+        [/^⚠️ PERINGATAN RESET:\n\nRekod bagi (\d+) orang guru terpilih akan dipadam dari jadual aktif\.\n\nTeruskan\?$/, function (m) { return '⚠️ RESET WARNING:\n\nThe records of ' + pl(m[1], 'selected teacher') + ' will be deleted from the active timetable.\n\nContinue?'; }],
+        [/^(Kurang|Lebih) (\d+) waktu( kuota)? \((\d+)\/(\d+)\)$/, function (m) { return (m[1] === 'Kurang' ? 'Under by ' : 'Over' + (m[3] ? ' quota' : '') + ' by ') + pl(m[2], 'period') + ' (' + m[4] + '/' + m[5] + ')'; }],
+        [/^(.+ \[[\d,]+\]) \((\d+) waktu\)(\s*\[.*\])?$/, function (m) { return m[1] + ' (' + pl(m[2], 'period') + ')' + (m[3] || ''); }],
+        [/^(.+) — buka jadual penuh$/, function (m) { return m[1] + ' — open full timetable'; }],
+        [/^Elektif Khusus \((.*)\)$/, function (m) { return 'Specific Elective (' + m[1] + ')'; }],
+        [/^Pilih sel untuk tambah agihan bagi (.*)$/, function (m) { return 'Select a cell to add an allocation for ' + m[1]; }],
+        [/^(.+) \((\d+)\/(\d+) waktu\)$/, function (m) { return m[1] + ' (' + m[2] + '/' + pl(m[3], 'period') + ')'; }],
+        [/^(\d+) slot$/, function (m) { return pl(m[1], 'slot'); }],
+        [/^(\d+) kelas Tingkatan (\d+) \((.*)\)$/, function (m) { return pl(m[1], 'Form ' + m[2] + ' class', 'Form ' + m[2] + ' classes') + ' (' + m[3] + ')'; }],
+        [/^SEMUA (\d+) kelas lain$/, function (m) { return 'ALL ' + m[1] + ' other classes'; }],
+        [/^(\d+) \/ (\d+) waktu$/, function (m) { return m[1] + ' / ' + pl(m[2], 'period'); }],
+        [/^Baki (\d+)$/, function (m) { return 'Left ' + m[1]; }], [/^baki (\d+)$/, function (m) { return 'left ' + m[1]; }],
+        [/^Lebih (\d+)$/, function (m) { return 'Over ' + m[1]; }], [/^lebih (\d+)$/, function (m) { return 'over ' + m[1]; }],
+        [/^lebih (\d+) slot$/, function (m) { return 'over by ' + pl(m[1], 'slot'); }],
+        [/^kurang (\d+)$/, function (m) { return 'short by ' + m[1]; }],
+        [/^melebihi had (\d+)$/, function (m) { return 'over limit ' + m[1]; }],
+        [/^Beban: (\d+)\/(\d+) waktu$/, function (m) { return 'Workload: ' + m[1] + '/' + pl(m[2], 'period'); }],
+        [/^Beban Semasa: (\d+) \/ (\d+) waktu$/, function (m) { return 'Current Workload: ' + m[1] + ' / ' + pl(m[2], 'period'); }],
+        [/^(\d+) \/ (\d+) waktu$/, function (m) { return m[1] + ' / ' + pl(m[2], 'period'); }],
+        [/^(\d+) buah kelas$/, function (m) { return pl(m[1], 'class', 'classes'); }],
+        [/^(\d+) orang guru$/, function (m) { return pl(m[1], 'teacher'); }],
+        [/^Lompong guru: (\d+) slot$/, function (m) { return 'Teacher gaps: ' + pl(m[1], 'slot'); }],
+        [/^Lompong kelas: (\d+) slot$/, function (m) { return 'Class gaps: ' + pl(m[1], 'slot'); }],
+        [/^Subjek berulang sehari: (\d+)$/, function (m) { return 'Repeated subject in a day: ' + m[1]; }],
+        [/^Optimum: kos (\d+) → (\d+)$/, function (m) { return 'Optimum: cost ' + m[1] + ' → ' + m[2]; }],
+        [/^Optimum: slot kosong di depan kelas (\d+)→(\d+), lompong guru (\d+)→(\d+), subjek berulang (\d+)→(\d+)\.$/, function (m) { return 'Optimum: empty slots at start of class ' + m[1] + '→' + m[2] + ', teacher gaps ' + m[3] + '→' + m[4] + ', repeated subjects ' + m[5] + '→' + m[6] + '.'; }],
+        [/^Kos (\d+) → (\d+) · ([\d.]+) s(.*)$/, function (m) { return 'Cost ' + m[1] + ' → ' + m[2] + ' · ' + m[3] + ' s' + tr(m[4]); }],
+        [/^(.* · )?(\d+) \/ (\d+) sesi diletak · ([\d.]+) s$/, function (m) { return (m[1] ? tr(m[1].replace(/ · $/, '')) + ' · ' : '') + m[2] + ' / ' + m[3] + ' sessions placed · ' + m[4] + ' s'; }],
+        [/^Percubaan (\d+) · (\d+) \/ (\d+) sesi diletak · ([\d.]+) s$/, function (m) { return 'Attempt ' + m[1] + ' · ' + m[2] + ' / ' + m[3] + ' sessions placed · ' + m[4] + ' s'; }],
+        [/^(\d+)\/(\d+) sesi diletak\. (\d+) sesi belum muat( \(carian dihentikan awal kerana tiada kemajuan\))? — lihat senarai di bawah jadual\.(.*)$/, function (m) { return m[1] + '/' + m[2] + ' sessions placed. ' + m[3] + ' sessions did not fit' + (m[4] ? ' (search stopped early: no progress)' : '') + ' — see the list below the timetable.' + tr(m[5]); }],
+        [/^Jadual lengkap: semua (\d+) sesi diletak \(([\d.]+) s\)\.(.*)$/, function (m) { return 'Timetable complete: all ' + m[1] + ' sessions placed (' + m[2] + ' s).' + tr(m[3]); }],
+        [/^(\d+) kelas disusun: semua (\d+) sesi diletak \(([\d.]+) s\)\.$/, function (m) { return pl(m[1], 'class', 'classes') + ' built: all ' + m[2] + ' sessions placed (' + m[3] + ' s).'; }],
+        [/^(\d+) kelas disusun: (\d+)\/(\d+) sesi diletak — lihat senarai di bawah jadual\.$/, function (m) { return pl(m[1], 'class', 'classes') + ' built: ' + m[2] + '/' + m[3] + ' sessions placed — see the list below the timetable.'; }],
+        [/^Susun (\d+) Kelas$/, function (m) { return 'Build ' + pl(m[1], 'Class', 'Classes'); }],
+        [/^Mula Susun (\d+) Kelas$/, function (m) { return 'Start Building ' + pl(m[1], 'Class', 'Classes'); }],
+        [/^Susun 1 kelas sahaja: (.*)$/, function (m) { return 'Building 1 class only: ' + m[1]; }],
+        [/^Skop: (\d+) kelas dipilih \(kelas lain tidak diubah\)$/, function (m) { return 'Scope: ' + pl(m[1], 'class', 'classes') + ' selected (other classes unchanged)'; }],
+        [/^Skop: (\d+) kelas dipilih \((.*)\)\. Tutup panel & ubah tanda kotak kelas \(Shift \+ klik = julat\) untuk menukar skop\.$/, function (m) { return 'Scope: ' + pl(m[1], 'class', 'classes') + ' selected (' + m[2] + '). Close the panel & change the class checkboxes (Shift + click = range) to change the scope.'; }],
+        [/^Sejak (.*) · (\d+) minit · (\d+) guru pernah ganti$/, function (m) { return 'Since ' + m[1] + ' · ' + pl(m[2], 'minute') + ' · ' + pl(m[3], 'teacher') + ' have covered'; }],
+        [/^· (\d+) hari × (\d+) waktu = (\d+) slot seminggu$/, function (m) { return '· ' + pl(m[1], 'day') + ' × ' + pl(m[2], 'period') + ' = ' + pl(m[3], 'slot') + ' per week'; }],
+        [/^· (\d+) rekod tidak hadir · (\d+) hari disahkan$/, function (m) { return '· ' + pl(m[1], 'absence record') + ' · ' + pl(m[2], 'day') + ' confirmed'; }],
+        [/^Kekal \((.*)w\)$/, function (m) { return 'Keep (' + m[1] + 'w)'; }],
+        [/^Kekalkan sedia ada \((.*) waktu\) atau taip baru$/, function (m) { return 'Keep existing (' + m[1] + ' periods) or type new'; }],
+        [/^-- KEKALKAN GURU SEDIA ADA \((\d+) Kelas\) --$/, function (m) { return '-- KEEP EXISTING TEACHER (' + pl(m[1], 'Class', 'Classes') + ') --'; }],
+        [/^Kemaskini Waktu \((\d+) Kelas\)$/, function (m) { return 'Update Periods (' + pl(m[1], 'Class', 'Classes') + ')'; }],
+        [/^Tukar Guru \((\d+) Kelas\)$/, function (m) { return 'Change Teacher (' + pl(m[1], 'Class', 'Classes') + ')'; }],
+        [/^Tukar Guru \/ Waktu \((\d+) Kelas\)$/, function (m) { return 'Change Teacher / Periods (' + pl(m[1], 'Class', 'Classes') + ')'; }],
+        [/^Simpan Gabungan \((\d+) Kelas\)$/, function (m) { return 'Save Combined (' + pl(m[1], 'Class', 'Classes') + ')'; }],
+        [/^Simpan ke (\d+) Kelas$/, function (m) { return 'Save to ' + pl(m[1], 'Class', 'Classes'); }],
+        [/^Menetapkan agihan serentak kepada (\d+) buah kelas\.$/, function (m) { return 'Applying the allocation to ' + pl(m[1], 'class', 'classes') + ' at once.'; }],
+        [/^Salin susunan slot (.*) ke (.*)\?\n?\n?Slot sedia ada kelas tersebut akan diganti\.$/, function (m) { return 'Copy the slot layout of ' + m[1] + ' to ' + tr(m[2]) + '?\n\nThe existing slots of those classes will be replaced.'; }],
+        [/^Slot (.*) disalin ke (\d+) kelas\.$/, function (m) { return 'Slots of ' + m[1] + ' copied to ' + pl(m[2], 'class', 'classes') + '.'; }],
+        [/^Buka semula SEMUA slot untuk (.*)\?$/, function (m) { return 'Reopen ALL slots for ' + m[1] + '?'; }],
+        [/^Bilik "(.*)" ditambah\.$/, function (m) { return 'Room "' + m[1] + '" added.'; }],
+        [/^Label "(.*)" sudah wujud\.$/, function (m) { return 'Label "' + m[1] + '" already exists.'; }],
+        [/^Nama "(.*)" berulang dalam senarai bilik\.$/, function (m) { return 'Name "' + m[1] + '" is duplicated in the room list.'; }],
+        [/^Nama "(.*)" berulang dalam senarai (.*)\.$/, function (m) { return 'Name "' + m[1] + '" is duplicated in the ' + m[2] + ' list.'; }],
+        [/^ID "(.*)" berulang dalam senarai (.*)\.$/, function (m) { return 'ID "' + m[1] + '" is duplicated in the ' + m[2] + ' list.'; }],
+        [/^"(.*)" tidak boleh dipadam kerana masih digunakan dalam (\d+) rekod agihan\.$/, function (m) { return '"' + m[1] + '" cannot be deleted because it is still used in ' + pl(m[2], 'allocation record') + '.'; }],
+        [/^"(.*)" masih digunakan dalam agihan\. Padam atau pindahkan agihan tersebut dahulu\.$/, function (m) { return '"' + m[1] + '" is still used in allocations. Delete or move those allocations first.'; }],
+        [/^Padam bilik "(.*)"\? Subjek yang ditetapkan ke bilik ini akan dikeluarkan daripadanya\.$/, function (m) { return 'Delete room "' + m[1] + '"? Subjects assigned to this room will be removed from it.'; }],
+        [/^Padam hubungan "(.*)"\?$/, function (m) { return 'Delete relation "' + m[1] + '"?'; }],
+        [/^Padam agihan (.*) \((.*)\) untuk (.*)\?$/, function (m) { return 'Delete allocation ' + m[1] + ' (' + m[2] + ') for ' + m[3] + '?'; }],
+        [/^Agihan (.*) dipadam\.$/, function (m) { return 'Allocation ' + m[1] + ' deleted.'; }],
+        [/^Agihan (.*) \((.*)\) berjaya dipulihkan!$/, function (m) { return 'Allocation ' + m[1] + ' (' + m[2] + ') restored successfully!'; }],
+        [/^Agihan berjaya disimpan untuk (\d+) kelas!$/, function (m) { return 'Allocation saved for ' + pl(m[1], 'class', 'classes') + '!'; }],
+        [/^Ditambah: (.*)$/, function (m) { return 'Added: ' + m[1]; }],
+        [/^Diubah: (.*) - belum disimpan$/, function (m) { return 'Changed: ' + m[1] + ' - not saved yet'; }],
+        [/^(.*) berjaya disalin ke sesi arkib "(.*)"\. Data aktif masih kekal\.$/, function (m) { return tr(m[1]) + ' copied to archive session "' + m[2] + '". Active data is unchanged.'; }],
+        [/^(\d+) rekod berjaya disalin ke sesi arkib "(.*)"\. Data aktif masih kekal\.$/, function (m) { return pl(m[1], 'record') + ' copied to archive session "' + m[2] + '". Active data is unchanged.'; }],
+        [/^(\d+) rekod berjaya dipadamkan dari senarai aktif\. \(Jika tersilap: pulihkan dari arkib, atau buka semula fail ZIP tanpa menyimpan\.\)$/, function (m) { return pl(m[1], 'record') + ' deleted from the active list. (If this was a mistake: restore from the archive, or reopen the ZIP file without saving.)'; }],
+        [/^(\d+) rekod dari sesi "(.*)" berjaya dipulihkan ke senarai aktif \(rekod lama guru yang sama telah digantikan\)\.$/, function (m) { return pl(m[1], 'record') + ' from session "' + m[2] + '" restored to the active list (old records of the same teachers were replaced).'; }],
+        [/^Adakah anda pasti mahu memulihkan rekod dari arkib "(.*)" ke senarai jadual aktif\?\n\nRekod guru yang terdapat dalam arkib ini akan menggantikan rekod aktif mereka sekarang\.$/, function (m) { return 'Are you sure you want to restore records from the archive "' + m[1] + '" to the active timetable list?\n\nTeacher records in this archive will replace their current active records.'; }],
+        [/^Memulihkan data dari sesi "(.*)"\.\.\.$/, function (m) { return 'Restoring data from session "' + m[1] + '"...'; }],
+        [/^Membuka fail "(.*)"\.\.\.$/, function (m) { return 'Opening file "' + m[1] + '"...'; }],
+        [/^Memuat turun "(.*)" dari Google Drive\.\.\.$/, function (m) { return 'Downloading "' + m[1] + '" from Google Drive...'; }],
+        [/^Mengimport (\d+) rekod dari Excel\.\.\.$/, function (m) { return 'Importing ' + pl(m[1], 'record') + ' from Excel...'; }],
+        [/^(Membatalkan penambahan|Memulihkan|Mengembalikan keadaan asal) (.*)\.\.\.$/, function (m) { var a = { 'Membatalkan penambahan': 'Undoing addition of', 'Memulihkan': 'Restoring', 'Mengembalikan keadaan asal': 'Reverting' }; return a[m[1]] + ' ' + m[2].replace(/^agihan$/, 'allocation') + '...'; }],
+        [/^(Penambahan|Pengemaskinian|Perubahan) (.*) berjaya dibatalkan!$/, function (m) { var a = { 'Penambahan': 'Addition of', 'Pengemaskinian': 'Update of', 'Perubahan': 'Change to' }; return a[m[1]] + ' ' + m[2].replace(/^agihan$/, 'allocation') + ' successfully undone!'; }],
+        [/^Dibatalkan: (.*)\.$/, function (m) { return 'Undone: ' + m[1].replace(/^tindakan$/, 'action') + '.'; }],
+        [/^Dibuat semula: (.*)\.$/, function (m) { return 'Redone: ' + m[1] + '.'; }],
+        [/^Batal: (.*) \(Pintasan: Ctrl\+Z\)$/, function (m) { return 'Undo: ' + m[1].replace(/^Tindakan terakhir$/, 'Last action') + ' (Shortcut: Ctrl+Z)'; }],
+        [/^Buat semula: (.*) \(Ctrl\+Y\)$/, function (m) { return 'Redo: ' + m[1] + ' (Ctrl+Y)'; }],
+        [/^Gagal membatalkan: (.*)$/, function (m) { return 'Failed to undo: ' + m[1]; }],
+        [/^Gagal memulihkan: (.*)$/, function (m) { return 'Failed to restore: ' + m[1]; }],
+        [/^Gagal mengembalikan data: (.*)$/, function (m) { return 'Failed to restore data: ' + m[1]; }],
+        [/^Fail "(.*)" dibuka: (\d+) guru, (\d+) kelas, (\d+) agihan\.$/, function (m) { return 'File "' + m[1] + '" opened: ' + pl(m[2], 'teacher') + ', ' + pl(m[3], 'class', 'classes') + ', ' + pl(m[4], 'allocation') + '.'; }],
+        [/^Fail "(.*)" dimuat turun ke folder Downloads\.$/, function (m) { return 'File "' + m[1] + '" downloaded to the Downloads folder.'; }],
+        [/^Fail (.*) dalam ZIP rosak: (.*)$/, function (m) { return 'File ' + m[1] + ' in the ZIP is corrupt: ' + m[2]; }],
+        [/^Data disimpan ke "(.*)"\.$/, function (m) { return 'Data saved to "' + m[1] + '".'; }],
+        [/^Disimpan ke Google Drive: "(.*)"\.$/, function (m) { return 'Saved to Google Drive: "' + m[1] + '".'; }],
+        [/^Kemas kini "(.*)" di Drive$/, function (m) { return 'Update "' + m[1] + '" on Drive'; }],
+        [/^Dipaut ke fail Drive:$/, function () { return 'Linked to Drive file:'; }],
+        [/^Berjaya mengimport (\d+) rekod jadual dari fail Excel\.$/, function (m) { return 'Imported ' + pl(m[1], 'timetable record') + ' from the Excel file.'; }],
+        [/^Disimpan: (\d+) rekod\.$/, function (m) { return 'Saved: ' + pl(m[1], 'record') + '.'; }],
+        [/^Senarai (.*) disimpan \((\d+) rekod\)\. Ingat simpan fail ZIP\.$/, function (m) { return m[1] + ' list saved (' + pl(m[2], 'record') + '). Remember to save the ZIP file.'; }],
+        [/^Muat naik berjaya — (.*)\. Ingat simpan fail ZIP\.$/, function (m) { return 'Upload successful — ' + m[1] + '. Remember to save the ZIP file.'; }],
+        [/^Ditemui (\d+) draf agihan belum disimpan dari sesi lalu\.$/, function (m) { return 'Found ' + pl(m[1], 'unsaved allocation draft') + ' from a previous session.'; }],
+        [/^Perubahan dikumpul \((\d+)\)\. Tekan "Simpan Semua Perubahan" di bawah apabila siap\.$/, function (m) { return 'Changes collected (' + m[1] + '). Press "Save All Changes" below when done.'; }],
+        [/^Kelas (.*): (\d+) waktu perlu dijadualkan tetapi hanya (\d+) slot boleh isi\. Semak label serentak atau slot diblok\.$/, function (m) { return 'Class ' + m[1] + ': ' + pl(m[2], 'period') + ' need scheduling but only ' + pl(m[3], 'fillable slot') + '. Check simultaneous labels or blocked slots.'; }],
+        [/^Guru (.*): (\d+) waktu perlu dijadualkan tetapi hanya (\d+) slot boleh mengajar\.$/, function (m) { return 'Teacher ' + m[1] + ': ' + pl(m[2], 'period') + ' need scheduling but only ' + pl(m[3], 'teachable slot') + '.'; }],
+        [/^Bilik (.*): (\d+) waktu perlu dijadualkan tetapi hanya (\d+) slot seminggu\. Tambah bilik lain untuk subjek berkenaan\.$/, function (m) { return 'Room ' + m[1] + ': ' + pl(m[2], 'period') + ' need scheduling but only ' + pl(m[3], 'slot') + ' per week. Add another room for that subject.'; }],
+        [/^Bilik (.*) bertindih pada sekurang-kurangnya satu slot\.$/, function (m) { return 'Room ' + m[1] + ' overlaps in at least one slot.'; }],
+        [/^Bilik tidak cukup untuk sesi serentak (.*) — satu agihan diletak tanpa bilik khas\.$/, function (m) { return 'Not enough rooms for the simultaneous session ' + m[1] + ' — one allocation was placed without a special room.'; }],
+        [/^Tiada bilik kosong \((.*)\) — bilik bertindih\.$/, function (m) { return 'No free room (' + m[1] + ') — rooms overlap.'; }],
+        [/^(.*): (\d+) waktu > (\d+) slot boleh mengajar$/, function (m) { return m[1] + ': ' + pl(m[2], 'period') + ' > ' + pl(m[3], 'teachable slot'); }],
+        [/^(.*): (\d+) waktu > had (\d+)$/, function (m) { return m[1] + ': ' + pl(m[2], 'period') + ' > limit ' + m[3]; }],
+        [/^Slot (.*) waktu (\d+) diblok \((.*)\) bagi guru (.*)\.$/, function (m) { return 'Slot ' + m[1] + ' period ' + m[2] + ' blocked (' + m[3] + ') for teacher ' + m[4] + '.'; }],
+        [/^Slot (.*) waktu (\d+) diblok \((.*)\) bagi kelas (.*)\.$/, function (m) { return 'Slot ' + m[1] + ' period ' + m[2] + ' blocked (' + m[3] + ') for class ' + m[4] + '.'; }],
+        [/^Kelas (.*) tiada guru sedia ada\. Sila pilih guru pengajar\.$/, function (m) { return 'Class ' + m[1] + ' has no existing teacher. Please choose a teaching teacher.'; }],
+        [/^Kelas (.*) tiada agihan masa sedia ada\. Sila masukkan pembahagian waktu\.$/, function (m) { return 'Class ' + m[1] + ' has no existing time allocation. Please enter the period split.'; }],
+        [/^Pecahan "(.*)" tidak berjumlah (\d+) waktu — (.*)\. Dianggap satu blok\.$/, function (m) { return 'Split "' + m[1] + '" does not add up to ' + pl(m[2], 'period') + ' — ' + m[3] + '. Treated as one block.'; }],
+        [/^Pecahan berbeza dalam (.*)\. Pecahan (.*) digunakan untuk semua\.$/, function (m) { return 'Different splits in ' + m[1] + '. Split ' + m[2] + ' is used for all.'; }],
+        [/^Guru yang sama mempunyai lebih daripada satu agihan dalam (.*)\. Semak label\.$/, function (m) { return 'The same teacher has more than one allocation in ' + m[1] + '. Check the labels.'; }],
+        [/^kumpulan serentak (.*) \((.*)\)$/, function (m) { return 'simultaneous group ' + m[1] + ' (' + m[2] + ')'; }],
+        [/^Hubungan "(.*)" memerlukan Kumpulan B yang sepadan dengan sekurang-kurangnya satu agihan\. Hubungan diabaikan\.$/, function (m) { return 'Relation "' + m[1] + '" needs a Group B matching at least one allocation. Relation ignored.'; }],
+        [/^Hubungan "(.*)" tidak sepadan dengan mana-mana agihan\.$/, function (m) { return 'Relation "' + m[1] + '" does not match any allocation.'; }],
+        [/^Hubungan "(.*)": agihan yang dipilih mempunyai masa\/pecahan berbeza, jadi tidak boleh serentak\. Hubungan diabaikan\.$/, function (m) { return 'Relation "' + m[1] + '": the selected allocations have different time/splits, so they cannot be simultaneous. Relation ignored.'; }],
+        [/^Hubungan (.*) "(.*)" tidak dipenuhi sepenuhnya \((\d+) pelanggaran\)\.$/, function (m) { return 'Relation ' + (HUB[m[1]] || m[1]) + ' "' + m[2] + '" is not fully satisfied (' + pl(m[3], 'violation') + ').'; }],
+        [/^Hubungan ditambah \((\d+) agihan\)\.$/, function (m) { return 'Relation added (' + pl(m[1], 'allocation') + ').'; }],
+        [/^Sesi berkunci tidak dapat dikekalkan \(bertembung\/diblok\): (.*)$/, function (m) { return 'Locked session could not be kept (clash/blocked): ' + m[1]; }],
+        [/^(.*) \((\d+)w\) — (.*)$/, function (m) { return m[1] + ' (' + m[2] + 'w) — ' + tr(m[3]); }],
+        [/^Tidak boleh alih: bertembung dengan (.*?)( \(berkunci\))? — sesi itu di baris lain atau berkunci\.$/, function (m) { return 'Cannot move: clashes with ' + m[1] + (m[2] ? ' (locked)' : '') + ' — that session is on another row or locked.'; }],
+        [/^Tidak boleh letak: bertembung dengan (.*) \(baris lain atau berkunci\)\.$/, function (m) { return 'Cannot place: clashes with ' + m[1] + ' (another row or locked).'; }],
+        [/^Tidak boleh tukar dengan (.*): (.*)$/, function (m) { return 'Cannot swap with ' + m[1] + ': ' + (m[2] === 'sesi itu bertembung di kedudukan asal.' ? 'that session clashes at its original position.' : tr(m[2])); }],
+        [/^Dialih\. (\d+) sesi yang bertembung \((.*)\) dipindah ke kotak bawah\.$/, function (m) { return 'Moved. ' + pl(m[1], 'clashing session') + ' (' + m[2] + ') moved to the bottom box.'; }],
+        [/^(\d+) sesi \((.*)\) dipindah ke kotak bawah\.$/, function (m) { return pl(m[1], 'session') + ' (' + m[2] + ') moved to the bottom box.'; }],
+        [/^Ditukar dengan (.*)\. Kedua-dua sesi dikunci\.$/, function (m) { return 'Swapped with ' + m[1] + '. Both sessions are locked.'; }],
+        [/^(\d+) teras bekerjasama\.$/, function (m) { return m[1] + ' cores working together.'; }],
+        [/^⚠ (\d+) slot kelas kosong sebelum waktu terakhir \(tidak dapat dielak — cuba tambah masa optimum\)\.$/, function (m) { return '⚠ ' + pl(m[1], 'empty class slot') + ' before the last period (unavoidable — try adding more optimum time).'; }],
+        [/^Kosongkan jadual (\d+) kelas dipilih\? (\d+) sesi akan dibuang\. Kelas lain tidak diubah\.$/, function (m) { return 'Clear the timetable of ' + pl(m[1], 'selected class', 'selected classes') + '? ' + pl(m[2], 'session') + ' will be removed. Other classes are unchanged.'; }],
+        [/^Susun semula (.*)\? Sesi tidak berkunci bagi kelas ini akan disusun semula\. Kelas lain tidak diubah\.(.*)$/, function (m) { return 'Rebuild ' + m[1] + '? Unlocked sessions of these classes will be rearranged. Other classes are unchanged.' + tr(m[2]); }],
+        [/^(\d+) kelas$/, function (m) { return pl(m[1], 'class', 'classes'); }],
+        [/^(\d+) waktu belum ada guru ganti\. Sahkan juga\?$/, function (m) { return pl(m[1], 'period') + ' still have no relief teacher. Confirm anyway?'; }],
+        [/^(\d+) slot diblok berada di luar hari\/waktu baharu dan akan dibuang\. Teruskan\?$/, function (m) { return pl(m[1], 'blocked slot') + ' fall outside the new days/periods and will be removed. Continue?'; }],
+        [/^Peringatan: Agihan ini akan melebihkan (\d+) waktu had kuota guru \((\d+) waktu\)\.$/, function (m) { return 'Reminder: This allocation will exceed the teacher quota limit by ' + pl(m[1], 'period') + ' (' + m[2] + ' periods).'; }],
+        [/^Cuti: (.*)\.$/, function (m) { return 'Holiday: ' + (m[1] === 'tiada persekolahan' ? 'no school' : m[1]) + '.'; }],
+        [/^Disahkan (.*) oleh (.*?)( · .*)?$/, function (m) { return 'Confirmed ' + m[1] + ' by ' + m[2] + (m[3] || ''); }],
+        [/^(.*) · (DISAHKAN|DIBATALKAN) · (.*)$/, function (m) { return m[1] + ' · ' + (m[2] === 'DISAHKAN' ? 'CONFIRMED' : 'CANCELLED') + ' · ' + m[3]; }],
+        [/^Cari (guru|kelas|subjek)\.\.\.$/, function (m) { return 'Search ' + ({ guru: 'teacher', kelas: 'class', subjek: 'subject' })[m[1]] + '...'; }],
+        [/^Jana — (bilik|guru|kelas) \((.*)\)$/, function (m) { return 'Generate — ' + ({ bilik: 'rooms', guru: 'teachers', kelas: 'classes' })[m[1]] + ' (' + tr(m[2]) + ')'; }],
+        [/^Fail ZIP ini bukan fail data VisiJadual \(folder "data\/" tidak dijumpai\)\.$/, function () { return 'This ZIP is not a VisiJadual data file (the "data/" folder was not found).'; }],
+        [/^Ralat: Fail Excel tidak mengandungi data pada lembaran "(.*)"\.$/, function (m) { return 'Error: The Excel file has no data on sheet "' + m[1] + '".'; }],
+        [/^Ralat: Lembaran "(.*)" kosong\.$/, function (m) { return 'Error: Sheet "' + m[1] + '" is empty.'; }],
+        [/^Sejarah guru ganti · (.*)\n\n([\s\S]*)$/, function (m) { return 'Relief teacher history · ' + m[1] + '\n\n' + tr(m[2]); }],
+        [/^W(\d+) (.*): (.*) → (.*)$/, function (m) { return 'P' + m[1] + ' ' + m[2] + ': ' + m[3] + ' → ' + (m[4] === 'Belum dipilih' ? 'Not selected' : m[4]); }],
+        [/^… dan (\d+) lagi$/, function (m) { return '… and ' + m[1] + ' more'; }],
+        [/^Dikesan$/, function () { return 'Detected'; }],
+        [/^Ditambah: (\d+)$/, function (m) { return 'Added: ' + m[1]; }]
+    ];
+    var HUB = { 'ketat': 'strict', 'seimbang': 'balanced', 'longgar': 'relaxed', 'lembut': 'soft' };
+
+    // month / day names inside free text (used by date strings)
+    var WORDS = [
+        [/\bJanuari\b/g, 'January'], [/\bFebruari\b/g, 'February'], [/\bMac\b/g, 'March'], [/\bMei\b/g, 'May'], [/\bJun\b/g, 'June'],
+        [/\bJulai\b/g, 'July'], [/\bOgos\b/g, 'August'], [/\bOktober\b/g, 'October'], [/\bDisember\b/g, 'December'],
+        [/\bIsnin\b/g, 'Monday'], [/\bSelasa\b/g, 'Tuesday'], [/\bRabu\b/g, 'Wednesday'], [/\bKhamis\b/g, 'Thursday'],
+        [/\bJumaat\b/g, 'Friday'], [/\bSabtu\b/g, 'Saturday'], [/\bAhad\b/g, 'Sunday']
+    ];
+
+    // ---------- translate ----------
+    var cache = Object.create(null);
+    function core(c) {
+        if (D[c] !== undefined) return D[c];
+        var i, m;
+        for (i = 0; i < P.length; i++) { m = P[i][0].exec(c); if (m) { var r = P[i][1](m); if (r != null && r !== c) return r; } }
+        for (i = 0; i < PFX.length; i++) {
+            if (c.indexOf(PFX[i][0]) === 0) { var rest = c.slice(PFX[i][0].length); return PFX[i][1] + (rest ? (/^\s/.test(rest) ? ' ' : '') + tr(rest.trim()) : ''); }
+        }
+        if (/\s[·—|]\s/.test(c)) {
+            var segs = c.split(/(\s[·—|]\s)/), ch = false;
+            for (i = 0; i < segs.length; i += 2) { var o = tr(segs[i]); if (o !== segs[i]) { segs[i] = o; ch = true; } }
+            if (ch) return segs.join('');
+        }
+        m = /^(.*?)(\s*[▲▼↑↓⇅]+)$/.exec(c);
+        if (m && m[1]) { var a = tr(m[1]); if (a !== m[1]) return a + m[2]; }
+        if (!LOW) { LOW = Object.create(null); for (var k in D) LOW[k.toLowerCase()] = D[k]; }
+        var lw = LOW[c.toLowerCase()];
+        if (lw !== undefined && c !== c.toLowerCase()) return c === c.toUpperCase() ? lw.toUpperCase() : lw.charAt(0).toUpperCase() + lw.slice(1);
+        var w = c;
+        for (i = 0; i < WORDS.length; i++) w = w.replace(WORDS[i][0], WORDS[i][1]);
+        return w;
+    }
+    var LOW = null;
+    function tr(str) {
+        if (lang !== 'en' || typeof str !== 'string' || !str) return str;
+        var lead = /^\s*/.exec(str)[0], trail = /\s*$/.exec(str)[0];
+        var body = str.slice(lead.length, str.length - trail.length);
+        if (!body || !/[A-Za-z]{2}/.test(body)) return str;
+        if (cache[body] !== undefined) return lead + cache[body] + trail;
+        var out;
+        if (body.indexOf('\n') >= 0) {
+            out = core(body);
+            if (out === body) {
+                var nb = body.replace(/\s+/g, ' ');
+                out = core(nb);
+                if (out === nb) out = body.split('\n').map(function (l) { return tr(l); }).join('\n');
+            }
+        } else {
+            out = core(body.replace(/\s+/g, ' '));
+        }
+        if (Object.keys(cache).length > 6000) cache = Object.create(null);
+        cache[body] = out;
+        return lead + out + trail;
+    }
+
+    // ---------- DOM ----------
+    var tNodes = new WeakMap(), aNodes = new WeakMap();
+    var SKIP = { SCRIPT: 1, STYLE: 1, TEXTAREA: 1, CODE: 1, PRE: 1, NOSCRIPT: 1 };
+    var ATTRS = ['title', 'placeholder', 'aria-label', 'alt'];
+    function skipEl(el) {
+        for (; el && el.nodeType === 1; el = el.parentNode) {
+            if (SKIP[el.nodeName] || (el.hasAttribute && (el.hasAttribute('data-no-i18n') || el.getAttribute('contenteditable') === 'true'))) return true;
+        }
+        return false;
+    }
+    function doText(n) {
+        if (lang !== 'en') return;
+        var rec = tNodes.get(n);
+        if (rec && n.data === rec.en) return;
+        var src = n.data, out = tr(src);
+        if (out !== src) { if (skipEl(n.parentNode)) return; tNodes.set(n, { ms: src, en: out }); n.data = out; }
+        else if (rec) tNodes.delete(n);
+    }
+    function doAttr(el, a) {
+        if (lang !== 'en') return;
+        var v = el.getAttribute(a); if (v == null) return;
+        var rec = aNodes.get(el);
+        if (rec && rec[a] && rec[a].en === v) return;
+        var out = tr(v);
+        if (out !== v) { if (skipEl(el)) return; if (!rec) aNodes.set(el, rec = {}); rec[a] = { ms: v, en: out }; el.setAttribute(a, out); }
+        else if (rec && rec[a]) delete rec[a];
+    }
+    function scan(root) {
+        if (lang !== 'en' || !root) return;
+        if (root.nodeType === 3) { doText(root); return; }
+        if (root.nodeType !== 1 && root.nodeType !== 9 && root.nodeType !== 11) return;
+        var doc = root.ownerDocument || root, w = doc.createTreeWalker(root, 4 | 1, null), n;
+        if (root.nodeType === 1) for (var k = 0; k < ATTRS.length; k++) doAttr(root, ATTRS[k]);
+        while ((n = w.nextNode())) {
+            if (n.nodeType === 3) doText(n);
+            else for (var j = 0; j < ATTRS.length; j++) if (n.hasAttribute(ATTRS[j])) doAttr(n, ATTRS[j]);
+        }
+    }
+    function restore(root) {
+        var w = document.createTreeWalker(root || document, 4 | 1, null), n;
+        while ((n = w.nextNode())) {
+            if (n.nodeType === 3) { var r = tNodes.get(n); if (r && n.data === r.en) n.data = r.ms; tNodes.delete(n); }
+            else { var ar = aNodes.get(n); if (ar) { for (var a in ar) if (n.getAttribute(a) === ar[a].en) n.setAttribute(a, ar[a].ms); aNodes.delete(n); } }
+        }
+    }
+    var mo = new MutationObserver(function (list) {
+        if (lang !== 'en') return;
+        for (var i = 0; i < list.length; i++) {
+            var m = list[i];
+            if (m.type === 'characterData') doText(m.target);
+            else if (m.type === 'attributes') doAttr(m.target, m.attributeName);
+            else for (var j = 0; j < m.addedNodes.length; j++) scan(m.addedNodes[j]);
+        }
+    });
+    function start() {
+        mo.observe(document.documentElement, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ATTRS });
+        scan(document);
+    }
+
+    // ---------- native dialogs ----------
+    var _alert = window.alert, _confirm = window.confirm, _prompt = window.prompt;
+    window.alert = function (m) { return _alert.call(window, tr(String(m))); };
+    window.confirm = function (m) { return _confirm.call(window, tr(String(m))); };
+    window.prompt = function (m, d) { return _prompt.call(window, tr(String(m)), d); };
+
+    // ---------- language switch ----------
+    function syncSelects() {
+        var s = document.querySelectorAll('select[data-vj-lang]');
+        for (var i = 0; i < s.length; i++) s[i].value = lang;
+    }
+    function setLang(l) {
+        if (l !== 'en' && l !== 'ms') return;
+        if (l === lang) { syncSelects(); return; }
+        if (l === 'ms') { restore(document); lang = 'ms'; } else { lang = 'en'; scan(document); }
+        try { localStorage.setItem(KEY, l); } catch (e) { }
+        document.documentElement.lang = l === 'ms' ? 'ms' : 'en';
+        syncSelects();
+        try { window.dispatchEvent(new CustomEvent('vj:langchange', { detail: l })); } catch (e) { }
+    }
+    document.documentElement.lang = lang === 'ms' ? 'ms' : 'en';
+    document.addEventListener('change', function (e) { var t = e.target; if (t && t.matches && t.matches('select[data-vj-lang]')) setLang(t.value); });
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function () { syncSelects(); }); else syncSelects();
+    start();
+
+    return {
+        t: tr, lang: function () { return lang; }, set: setLang,
+        locale: function () { return lang === 'ms' ? 'ms-MY' : 'en-GB'; },
+        apply: function (root) { scan(root); },
+        // translate a full HTML string (used for print popups)
+        html: function (h) {
+            if (lang !== 'en') return h;
+            var t = document.createElement('template'); t.innerHTML = h; scan(t.content); return t.innerHTML;
+        }
+    };
+})();
+    </script>
     <script>
 /**
  * VISIJADUAL PRO V2 — BACKEND TEMPATAN (backend.js)
@@ -275,7 +1453,7 @@
     function fmtDate(v) {
         const d = new Date(v);
         if (!v || isNaN(d.getTime())) return String(v || '');
-        return d.toLocaleDateString('ms-MY') + ' ' + d.toLocaleTimeString('ms-MY');
+        return d.toLocaleDateString(VJI18N.locale()) + ' ' + d.toLocaleTimeString(VJI18N.locale());
     }
 
     function clone(o) { return JSON.parse(JSON.stringify(o)); }
@@ -1878,7 +3056,7 @@ window.VJSampleData = function () {
         const files = j.files || [];
         ul.innerHTML = files.length ? files.map(f => `<li><button data-id="${escapeHtml(f.id)}" data-name="${escapeHtml(f.name)}" class="drive-file w-full text-left px-3 py-2 hover:bg-sky-50 flex items-center justify-between gap-2">
                 <span class="font-semibold text-slate-700 truncate">${escapeHtml(f.name)}</span>
-                <span class="text-[10px] text-slate-400 shrink-0">${new Date(f.modifiedTime).toLocaleString('ms-MY')}${f.size ? ' · ' + Math.round(f.size / 1024) + ' KB' : ''}</span></button></li>`).join('')
+                <span class="text-[10px] text-slate-400 shrink-0">${new Date(f.modifiedTime).toLocaleString(VJI18N.locale())}${f.size ? ' · ' + Math.round(f.size / 1024) + ' KB' : ''}</span></button></li>`).join('')
             : '<li class="px-3 py-4 text-center text-slate-400">Tiada fail ZIP VisiJadual ditemui. Simpan ke Drive dahulu.</li>';
         ul.querySelectorAll('.drive-file').forEach(b => b.onclick = () => muatTurun(b.dataset.id, b.dataset.name));
     }
@@ -2386,6 +3564,7 @@ window.VJSampleData = function () {
                     </div>
                 </button>
 
+                <div class="flex items-center justify-center gap-2 text-[11px] text-slate-500" data-no-i18n><span class="whitespace-nowrap">Language</span><select data-vj-lang aria-label="Language" class="text-[11px] border border-slate-200 rounded-md px-1.5 py-0.5 bg-white"><option value="en">English</option><option value="ms">Bahasa Melayu</option></select></div>
                 <p class="text-[10px] text-slate-400 text-center pt-1">Petua: seret & lepas fail ZIP ke halaman ini untuk membukanya.</p>
                 <p class="text-[10px] text-slate-400 text-center">© 2026 cikgumie. Hak cipta terpelihara. <a href="https://github.com/cikgumie/visijadualpro/blob/main/LICENSE" target="_blank" rel="noopener" class="underline hover:text-slate-600">Lesen</a></p>
             </div>
@@ -2970,6 +4149,8 @@ window.VJSampleData = function () {
         <button onclick="tetapanGo('arkib')" class="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 text-left"><i data-lucide="archive" class="w-4 h-4 text-slate-500"></i> Arkib Data</button>
         <div class="my-1 border-t border-slate-200"></div>
         <button onclick="closeTetapanMenu(); openTetapanModal()" class="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 text-left"><i data-lucide="key-round" class="w-4 h-4 text-slate-500"></i> Tukar Kata Laluan</button>
+        <div class="my-1 border-t border-slate-200"></div>
+        <div class="px-3 py-2 flex items-center gap-2.5 text-xs font-semibold text-slate-700" data-no-i18n><i data-lucide="languages" class="w-4 h-4 text-slate-500"></i><span class="whitespace-nowrap">Language</span><select data-vj-lang aria-label="Language" class="ml-auto text-xs border border-slate-200 rounded-lg px-1.5 py-1 bg-white"><option value="en">English</option><option value="ms">Bahasa Melayu</option></select></div>
     </div>
 
         <aside id="sideNav" class="side-nav no-print">
@@ -6946,7 +8127,7 @@ window.VJSampleData = function () {
             XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(dataSubjek), "Analisis Subjek");
             XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(dataMentah), "Data Mentah");
 
-            const tarikh = new Date().toLocaleDateString('ms-MY').replace(/\//g, '-');
+            const tarikh = new Date().toLocaleDateString(VJI18N.locale()).replace(/\//g, '-');
             XLSX.writeFile(wb, `VisiJadual_Export_${tarikh}.xlsx`);
             showToast("Fail Excel berjaya dieksport!", "success");
         }
@@ -10067,7 +11248,7 @@ window.VJSolver = (function () {
             const dikunci = jadual.sesi.filter(x => x.kunci).length;
             document.getElementById('hubCount').innerText = (inp.hubungan || []).length || '';
             document.getElementById('jdlOverview').innerHTML = jadual.dijana
-                ? `· disusun ${escapeHtml(new Date(jadual.dijana).toLocaleString('ms-MY'))} · ${totalSesi} sesi${dikunci ? ` · ${dikunci} dikunci` : ''}`
+                ? `· disusun ${escapeHtml(new Date(jadual.dijana).toLocaleString(VJI18N.locale()))} · ${totalSesi} sesi${dikunci ? ` · ${dikunci} dikunci` : ''}`
                 : '· belum disusun';
 
             const empty = document.getElementById('jdlEmpty'), modal = document.getElementById('jdlModal');
@@ -10231,7 +11412,7 @@ window.VJSolver = (function () {
             const batalJanji = new Promise(res => { tolak = res; });
             const pemantau = setInterval(() => { if (isyarat && isyarat.batal && !tamat) { henti(); tolak({ batal: true }); } }, 100);
             const t0 = performance.now();
-            let kosAwal0 = null;
+            let kosAwal0 = null, percubaan = 1;
 
             // Jalankan satu pusingan pada semua worker; pulangkan senarai hasil
             const pusingan = (inpR, optR, r) => new Promise(resolve => {
@@ -10244,7 +11425,7 @@ window.VJSolver = (function () {
                     const ms = performance.now() - t0;
                     const fasa1 = ada.filter(s => s.fasa !== 'optimum');
                     if (r === 0 && fasa1.length) {
-                        onProgress(Object.assign({}, fasa1.reduce((a, b) => (b.terbaik > a.terbaik ? b : a)), { ms }));
+                        onProgress(Object.assign({}, fasa1.reduce((a, b) => (b.terbaik > a.terbaik ? b : a)), { ms, percubaan }));
                     } else {
                         const opt = ada.filter(s => s.fasa === 'optimum');
                         if (!opt.length) return;
@@ -10286,6 +11467,11 @@ window.VJSolver = (function () {
                     hasil.forEach(x => { if (jdlLebihBaik(x, bestR)) bestR = x; });
                     if (pertama) { awal0 = bestR.stat.optimum ? { awal: bestR.stat.optimum.awal, kosAwal: bestR.stat.optimum.kosAwal } : null; iter = bestR.stat.iter; hentiBuntu = !!bestR.stat.hentiBuntu; }
                     hasil.forEach(x => { if (x.stat.optimum) { langkah += x.stat.optimum.langkah; diterima += x.stat.optimum.diterima; } });
+                    // Tanpa had (Strict): jika masih ada sesi tidak muat, mulakan semula dengan susunan rawak baharu sehingga semua diletak
+                    if (pertama && tanpaHad && !(isyarat && isyarat.henti) && bestR.stat.diletak < bestR.stat.unit) {
+                        if (jdlLebihBaik(bestR, best)) best = bestR;
+                        percubaan++; r--; continue;
+                    }
                     // Jangan sekali-kali mundur: kekalkan jadual terbaik setakat ini
                     if (jdlLebihBaik(bestR, best)) {
                         // Sebab "tidak muat" hanya diketahui oleh pusingan yang benar-benar mencuba meletak (pusingan 1)
@@ -10362,7 +11548,7 @@ window.VJSolver = (function () {
                         const f = tanpaHad ? 1 : (hadOpt ? Math.min(1, (st.ms - msMulaOpt) / (hadOpt * 1000)) : 1);
                         jdlOverlayKemas(tanpaHad ? 'Fasa 2/2 · Mengoptimum tanpa had' : 'Fasa 2/2 · Mengoptimum kualiti', `Kos ${Math.round(st.kosAwal)} → ${Math.round(st.kos)} · ${(st.ms / 1000).toFixed(1)} s${tanpaHad ? ' · ' + (isyarat.status ? 'kitaran ' + isyarat.status.kitaran + ' (tiada peningkatan ' + isyarat.status.tiada + '/2) · ' : '') + 'berhenti sendiri jika tiada peningkatan, atau tekan "Henti & Guna Terbaik"' : ''}`, f);
                     } else {
-                        jdlOverlayKemas(hadOpt ? 'Fasa 1/2 · Meletak sesi' : 'Meletak sesi', `${st.terbaik} / ${st.jumlah} sesi diletak · ${(st.ms / 1000).toFixed(1)} s`, st.jumlah ? st.terbaik / st.jumlah : 0);
+                        jdlOverlayKemas(hadOpt ? 'Fasa 1/2 · Meletak sesi' : 'Meletak sesi', `${tanpaHad && st.percubaan > 1 ? 'Percubaan ' + st.percubaan + ' · ' : ''}${st.terbaik} / ${st.jumlah} sesi diletak · ${(st.ms / 1000).toFixed(1)} s`, st.jumlah ? st.terbaik / st.jumlah : 0);
                     }
                 });
                 if (res.batal) { showToast('Penyusunan dibatalkan. Jadual sedia ada tidak diubah.', 'info'); return; }
@@ -10755,7 +11941,7 @@ window.VJSolver = (function () {
                 amaran: ['bg-amber-100 text-amber-800', '⚠ Jadual lengkap tetapi ada kompromi / amaran.'],
                 gagal: ['bg-rose-100 text-rose-800', '✖ Jadual belum lengkap atau ada masalah serius.'] }[S.tahap];
             const ikon = { gagal: '✖', amaran: '⚠', info: 'ℹ' }, warna = { gagal: 'border-rose-200 bg-rose-50', amaran: 'border-amber-200 bg-amber-50', info: 'border-slate-200 bg-white' };
-            const tarikh = new Date(R.tarikh).toLocaleString('ms-MY');
+            const tarikh = new Date(R.tarikh).toLocaleString(VJI18N.locale());
             el.innerHTML = `<div class="rounded-xl px-3 py-2 text-xs font-bold ${kepala[0]}">${kepala[1]}</div>
                 <p class="text-[11px] text-slate-500">${R.semasa ? 'Analisis jadual semasa' : 'Hasil susunan'} · ${escapeHtml(tarikh)}${R.skop ? ' · kelas dipilih: ' + escapeHtml(R.skop) : ''}${S.unit ? ` · ${S.diletak}/${S.unit} sesi diletak` : ''}</p>
                 ${S.butir.map(b => `<div class="border rounded-xl p-3 ${warna[b.jenis]}">
@@ -11668,7 +12854,7 @@ window.VJGanti = (function () {
             if (disahkan) baris = r.baris;
             else ({ baris, isu } = VJGanti.rancang(inp, gtTarikh, gtPilihan));
             document.getElementById('gtInfo').innerText = di < 0 ? 'Bukan hari persekolahan.' : isu || (disahkan
-                ? `Disahkan ${new Date(r.dicipta).toLocaleString('ms-MY')} oleh ${r.oleh}${r.catatan ? ' · ' + r.catatan : ''}`
+                ? `Disahkan ${new Date(r.dicipta).toLocaleString(VJI18N.locale())} oleh ${r.oleh}${r.catatan ? ' · ' + r.catatan : ''}`
                 : `${th.length} guru tidak hadir · ${baris.length} waktu perlu diganti`);
             const tb = document.getElementById('gtCadangan');
             if (!baris.length) {
@@ -11733,7 +12919,7 @@ window.VJGanti = (function () {
         function gtSejarah() {
             const g = VJStore.getGantian();
             const list = g.rekod.filter(r => r.tarikh === gtTarikh);
-            const teks = list.length ? list.map(r => `${new Date(r.dicipta).toLocaleString('ms-MY')} · ${r.status === 'SAH' ? 'DISAHKAN' : 'DIBATALKAN'} · ${r.oleh}` +
+            const teks = list.length ? list.map(r => `${new Date(r.dicipta).toLocaleString(VJI18N.locale())} · ${r.status === 'SAH' ? 'DISAHKAN' : 'DIBATALKAN'} · ${r.oleh}` +
                 (r.catatan ? `\n  ${r.catatan}` : '') + r.baris.map(x => `\n  W${x.waktu + 1} ${x.kelasNama}: ${x.guruNama} → ${x.gantiNama || 'Belum dipilih'}`).join('')).join('\n\n')
                 : 'Tiada rekod sejarah bagi tarikh ini.';
             alert(`Sejarah guru ganti · ${gtTarikh}\n\n${teks}`);
@@ -11752,14 +12938,14 @@ window.VJGanti = (function () {
             const rows = r.baris.map((x, i) => `<tr><td>${i + 1}</td><td>${e(x.guruNama)}</td><td>${e(x.sebab)}</td><td>W${x.waktu + 1}</td><td>${e(x.mula)}–${e(x.tamat)}</td><td>${e(x.subjekNama)}</td><td>${e(x.kelasNama)}</td><td><b>${e(x.gantiNama || 'Belum dipilih')}</b></td><td style="width:22mm"></td></tr>`).join('');
             const w = window.open('', '_blank');
             if (!w) { showToast('Pop-up disekat. Benarkan pop-up untuk mencetak.', 'error'); return; }
-            w.document.write(`<!doctype html><html lang="ms"><head><meta charset="utf-8"><title>Jadual Guru Ganti ${e(gtTarikh)}</title><style>
+            w.document.write(`<!doctype html><html lang="${VJI18N.lang()}"><head><meta charset="utf-8"><title>${VJI18N.t('Jadual Guru Ganti')} ${e(gtTarikh)}</title><style>
                 @page{size:A4 landscape;margin:12mm} body{font-family:Arial,sans-serif;font-size:11px;color:#000}
                 h1,h2,p{text-align:center;margin:2px 0} table{width:100%;border-collapse:collapse;margin-top:10px}
                 th,td{border:1px solid #000;padding:5px;text-align:left} th{background:#eee}</style></head><body>
-                <h1>${e(g.tetapan.namaSekolah || 'SEKOLAH')}</h1><h2>JADUAL GURU GANTI</h2>
+                <h1>${e(g.tetapan.namaSekolah || VJI18N.t('SEKOLAH'))}</h1><h2>${VJI18N.t('JADUAL GURU GANTI')}</h2>
                 <p>${e(document.getElementById('gtTajuk').innerText)}</p>
-                <table><thead><tr><th>Bil</th><th>Guru Tidak Hadir</th><th>Sebab</th><th>Waktu</th><th>Masa</th><th>Subjek</th><th>Kelas</th><th>Guru Ganti</th><th>T/tangan</th></tr></thead><tbody>${rows}</tbody></table>
-                <p style="text-align:left;margin-top:14px">Disediakan oleh: ${e(r.oleh)}</p><script>setTimeout(()=>print(),300)<\/script></body></html>`);
+                <table><thead><tr>${['Bil','Guru Tidak Hadir','Sebab','Waktu','Masa','Subjek','Kelas','Guru Ganti','T/tangan'].map(h => '<th>' + VJI18N.t(h) + '</th>').join('')}</tr></thead><tbody>${rows}</tbody></table>
+                <p style="text-align:left;margin-top:14px">${VJI18N.t('Disediakan oleh')}: ${e(r.oleh)}</p><script>setTimeout(()=>print(),300)<\/script></body></html>`);
             w.document.close();
         }
 

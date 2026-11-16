@@ -26,6 +26,11 @@ Semua data berada dalam memori pelayar, dan disimpan/dibuka sebagai **fail ZIP**
 - Kata laluan Mod Edit lalai: `admin123` (tukar di Tetapan). Kata laluan disimpan dalam fail ZIP.
   Ini hanya penghalang daripada tersalah edit, bukan keselamatan sebenar.
 
+## Bahasa / Language
+
+Antaramuka kini **English secara lalai**. Tukar ke Bahasa Melayu (atau sebaliknya) melalui ikon Tetapan (gear) > **Language**, atau pada skrin permulaan. Pilihan disimpan dalam pelayar (`vj_lang`).
+UI is **English by default**; switch to Bahasa Melayu under Settings (gear) > **Language** or on the start screen. Strings are translated in the `VJI18N` block in `index.html` (add missing ones to `D` / `P`).
+
 ## Google Drive
 
 Butang **Drive** (ikon awan di header) dan **Buka dari Google Drive** (skrin permulaan):

@@ -3461,31 +3461,15 @@ window.VJSampleData = function () {
                 </div>
                 <div class="p-5 space-y-4">
                     <p id="jdlSusunSkop" class="text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-100 rounded-lg px-3 py-1.5"></p>
-                    <div class="grid sm:grid-cols-2 gap-3">
-                        <label class="flex items-start gap-2 text-xs font-semibold text-slate-700" title="Agihan yang pecahannya sama dengan jumlah masa (cth 6) dipecah sama rata mengikut hari (cth 2,2,2)">
-                            <input id="jdlPecahAuto" type="checkbox" checked class="w-4 h-4 mt-0.5 accent-brand-600"> <span>Pecah automatik agihan tanpa pecahan</span>
-                        </label>
+                    <div class="space-y-2">
+                        <div id="jdlTahapPilih" class="grid grid-cols-3 gap-2">
+                            <button type="button" data-tahap="relax" onclick="jdlSetTahap('relax')" class="jdl-tahap rounded-xl border-2 px-3 py-2 text-left transition"><span class="flex items-center gap-1.5 text-xs font-extrabold"><i data-lucide="coffee" class="w-4 h-4"></i> Relax</span><span class="block text-[10px] font-medium mt-0.5 opacity-75">Cepat · 10 s</span></button>
+                            <button type="button" data-tahap="optimize" onclick="jdlSetTahap('optimize')" class="jdl-tahap rounded-xl border-2 px-3 py-2 text-left transition"><span class="flex items-center gap-1.5 text-xs font-extrabold"><i data-lucide="gauge" class="w-4 h-4"></i> Optimize</span><span class="block text-[10px] font-medium mt-0.5 opacity-75">Seimbang · 30 s</span></button>
+                            <button type="button" data-tahap="strict" onclick="jdlSetTahap('strict')" class="jdl-tahap rounded-xl border-2 px-3 py-2 text-left transition"><span class="flex items-center gap-1.5 text-xs font-extrabold"><i data-lucide="shield-check" class="w-4 h-4"></i> Strict</span><span class="block text-[10px] font-medium mt-0.5 opacity-75">Terbaik · sehingga stabil</span></button>
+                        </div>
+                        <p id="jdlTahapNota" class="text-[11px] text-slate-500"></p>
                         <label class="flex items-start gap-2 text-xs font-semibold text-slate-700" title="Agihan berlabel huruf kumpulan yang sama (cth K1, K2, K3), bilangan waktu sama dan tingkatan sama diletak pada masa yang sama walaupun kelas berlainan">
                             <input id="jdlSerentakHuruf" type="checkbox" checked class="w-4 h-4 mt-0.5 accent-brand-600"> <span>Kumpulan sama serentak</span>
-                        </label>
-                        <label class="text-xs font-semibold text-slate-700 flex flex-col gap-1">Had masa meletak sesi
-                            <select id="jdlMasaHad" class="border border-slate-200 bg-white rounded-lg px-2 py-1.5 text-xs font-bold text-slate-700">
-                                <option value="10">10 saat</option>
-                                <option value="30" selected>30 saat</option>
-                                <option value="90">90 saat</option>
-                            </select>
-                        </label>
-                        <label class="text-xs font-semibold text-slate-700 flex flex-col gap-1">Teras pemproses
-                            <select id="jdlTeras" class="border border-slate-200 bg-white rounded-lg px-2 py-1.5 text-xs font-bold text-slate-700" title="Setiap teras menyusun jadual sendiri secara serentak; jadual terbaik dipilih."></select>
-                        </label>
-                        <label class="text-xs font-semibold text-slate-700 flex flex-col gap-1 sm:col-span-2">Optimum
-                            <select id="jdlOptimum" class="border border-slate-200 bg-white rounded-lg px-2 py-1.5 text-xs font-bold text-slate-700" title="Fasa pengoptimuman selepas semua sesi diletak: kurangkan lompong kelas & guru, subjek berulang sehari dan beban harian tidak seimbang">
-                                <option value="0">Tanpa optimum</option>
-                                <option value="10">Optimum 10 s</option>
-                                <option value="30">Optimum 30 s</option>
-                                <option value="90">Optimum 90 s</option>
-                                <option value="-1" selected>Optimum tanpa had (henti manual)</option>
-                            </select>
                         </label>
                     </div>
                     <button onclick="jdlSusunMula()" class="w-full px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-sm font-bold shadow flex items-center justify-center gap-2">
@@ -9772,7 +9756,24 @@ window.VJSolver = (function () {
         const jdlTrxDipilih = t => String(t[3]).split(',').some(k => jdlPilihan.has(k.trim()));
 
         // Pilihan penyusunan dari kotak semak di bar atas
-        const jdlOptBina = () => ({ pecahAuto: document.getElementById('jdlPecahAuto').checked, serentakHuruf: document.getElementById('jdlSerentakHuruf').checked });
+        const JDL_TAHAP = {
+            relax: { saat: 10, opt: 10, nota: 'Letak sesi maks 10 s, optimum 10 s. Sesuai untuk semakan pantas.' },
+            optimize: { saat: 30, opt: 30, nota: 'Letak sesi maks 30 s, optimum 30 s. Sesuai untuk kegunaan biasa.' },
+            strict: { saat: 90, opt: -1, nota: 'Letak sesi maks 90 s, optimum tanpa had sehingga stabil (boleh dihentikan manual). Hasil terbaik.' }
+        };
+        let jdlTahap = 'optimize';
+        try { const v = localStorage.getItem('visijadual_tahap'); if (v && JDL_TAHAP[v]) jdlTahap = v; } catch (e) {}
+        function jdlSetTahap(t) {
+            if (!JDL_TAHAP[t]) return;
+            jdlTahap = t;
+            try { localStorage.setItem('visijadual_tahap', t); } catch (e) {}
+            document.querySelectorAll('#jdlTahapPilih .jdl-tahap').forEach(b => {
+                const on = b.dataset.tahap === t;
+                b.className = 'jdl-tahap rounded-xl border-2 px-3 py-2 text-left transition ' + (on ? 'border-brand-600 bg-brand-50 text-brand-800' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300');
+            });
+            const n = document.getElementById('jdlTahapNota'); if (n) n.textContent = JDL_TAHAP[t].nota;
+        }
+        const jdlOptBina = () => ({ pecahAuto: true, serentakHuruf: document.getElementById('jdlSerentakHuruf').checked });
 
         const JDL_WARNA = ['bg-sky-100 text-sky-900', 'bg-emerald-100 text-emerald-900', 'bg-amber-100 text-amber-900', 'bg-violet-100 text-violet-900',
             'bg-rose-100 text-rose-900', 'bg-teal-100 text-teal-900', 'bg-orange-100 text-orange-900', 'bg-lime-100 text-lime-900',
@@ -10341,7 +10342,7 @@ window.VJSolver = (function () {
             jdlSedang = true;
             const btn = document.getElementById('jdlBtnSusun');
             btn.disabled = true; btn.classList.add('opacity-60');
-            const hadOptPilih = parseInt(document.getElementById('jdlOptimum').value) || 0;
+            const hadOptPilih = JDL_TAHAP[jdlTahap].opt;
             const tanpaHad = hadOptPilih < 0;
             const hadOpt = tanpaHad ? 30 : hadOptPilih;
             const isyarat = { batal: false, henti: false, tanpaHad };
@@ -10350,10 +10351,10 @@ window.VJSolver = (function () {
             try {
                 const res = await jdlSusunSelari(inp, {
                     ...jdlOptBina(),
-                    hadSaat: parseInt(document.getElementById('jdlMasaHad').value) || 30,
+                    hadSaat: JDL_TAHAP[jdlTahap].saat,
                     hadOptimumSaat: hadOpt,
                     tanpaHad,
-                    teras: parseInt(document.getElementById('jdlTeras').value) || 1,
+                    teras: JDL_TERAS_MAKS,
                     isyarat
                 }, st => {
                     if (st.fasa === 'optimum') {
@@ -10453,8 +10454,7 @@ window.VJSolver = (function () {
             { id: 'data', nama: '1. Semakan data & peraturan', info: 'Pecahan waktu, kumpulan serentak, hubungan' },
             { id: 'kelas', nama: '2. Ujian Kelas', info: 'Beban waktu setiap kelas vs slot boleh isi' },
             { id: 'guru', nama: '3. Ujian Guru', info: 'Beban (logik kumpulan serentak) vs slot boleh mengajar & had maksimum' },
-            { id: 'bilik', nama: '4. Ujian Bilik', info: 'Permintaan bilik khas vs slot seminggu' },
-            { id: 'jana', nama: '5. Jana percubaan (10 saat, tidak disimpan)', info: 'Cuba susun sebenar, kemudian laporan ikut kelas, guru & bilik' }
+            { id: 'bilik', nama: '4. Ujian Bilik', info: 'Permintaan bilik khas vs slot seminggu' }
         ];
         const jdlUjian = { hasil: {}, sedang: false, isyarat: null, B: null };
 
@@ -10465,6 +10465,7 @@ window.VJSolver = (function () {
             const n = jdlPilihan.size;
             document.getElementById('jdlSusunSkop').textContent = n ? `Skop: ${n} kelas dipilih (kelas lain tidak diubah)` : 'Skop: semua kelas';
             document.getElementById('jdlSusunMulaTeks').textContent = n ? `Mula Susun ${n} Kelas` : 'Mula Susun';
+            jdlSetTahap(jdlTahap);
             jdlUjianRender();
             if (window.lucide) lucide.createIcons();
         }
@@ -10705,7 +10706,7 @@ window.VJSolver = (function () {
             if (tm.length) {
                 tambah('gagal', `${tm.length} sesi tidak dapat diletak`,
                     tm.slice(0, 12).map(t => `${t.desc} (${t.len}w) — ${t.sebab}`).join('\n') + (tm.length > 12 ? `\n… dan ${tm.length - 12} lagi` : ''),
-                    'Cuba Optimum/had masa lebih lama atau teras lebih banyak. Semak slot diblok, hubungan "ketat" dan kumpulan serentak. Jalankan Mod Ujian untuk lihat kelas/guru yang padat.');
+                    'Cuba tahap Strict. Semak slot diblok, hubungan "ketat" dan kumpulan serentak. Jalankan Mod Ujian untuk lihat kelas/guru yang padat.');
             }
             // 2. Hubungan & isu lain daripada penyusun
             (res.isu || []).forEach(i => {
@@ -11413,7 +11414,6 @@ window.VJSolver = (function () {
             renderJadualView();
         }
 
-        document.getElementById('jdlPecahAuto').addEventListener('change', () => renderJadualView());
         document.getElementById('jdlSerentakHuruf').addEventListener('change', () => renderJadualView());
     </script>
     <script>

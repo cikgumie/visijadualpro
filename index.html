@@ -352,6 +352,10 @@ window.VJI18N = (function () {
         "Tambah Hubungan": "Add Relation",
         "Tambah bilik": "Add room",
         "Tambah hubungan": "Add relation",
+        "Tetapkan ikut hari": "Set per day",
+        "Pilih hari yang dikenakan dan nilai bagi setiap hari. Hari tidak ditanda tidak dikenakan.": "Choose the days it applies to and the value for each day. Unticked days are not constrained.",
+        "Tanda sekurang-kurangnya satu hari.": "Tick at least one day.",
+        "Nilai setiap hari mesti sekurang-kurangnya 1.": "Each day's value must be at least 1.",
         "Tambah ke Senarai": "Add to List",
         "Tambah ke Senarai Simpan": "Add to Save List",
         "Tampal dari Excel": "Paste from Excel",
@@ -1371,6 +1375,8 @@ window.VJI18N = (function () {
             pilih: { subjek: ids(h.pilih && h.pilih.subjek), guru: ids(h.pilih && h.pilih.guru), kelas: ids(h.pilih && h.pilih.kelas) },
             pilihB: { subjek: ids(h.pilihB && h.pilihB.subjek), guru: ids(h.pilihB && h.pilihB.guru), kelas: ids(h.pilihB && h.pilihB.kelas) },
             nilai: Math.max(0, parseInt(h.nilai) || 0),
+            nilaiHari: (Array.isArray(h.nilaiHari) && h.nilaiHari.some(v => v !== null && v !== undefined && v !== ''))
+                ? h.nilaiHari.map(v => (v === null || v === undefined || v === '') ? null : Math.max(0, parseInt(v) || 0)) : [],
             slot: ids(h.slot).filter(k => /^\d+-\d+$/.test(k)),
             slotB: ids(h.slotB).filter(k => /^\d+-\d+$/.test(k)),
             berat: ['ketat', 'optimum', 'longgar'].includes(h.berat) ? h.berat : '',
@@ -4725,6 +4731,12 @@ window.VJSampleData = function () {
                             <input id="hubNama" type="text" placeholder="Cth: Makmal Sains, BM pagi sahaja" class="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-xs"></label>
                     </div>
                     <p id="hubJenisHint" class="text-[11px] text-slate-500"></p>
+                    <div id="hubHariBox" class="hidden rounded-lg border border-slate-200 bg-slate-50/60 px-3 py-2">
+                        <label class="inline-flex items-center gap-1.5 text-[11px] font-bold text-slate-700 cursor-pointer">
+                            <input id="hubIkutHari" type="checkbox" onchange="hubIkutHariTukar()" class="w-3.5 h-3.5 accent-brand-600"> Tetapkan ikut hari</label>
+                        <span class="text-[10px] text-slate-500 ml-1">Pilih hari yang dikenakan dan nilai bagi setiap hari. Hari tidak ditanda tidak dikenakan.</span>
+                        <div id="hubHariGrid" class="hidden mt-2 flex flex-wrap gap-2"></div>
+                    </div>
                     <div>
                         <p id="hubTajukA" class="text-[11px] font-bold text-slate-700 mb-1"></p>
                         <div class="grid sm:grid-cols-3 gap-2">
@@ -9760,22 +9772,22 @@ window.VJSolver = (function () {
         maksSerentak: { kat: 'Waktu & serentak', nama: 'Maks sesi pada satu waktu', nilai: 'Maks serentak', hint: 'Bilangan sesi yang berlangsung serentak tidak melebihi nilai ini. Cth: 1 makmal → maks 1 kelas Sains pada satu masa.' },
 
         bezaHari: { kat: 'Hari', nama: 'Tidak boleh pada hari yang sama', ab: 'pilihan', hint: 'Agihan berbeza yang dipilih tidak jatuh pada hari yang sama. Cth: Matematik & Matematik Tambahan bagi satu kelas.' },
-        maksSehari: { kat: 'Hari', nama: 'Maks waktu sehari', nilai: 'Maks waktu', hint: 'Jumlah waktu bagi sesi yang dipilih dalam sehari tidak melebihi nilai ini.' },
-        minSehari: { kat: 'Hari', nama: 'Min waktu sehari', nilai: 'Min waktu', lembut: true, hint: 'Setiap hari sekurang-kurangnya sekian waktu. Cth: guru mengajar sekurang-kurangnya 2 waktu setiap hari.' },
-        minSehariAda: { kat: 'Hari', nama: 'Min waktu sehari (hari kosong dibenarkan)', nilai: 'Min waktu', lembut: true, hint: 'Jika ada sesi pada sesuatu hari, jumlahnya sekurang-kurangnya sekian waktu.' },
-        maksSesiSehari: { kat: 'Hari', nama: 'Maks sesi sehari', nilai: 'Maks sesi', hint: 'Bilangan sesi (bukan waktu) yang dipilih dalam sehari tidak melebihi nilai ini.' },
+        maksSehari: { harian: true, kat: 'Hari', nama: 'Maks waktu sehari', nilai: 'Maks waktu', hint: 'Jumlah waktu bagi sesi yang dipilih dalam sehari tidak melebihi nilai ini.' },
+        minSehari: { harian: true, kat: 'Hari', nama: 'Min waktu sehari', nilai: 'Min waktu', lembut: true, hint: 'Setiap hari sekurang-kurangnya sekian waktu. Cth: guru mengajar sekurang-kurangnya 2 waktu setiap hari.' },
+        minSehariAda: { harian: true, kat: 'Hari', nama: 'Min waktu sehari (hari kosong dibenarkan)', nilai: 'Min waktu', lembut: true, hint: 'Jika ada sesi pada sesuatu hari, jumlahnya sekurang-kurangnya sekian waktu.' },
+        maksSesiSehari: { harian: true, kat: 'Hari', nama: 'Maks sesi sehari', nilai: 'Maks sesi', hint: 'Bilangan sesi (bukan waktu) yang dipilih dalam sehari tidak melebihi nilai ini.' },
         maksHari: { kat: 'Hari', nama: 'Maks hari seminggu', nilai: 'Maks hari', hint: 'Sesi yang dipilih hanya pada sekian hari seminggu. Cth: guru separuh masa 3 hari sahaja.' },
         minHari: { kat: 'Hari', nama: 'Min hari seminggu', nilai: 'Min hari', lembut: true, hint: 'Sesi yang dipilih tersebar sekurang-kurangnya pada sekian hari.' },
         maksHariBerturut: { kat: 'Hari', nama: 'Maks hari berturut-turut', nilai: 'Maks hari', lembut: true, hint: 'Sesi yang dipilih tidak berlaku lebih daripada sekian hari berturut-turut.' },
         maksHariLapang: { kat: 'Hari', nama: 'Maks hari lapang di antara sesi', nilai: 'Maks hari lapang', lembut: true, hint: 'Jarak hari tanpa sesi di antara dua hari bersesi tidak melebihi nilai ini. Cth: BM tidak lebih 1 hari tanpa kelas.' },
 
-        maksBerturut: { kat: 'Berturut & lompong', nama: 'Maks waktu berturut-turut', nilai: 'Maks waktu', ab: 'pilihan', hint: 'Sesi yang dipilih (A dan B jika diisi) tidak berturut-turut melebihi sekian waktu.' },
-        maksJulat: { kat: 'Berturut & lompong', nama: 'Maks waktu + lompong sehari', nilai: 'Maks julat', hint: 'Dari sesi pertama hingga terakhir dalam sehari tidak melebihi sekian waktu.' },
-        minJulat: { kat: 'Berturut & lompong', nama: 'Min waktu + lompong sehari (hari kosong dibenarkan)', nilai: 'Min julat', lembut: true, hint: 'Jika ada sesi pada sesuatu hari, julat dari sesi pertama hingga terakhir sekurang-kurangnya sekian waktu.' },
-        maksLompong: { kat: 'Berturut & lompong', nama: 'Maks lompong sehari', nilai: 'Maks lompong', lembut: true, hint: 'Waktu kosong di antara sesi dalam sehari tidak melebihi nilai ini. Cth: guru tiada lebih 2 waktu terbiar.' },
+        maksBerturut: { harian: true, kat: 'Berturut & lompong', nama: 'Maks waktu berturut-turut', nilai: 'Maks waktu', ab: 'pilihan', hint: 'Sesi yang dipilih (A dan B jika diisi) tidak berturut-turut melebihi sekian waktu.' },
+        maksJulat: { harian: true, kat: 'Berturut & lompong', nama: 'Maks waktu + lompong sehari', nilai: 'Maks julat', hint: 'Dari sesi pertama hingga terakhir dalam sehari tidak melebihi sekian waktu.' },
+        minJulat: { harian: true, kat: 'Berturut & lompong', nama: 'Min waktu + lompong sehari (hari kosong dibenarkan)', nilai: 'Min julat', lembut: true, hint: 'Jika ada sesi pada sesuatu hari, julat dari sesi pertama hingga terakhir sekurang-kurangnya sekian waktu.' },
+        maksLompong: { harian: true, kat: 'Berturut & lompong', nama: 'Maks lompong sehari', nilai: 'Maks lompong', lembut: true, hint: 'Waktu kosong di antara sesi dalam sehari tidak melebihi nilai ini. Cth: guru tiada lebih 2 waktu terbiar.' },
         maksLompongMinggu: { kat: 'Berturut & lompong', nama: 'Maks lompong seminggu', nilai: 'Maks lompong', lembut: true, hint: 'Jumlah waktu kosong di antara sesi sepanjang minggu tidak melebihi nilai ini.' },
-        maksLompongAwal: { kat: 'Berturut & lompong', nama: 'Maks lompong sehari (waktu kosong di awal dikira)', nilai: 'Maks lompong', lembut: true, hint: 'Seperti maks lompong sehari, tetapi waktu kosong sebelum sesi pertama turut dikira.' },
-        maksLompongAkhir: { kat: 'Berturut & lompong', nama: 'Maks lompong sehari (waktu kosong di akhir dikira)', nilai: 'Maks lompong', lembut: true, hint: 'Seperti maks lompong sehari, tetapi waktu kosong selepas sesi terakhir turut dikira.' },
+        maksLompongAwal: { harian: true, kat: 'Berturut & lompong', nama: 'Maks lompong sehari (waktu kosong di awal dikira)', nilai: 'Maks lompong', lembut: true, hint: 'Seperti maks lompong sehari, tetapi waktu kosong sebelum sesi pertama turut dikira.' },
+        maksLompongAkhir: { harian: true, kat: 'Berturut & lompong', nama: 'Maks lompong sehari (waktu kosong di akhir dikira)', nilai: 'Maks lompong', lembut: true, hint: 'Seperti maks lompong sehari, tetapi waktu kosong selepas sesi terakhir turut dikira.' },
 
         slotHanya: { kat: 'Slot', nama: 'Hanya pada slot terpilih', slot: 'Slot dibenarkan', hint: 'Sesi yang dipilih hanya boleh diletak dalam slot yang ditanda. Cth: PJ waktu pagi sahaja.' },
         slotLarang: { kat: 'Slot', nama: 'Tidak boleh pada slot terpilih', slot: 'Slot dilarang', hint: 'Sesi yang dipilih tidak boleh menyentuh slot yang ditanda.' },
@@ -9791,6 +9803,14 @@ window.VJSolver = (function () {
         aBersebelahanB: { kat: 'Susunan A & B', nama: 'A mesti bersebelahan B (jika sehari)', ab: 'wajib', hint: 'Jika A dan B pada hari yang sama, sesi A mesti bersambung terus dengan sesi B.' }
     };
     const JENIS_DOMAIN = new Set(['slotHanya', 'slotLarang', 'tidakMula', 'tidakTamat']);
+
+    // Nilai hubungan bagi hari d. h.nilaiHari (jika diisi) menetapkan nilai berbeza setiap hari:
+    // nombor = nilai hari itu, null = tidak dikenakan pada hari itu, tiada entri = guna h.nilai.
+    function nilaiHari(h, d) {
+        const nh = h && h.nilaiHari;
+        if (!Array.isArray(nh) || !nh.length || nh[d] === undefined) return h ? h.nilai : 0;
+        return nh[d] === null ? null : nh[d];
+    }
 
     // Pemberat hubungan: ketat (wajib dipatuhi), optimum (diusahakan kuat), longgar (diusahakan jika mudah).
     // Jenis lembut tidak boleh dijamin, jadi "ketat" baginya = pemberat paling tinggi.
@@ -9820,7 +9840,8 @@ window.VJSolver = (function () {
     function padanHub(h, r, sisi) { return padanPilih(sisi === 'B' ? h.pilihB : h.pilih, r); }
 
     // Ukuran pelanggaran kekangan lembut daripada grid H×W (1 = ada sesi)
-    function ukurLembut(jenis, n, grid, H, W) {
+    // nh (pilihan): nilai setiap hari bagi jenis harian (lihat nilaiHari); null = hari itu tidak dikira
+    function ukurLembut(jenis, n0, grid, H, W, nh) {
         let jumlah = 0, lompongMinggu = 0, hariGuna = [];
         for (let d = 0; d < H; d++) {
             let bil = 0, awal = -1, akhir = -1;
@@ -9828,6 +9849,8 @@ window.VJSolver = (function () {
             hariGuna.push(bil > 0);
             const julat = bil ? akhir - awal + 1 : 0, lompong = julat - bil;
             lompongMinggu += lompong;
+            const n = nh ? nilaiHari({ nilai: n0, nilaiHari: nh }, d) : n0;
+            if (n === null) continue;
             if (jenis === 'minSehari') jumlah += Math.max(0, n - bil);
             else if (jenis === 'minSehariAda' && bil) jumlah += Math.max(0, n - bil);
             else if (jenis === 'minJulat' && bil) jumlah += Math.max(0, n - julat);
@@ -9835,6 +9858,7 @@ window.VJSolver = (function () {
             else if (jenis === 'maksLompongAwal' && bil) jumlah += Math.max(0, lompong + awal - n);
             else if (jenis === 'maksLompongAkhir' && bil) jumlah += Math.max(0, lompong + (W - 1 - akhir) - n);
         }
+        const n = n0;
         if (jenis === 'maksLompongMinggu') jumlah = Math.max(0, lompongMinggu - n);
         if (jenis === 'minHari') jumlah = Math.max(0, n - hariGuna.filter(Boolean).length);
         if (jenis === 'maksHariBerturut') {
@@ -10291,7 +10315,9 @@ window.VJSolver = (function () {
 
         // Hubungan keras: tambah unit yang mesti diusir jika u diletak di s
         function konflikHubungan(ri, u, s, set) {
-            const R = B.hubUnit[ri], J = R.h.jenis, n = R.h.nilai, T = units[u], d = Math.floor(s / W);
+            const R = B.hubUnit[ri], J = R.h.jenis, T = units[u], d = Math.floor(s / W);
+            const n = R.meta.harian ? nilaiHari(R.h, d) : R.h.nilai;
+            if (n === null) return;
             const akhirU = s + T.len - 1;
             const aU = R.inA[u] === 1, bU = R.inB[u] === 1;
             const hidup = x => x !== u && !set.has(x);
@@ -10412,7 +10438,7 @@ window.VJSolver = (function () {
             let c = 0;
             for (const ri of relU[u]) {
                 const R = B.hubUnit[ri];
-                if (relLembut[ri]) c += R.w * ukurLembut(R.h.jenis, R.h.nilai, gridHubungan(ri, u, s, set), H, W);
+                if (relLembut[ri]) c += R.w * ukurLembut(R.h.jenis, R.h.nilai, gridHubungan(ri, u, s, set), H, W, R.h.nilaiHari);
                 else if (relLonggar[ri]) c += R.w * langgarUnit(ri, u, s, set);
             }
             return c;
@@ -10421,7 +10447,7 @@ window.VJSolver = (function () {
         // Jumlah pelanggaran semasa bagi hubungan ri (semua unit yang telah diletak)
         function langgarHubungan(ri) {
             const R = B.hubUnit[ri];
-            if (R.meta.lembut) return ukurLembut(R.h.jenis, R.h.nilai, gridHubungan(ri, -1, 0, null), H, W);
+            if (R.meta.lembut) return ukurLembut(R.h.jenis, R.h.nilai, gridHubungan(ri, -1, 0, null), H, W, R.h.nilaiHari);
             let n = 0;
             for (const x of R.units) if (pos[x] >= 0) n += langgarUnit(ri, x, pos[x], null);
             return n;
@@ -11064,7 +11090,7 @@ window.VJSolver = (function () {
         }
     }
 
-    return { bina, susun, parsePecahan, pecahAuto, hurufLabel, JENIS_HUB, TAHAP_HUB, tahapHub, namaHub, padanHub, pilihKosong, ukurLembut };
+    return { bina, susun, parsePecahan, pecahAuto, hurufLabel, JENIS_HUB, TAHAP_HUB, tahapHub, namaHub, padanHub, pilihKosong, ukurLembut, nilaiHari };
 })();
     </script>
     <script>
@@ -12555,6 +12581,35 @@ window.VJSolver = (function () {
 
         // ---- Hubungan antara sesi ----
         let hubSlotDraf = new Set(), hubSlotDrafB = new Set();
+        let hubHariDraf = [];   // [{ on, v }] bagi setiap hari (jenis harian, "Tetapkan ikut hari")
+
+        function hubIkutHariTukar() {
+            const hari = VJStore.getSlot().hari;
+            if (hubHariDraf.length !== hari.length) {
+                const v = Math.max(0, parseInt(document.getElementById('hubNilai').value) || 0);
+                hubHariDraf = hari.map(() => ({ on: true, v }));
+            }
+            hubFormUpdate();
+        }
+
+        function hubRenderHari() {
+            const hari = VJStore.getSlot().hari;
+            const minV = /^min|Lompong/.test(document.getElementById('hubJenis').value) ? 0 : 1;
+            document.getElementById('hubHariGrid').innerHTML = hari.map((nama, d) => {
+                const x = hubHariDraf[d] || { on: false, v: minV };
+                return `<div class="flex items-center gap-1.5 bg-white border ${x.on ? 'border-brand-300' : 'border-slate-200 opacity-60'} rounded-lg px-2 py-1">
+                    <label class="inline-flex items-center gap-1 text-[11px] font-bold text-slate-700 cursor-pointer">
+                        <input type="checkbox" ${x.on ? 'checked' : ''} onchange="hubHariSet(${d}, 'on', this.checked)" class="w-3.5 h-3.5 accent-brand-600">${escapeHtml(nama)}</label>
+                    <input type="number" min="${minV}" max="50" value="${x.v}" ${x.on ? '' : 'disabled'} oninput="hubHariSet(${d}, 'v', this.value)" class="w-14 border border-slate-300 rounded-md px-1.5 py-0.5 text-xs">
+                </div>`;
+            }).join('');
+        }
+
+        function hubHariSet(d, k, v) {
+            if (!hubHariDraf[d]) return;
+            if (k === 'on') { hubHariDraf[d].on = !!v; hubRenderHari(); }
+            else hubHariDraf[d].v = Math.max(0, parseInt(v) || 0);
+        }
 
         function hubTogglePanel() {
             const box = document.getElementById('hubPanel');
@@ -12573,6 +12628,8 @@ window.VJSolver = (function () {
                 });
                 hubSlotDraf = new Set();
                 hubSlotDrafB = new Set();
+                hubHariDraf = [];
+                document.getElementById('hubIkutHari').checked = false;
                 hubJenisTukar();
                 hubRenderList();
             }
@@ -12608,6 +12665,8 @@ window.VJSolver = (function () {
                 pilih: { subjek: hubDipilih('hubSubjek'), guru: hubDipilih('hubGuru'), kelas: hubDipilih('hubKelas') },
                 pilihB: { subjek: hubDipilih('hubSubjekB'), guru: hubDipilih('hubGuruB'), kelas: hubDipilih('hubKelasB') },
                 nilai: parseInt(document.getElementById('hubNilai').value) || 0,
+                nilaiHari: ((VJSolver.JENIS_HUB[document.getElementById('hubJenis').value] || {}).harian && document.getElementById('hubIkutHari').checked)
+                    ? VJStore.getSlot().hari.map((_, d) => hubHariDraf[d] && hubHariDraf[d].on ? hubHariDraf[d].v : null) : [],
                 berat: document.getElementById('hubBerat').value,
                 slot: Array.from(hubSlotDraf),
                 slotB: Array.from(hubSlotDrafB)
@@ -12630,8 +12689,12 @@ window.VJSolver = (function () {
             const h = hubDraf();
             const m = VJSolver.JENIS_HUB[h.jenis] || {};
             const inp = VJStore.getSolverInput();
-            document.getElementById('hubNilaiBox').classList.toggle('hidden', !m.nilai);
+            const ikutHari = !!m.harian && document.getElementById('hubIkutHari').checked;
+            document.getElementById('hubNilaiBox').classList.toggle('hidden', !m.nilai || ikutHari);
             document.getElementById('hubNilaiLabel').innerText = m.nilai || '';
+            document.getElementById('hubHariBox').classList.toggle('hidden', !m.harian);
+            document.getElementById('hubHariGrid').classList.toggle('hidden', !ikutHari);
+            if (ikutHari) hubRenderHari();
             const beratEl = document.getElementById('hubBerat');
             beratEl.disabled = h.jenis === 'serentak';
             if (h.jenis === 'serentak') beratEl.value = 'ketat';
@@ -12693,7 +12756,10 @@ window.VJSolver = (function () {
             const adaB = m.ab && !VJSolver.pilihKosong(h.pilihB);
             bahagian.push((adaB ? 'A — ' : '') + ringkas(h.pilih));
             if (adaB) bahagian.push('B — ' + ringkas(h.pilihB));
-            if (m.nilai) bahagian.push(`${m.nilai}: ${h.nilai}`);
+            if (m.nilai && m.harian && (h.nilaiHari || []).length) {
+                const hari = inp.slot.hari;
+                bahagian.push(`${m.nilai}: ` + hari.map((nm, d) => { const v = VJSolver.nilaiHari(h, d); return v === null ? null : `${nm} ${v}`; }).filter(Boolean).join(', '));
+            } else if (m.nilai) bahagian.push(`${m.nilai}: ${h.nilai}`);
             if (m.slot) bahagian.push(`${h.slot.length} slot${m.slotB ? ' A, ' + h.slotB.length + ' slot B' : ''}`);
             return bahagian.join(' · ');
         }
@@ -12731,11 +12797,17 @@ window.VJSolver = (function () {
             if (m.ab === 'wajib' && VJSolver.pilihKosong(h.pilihB)) { showToast('Jenis ini memerlukan Kumpulan B.', 'warning'); return; }
             if (m.slot && !h.slot.length) { showToast('Tanda sekurang-kurangnya satu slot.', 'warning'); return; }
             if (m.slotB && !h.slotB.length) { showToast('Tanda sekurang-kurangnya satu slot B.', 'warning'); return; }
-            if (m.nilai && h.nilai < 1 && !/^min|Lompong/.test(h.jenis)) { showToast('Nilai mesti sekurang-kurangnya 1.', 'warning'); return; }
+            if (h.nilaiHari.length) {
+                if (h.nilaiHari.every(v => v === null)) { showToast('Tanda sekurang-kurangnya satu hari.', 'warning'); return; }
+                if (!/^min|Lompong/.test(h.jenis) && h.nilaiHari.some(v => v !== null && v < 1)) { showToast('Nilai setiap hari mesti sekurang-kurangnya 1.', 'warning'); return; }
+                const ada = h.nilaiHari.filter(v => v !== null);
+                h.nilai = h.jenis.startsWith('min') ? Math.min(...ada) : Math.max(...ada);
+            } else if (m.nilai && h.nilai < 1 && !/^min|Lompong/.test(h.jenis)) { showToast('Nilai mesti sekurang-kurangnya 1.', 'warning'); return; }
             if (!m.ab || VJSolver.pilihKosong(h.pilihB)) h.pilihB = { subjek: [], guru: [], kelas: [] };
             if (!m.slot) h.slot = [];
             if (!m.slotB) h.slotB = [];
             if (!m.nilai) h.nilai = 0;
+            if (!m.harian) h.nilaiHari = [];
             const n = hubAgihanSepadan(h, inp).length;
             if (!n) { showToast('Tiada agihan sepadan dengan pilihan ini.', 'warning'); return; }
             if (m.ab && !VJSolver.pilihKosong(h.pilihB) && !hubAgihanSepadan(h, inp, 'B').length) { showToast('Tiada agihan sepadan dengan Kumpulan B.', 'warning'); return; }

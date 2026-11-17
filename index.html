@@ -89,6 +89,8 @@ window.VJI18N = (function () {
 
     // ---------- helpers ----------
     function pl(n, w, ww) { n = +n; return n + ' ' + (n === 1 ? w : (ww || w + 's')); }
+    // "3 kelas + 2 guru" -> "3 classes + 2 teachers" (teks lain tidak diubah)
+    function skEn(t) { return String(t).replace(/(\d+) kelas\b/g, function (_, n) { return pl(n, 'class', 'classes'); }).replace(/(\d+) guru\b/g, function (_, n) { return pl(n, 'teacher', 'teachers'); }); }
 
     // ---------- exact dictionary (Malay -> English) ----------
     var D = {
@@ -352,6 +354,17 @@ window.VJI18N = (function () {
         "Tambah Hubungan": "Add Relation",
         "Tambah bilik": "Add room",
         "Tambah hubungan": "Add relation",
+        "Semua guru · tanda kotak untuk pilih": "All teachers · tick the box to select",
+        "Pilih guru ini untuk disusun (Shift + klik: pilih julat)": "Select this teacher to build (Shift + click: select a range)",
+        "Susun Automatik & Kosongkan hanya untuk pilihan ini; yang lain tidak diubah.": "Automatic Build & Clear apply only to this selection; everything else is unchanged.",
+        "· Susun Automatik & Kosongkan hanya untuk pilihan ini; yang lain tidak diubah.": "· Automatic Build & Clear apply only to this selection; everything else is unchanged.",
+        "Tandakan kotak kelas atau guru untuk susun kelas / guru tertentu sahaja (Shift + klik untuk pilih julat).": "Tick class or teacher boxes to build specific classes / teachers only (Shift + click to select a range).",
+        "· Tandakan kotak kelas atau guru untuk susun kelas / guru tertentu sahaja (": "· Tick class or teacher boxes to build specific classes / teachers only (",
+        "Tiada agihan bagi kelas / guru yang dipilih.": "No allocations for the selected classes / teachers.",
+        "Tiada sesi tidak berkunci bagi kelas / guru dipilih.": "No unlocked sessions for the selected classes / teachers.",
+        "Kosongkan jadual (kelas / guru dipilih sahaja jika ada)": "Clear timetable (selected classes / teachers only, if any)",
+        "Skop: semua kelas. Pilih kelas atau guru (tanda kotak, Shift + klik untuk julat) untuk menguji kelas / guru tertentu sahaja.": "Scope: all classes. Select classes or teachers (tick boxes, Shift + click for a range) to test specific classes / teachers only.",
+        "Klik nama untuk lihat jadual penuh. Seret sesi ke petak lain untuk alih (lepas atas sesi sama panjang untuk tukar tempat). Seret sesi ke kotak di bawah untuk keluarkan; seret dari kotak bawah ke jadual untuk letak. Klik petak sesi untuk kunci / buka kunci. Mod Blok Slot: klik / seret petak kosong untuk blok, klik petak berblok untuk buka. Tandakan kotak kelas atau guru untuk susun kelas / guru itu sahaja (Shift + klik untuk pilih julat).": "Click a name to see the full timetable. Drag a session to another cell to move it (drop on a session of the same length to swap). Drag a session to the box below to remove it; drag from the box below to the timetable to place it. Click a session cell to lock / unlock. Block Slot mode: click / drag empty cells to block, click a blocked cell to open it. Tick a class or teacher box to build that class / teacher only (Shift + click to select a range).",
         "Tetapkan ikut hari": "Set per day",
         "Pilih hari yang dikenakan dan nilai bagi setiap hari. Hari tidak ditanda tidak dikenakan.": "Choose the days it applies to and the value for each day. Unticked days are not constrained.",
         "Tanda sekurang-kurangnya satu hari.": "Tick at least one day.",
@@ -932,6 +945,16 @@ window.VJI18N = (function () {
     var P = [
         [/^(\d+) Kelas Dipilih$/i, function (m) { return pl(m[1], 'class', 'classes') + ' selected'; }],
         [/^(\d+) kelas dipilih$/i, function (m) { return pl(m[1], 'class', 'classes') + ' selected'; }],
+        [/^(\d+ (?:kelas|guru)(?: \+ \d+ guru)?) dipilih$/, function (m) { return skEn(m[1]) + ' selected'; }],
+        [/^Susun 1 guru sahaja: (.*)$/, function (m) { return 'Building 1 teacher only: ' + m[1]; }],
+        [/^Susun (\d+ (?:kelas|guru)(?: \+ \d+ guru)?)$/, function (m) { return 'Build ' + skEn(m[1]); }],
+        [/^Mula Susun (\d+ (?:kelas|guru)(?: \+ \d+ guru)?)$/, function (m) { return 'Start Building ' + skEn(m[1]); }],
+        [/^(\d+ (?:kelas|guru)(?: \+ \d+ guru)?) disusun: semua (\d+) sesi diletak \(([\d.]+) s\)\.$/, function (m) { return skEn(m[1]) + ' built: all ' + m[2] + ' sessions placed (' + m[3] + ' s).'; }],
+        [/^(\d+ (?:kelas|guru)(?: \+ \d+ guru)?) disusun: (\d+)\/(\d+) sesi diletak — lihat senarai di bawah jadual\.$/, function (m) { return skEn(m[1]) + ' built: ' + m[2] + '/' + m[3] + ' sessions placed — see the list below the timetable.'; }],
+        [/^Skop: (\d+ (?:kelas|guru)(?: \+ \d+ guru)?) dipilih \(yang lain tidak diubah\)$/, function (m) { return 'Scope: ' + skEn(m[1]) + ' selected (others unchanged)'; }],
+        [/^Skop: (\d+ (?:kelas|guru)(?: \+ \d+ guru)?) dipilih \((.*)\)\. Tutup panel & ubah tanda kotak kelas \/ guru \(Shift \+ klik = julat\) untuk menukar skop\.$/, function (m) { return 'Scope: ' + skEn(m[1]) + ' selected (' + m[2] + '). Close the panel & change the class / teacher checkboxes (Shift + click = range) to change the scope.'; }],
+        [/^Kosongkan jadual (\d+ (?:kelas|guru)(?: \+ \d+ guru)?) dipilih\? (\d+) sesi akan dibuang\. Sesi lain tidak diubah\.$/, function (m) { return 'Clear the timetable of the ' + skEn(m[1]) + ' selected? ' + pl(m[2], 'session') + ' will be removed. Other sessions are unchanged.'; }],
+        [/^Susun semula (.*)\? Sesi tidak berkunci bagi pilihan ini akan disusun semula\. Sesi lain tidak diubah\.(.*)$/, function (m) { return 'Rebuild ' + skEn(m[1]) + '? Unlocked sessions of this selection will be rearranged. Other sessions are unchanged.' + tr(m[2]); }],
         [/^(\d+) Waktu$/, function (m) { return pl(m[1], 'period'); }],
         [/^(\d+) waktu$/, function (m) { return pl(m[1], 'period'); }],
         [/^(\d+) Waktu \((\d+) sesi\)$/, function (m) { return pl(m[1], 'period') + ' (' + pl(m[2], 'session') + ')'; }],
@@ -4808,11 +4831,11 @@ window.VJSampleData = function () {
                             <div class="flex items-center gap-1">
                                 <button onclick="hubTogglePanel()" class="relative p-1.5 border border-slate-200 bg-white hover:bg-slate-100 rounded-lg text-slate-700" title="Hubungan antara sesi" aria-label="Hubungan"><i data-lucide="link-2" class="w-4 h-4"></i><span id="hubCount" class="absolute -top-1 -right-1 text-[9px] min-w-[14px] text-center px-1 rounded-full bg-brand-600 text-white empty:hidden"></span></button>
                                 <button onclick="jdlRumusanBuka(false)" class="p-1.5 border border-slate-200 bg-white hover:bg-slate-100 rounded-lg text-slate-700" title="Rumusan kualiti jadual: sesi tidak muat, hubungan, lompong, beban guru" aria-label="Rumusan"><i data-lucide="clipboard-check" class="w-4 h-4"></i></button>
-                                <button onclick="jdlKosongkan()" class="p-1.5 border border-rose-200 bg-rose-50 hover:bg-rose-100 rounded-lg text-rose-700" title="Kosongkan jadual (kelas dipilih sahaja jika ada)" aria-label="Kosongkan"><i data-lucide="eraser" class="w-4 h-4"></i></button>
+                                <button onclick="jdlKosongkan()" class="p-1.5 border border-rose-200 bg-rose-50 hover:bg-rose-100 rounded-lg text-rose-700" title="Kosongkan jadual (kelas / guru dipilih sahaja jika ada)" aria-label="Kosongkan"><i data-lucide="eraser" class="w-4 h-4"></i></button>
                                 <button id="jdlBtnSusun" onclick="jdlUjianBuka()" class="px-2.5 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-[11px] font-bold shadow flex items-center gap-1.5" title="Susun jadual / Mod Ujian"><i data-lucide="wand-sparkles" class="w-4 h-4"></i> <span id="jdlBtnSusunTeks">Susun</span></button>
                             </div>
                             <button id="jdlBtnFokus" onclick="jdlFokus()" class="px-2.5 py-1 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-[11px] font-bold flex items-center gap-1" title="Paparkan jadual memenuhi skrin (tekan F atau Esc untuk keluar)"><i data-lucide="maximize" class="w-3 h-3"></i> <span id="jdlBtnFokusTeks">Fokus</span></button>
-                            <span class="text-slate-400 cursor-help" title="Klik nama untuk lihat jadual penuh.&#10;Seret sesi ke petak lain untuk alih (lepas atas sesi sama panjang untuk tukar tempat).&#10;Seret sesi ke kotak di bawah untuk keluarkan; seret dari kotak bawah ke jadual untuk letak.&#10;Klik petak sesi untuk kunci / buka kunci.&#10;Mod Blok Slot: klik / seret petak kosong untuk blok, klik petak berblok untuk buka.&#10;Tandakan kotak kelas untuk susun kelas itu sahaja (Shift + klik untuk pilih julat)."><i data-lucide="circle-help" class="w-4 h-4"></i></span>
+                            <span class="text-slate-400 cursor-help" title="Klik nama untuk lihat jadual penuh.&#10;Seret sesi ke petak lain untuk alih (lepas atas sesi sama panjang untuk tukar tempat).&#10;Seret sesi ke kotak di bawah untuk keluarkan; seret dari kotak bawah ke jadual untuk letak.&#10;Klik petak sesi untuk kunci / buka kunci.&#10;Mod Blok Slot: klik / seret petak kosong untuk blok, klik petak berblok untuk buka.&#10;Tandakan kotak kelas atau guru untuk susun kelas / guru itu sahaja (Shift + klik untuk pilih julat)."><i data-lucide="circle-help" class="w-4 h-4"></i></span>
                         </div>
                         <div id="jdlGridWrap" class="overflow-auto max-h-[calc(100vh-330px)] min-h-[220px] border border-slate-200">
                             <table id="jdlSemuaGrid" class="text-[10px] border-separate border-spacing-0"></table>
@@ -11104,25 +11127,39 @@ window.VJSolver = (function () {
         const jdlPilihan = new Set(); // kelas dipilih untuk disusun / dikosongkan sahaja
         let jdlPilihSusunan = [];     // susunan id kelas seperti dipapar (untuk Shift + klik)
         let jdlPilihSauh = null;      // kelas terakhir diklik
+        const jdlPilihanGuru = new Set(); // guru dipilih untuk disusun / dikosongkan sahaja
+        let jdlPilihSauhGuru = null;  // guru terakhir diklik
+        const jdlNPilih = () => jdlPilihan.size + jdlPilihanGuru.size;
+        // Teks skop: "3 kelas", "2 guru" atau "3 kelas + 2 guru"
+        const jdlSkopTeks = () => [jdlPilihan.size ? jdlPilihan.size + ' kelas' : '', jdlPilihanGuru.size ? jdlPilihanGuru.size + ' guru' : ''].filter(Boolean).join(' + ');
+        // Nama kelas & guru dipilih (untuk paparan)
+        function jdlNamaPilih(inp) {
+            return inp.kelas.filter(k => jdlPilihan.has(k[0])).map(k => k[1])
+                .concat(inp.guru.filter(g => jdlPilihanGuru.has(String(g[0]))).map(g => g[1]));
+        }
         let jdlAlat = 'alih';         // 'alih' (seret/kunci sesi) atau 'blok' (blok slot)
         let jdlBlokLabel = null;
         function jdlSetAlat(a) { jdlAlat = a; renderJadualView(); }
 
+        // Tanda kotak kelas (paparan Kelas) atau guru (paparan Guru); Shift + klik = julat
         function jdlTandaKelas(ev, id) {
             ev.stopPropagation();
             const on = ev.target.checked;
-            const i = jdlPilihSusunan.indexOf(id), j = jdlPilihSusunan.indexOf(jdlPilihSauh);
+            const guru = jdlMode === 'guru';
+            const set = guru ? jdlPilihanGuru : jdlPilihan;
+            const sauh = guru ? jdlPilihSauhGuru : jdlPilihSauh;
+            const i = jdlPilihSusunan.indexOf(id), j = jdlPilihSusunan.indexOf(sauh);
             if (ev.shiftKey && i >= 0 && j >= 0) {
-                for (let k = Math.min(i, j); k <= Math.max(i, j); k++) on ? jdlPilihan.add(jdlPilihSusunan[k]) : jdlPilihan.delete(jdlPilihSusunan[k]);
+                for (let k = Math.min(i, j); k <= Math.max(i, j); k++) on ? set.add(jdlPilihSusunan[k]) : set.delete(jdlPilihSusunan[k]);
             } else {
-                on ? jdlPilihan.add(id) : jdlPilihan.delete(id);
+                on ? set.add(id) : set.delete(id);
             }
-            jdlPilihSauh = id;
+            if (guru) jdlPilihSauhGuru = id; else jdlPilihSauh = id;
             renderJadualView();
         }
-        function jdlPilihKosong() { jdlPilihan.clear(); jdlPilihSauh = null; renderJadualView(); }
-        // Adakah transaksi t melibatkan mana-mana kelas dipilih
-        const jdlTrxDipilih = t => String(t[3]).split(',').some(k => jdlPilihan.has(k.trim()));
+        function jdlPilihKosong() { jdlPilihan.clear(); jdlPilihanGuru.clear(); jdlPilihSauh = null; jdlPilihSauhGuru = null; renderJadualView(); }
+        // Adakah transaksi t melibatkan mana-mana kelas atau guru dipilih
+        const jdlTrxDipilih = t => String(t[3]).split(',').some(k => jdlPilihan.has(k.trim())) || jdlPilihanGuru.has(String(t[1] || ''));
 
         // Pilihan penyusunan dari kotak semak di bar atas
         const JDL_TAHAP = {
@@ -11300,10 +11337,11 @@ window.VJSolver = (function () {
                 // Waktu terakhir bersesi setiap hari (kelas): slot kosong sebelum itu ditanda merah
                 const akhirHari = [];
                 for (let d = 0; d < H; d++) { let z = -1; for (let p = 0; p < W; p++) if (g[d * W + p].length) z = p; akhirHari.push(z); }
-                const dipilih = isKelas && jdlPilihan.has(id);
+                const isGuru = jdlMode === 'guru';
+                const dipilih = isKelas ? jdlPilihan.has(id) : isGuru && jdlPilihanGuru.has(String(id));
                 html += `<tr class="${dipilih ? 'jdl-dipilih' : ''}"><th class="${stickyTh} ${dipilih ? '!bg-brand-50' : ''} px-2 py-0.5 text-left border-b border-slate-200 whitespace-nowrap">
                     <div class="flex items-center gap-1.5">
-                    ${isKelas ? `<input type="checkbox" ${dipilih ? 'checked' : ''} onclick="jdlTandaKelas(event, '${escapeHtml(id)}')" class="w-3.5 h-3.5 accent-brand-600 cursor-pointer shrink-0" title="Pilih kelas ini untuk disusun (Shift + klik: pilih julat)">` : ''}
+                    ${isKelas || isGuru ? `<input type="checkbox" ${dipilih ? 'checked' : ''} onclick="jdlTandaKelas(event, '${escapeHtml(id)}')" class="w-3.5 h-3.5 accent-brand-600 cursor-pointer shrink-0" title="${isKelas ? 'Pilih kelas ini untuk disusun (Shift + klik: pilih julat)' : 'Pilih guru ini untuk disusun (Shift + klik: pilih julat)'}">` : ''}
                     <div class="min-w-0"><button onclick="jdlPilih('${escapeHtml(id)}')" class="text-[11px] font-bold text-slate-800 hover:text-brand-700 hover:underline max-w-[140px] truncate block" title="${escapeHtml(item[1])} — buka jadual penuh">${escapeHtml(item[1])}</button>
                     <span class="text-[9px] font-bold ${isBilik ? 'text-slate-500' : warnaBil}">${isBilik ? a + ' waktu' : a + '/' + b}</span></div></div></th>`;
                 for (let d = 0; d < H; d++) {
@@ -11407,21 +11445,24 @@ window.VJSolver = (function () {
             // Buang pilihan kelas yang sudah tiada
             const idKelas = new Set(inp.kelas.map(k => k[0]));
             [...jdlPilihan].forEach(id => { if (!idKelas.has(id)) jdlPilihan.delete(id); });
-            if (jdlMode === 'kelas') jdlPilihSusunan = items.map(x => x[0]);
-            const nPilih = jdlPilihan.size;
+            const idGuru = new Set(inp.guru.map(g => String(g[0])));
+            [...jdlPilihanGuru].forEach(id => { if (!idGuru.has(id)) jdlPilihanGuru.delete(id); });
+            if (jdlMode === 'kelas' || jdlMode === 'guru') jdlPilihSusunan = items.map(x => String(x[0]));
+            const nPilih = jdlNPilih();
             const bar = document.getElementById('jdlPilihBar');
             bar.className = 'flex items-center gap-1.5 text-[11px] px-2 py-0.5 rounded-lg border ' +
                 (nPilih ? 'bg-brand-50 border-brand-200 text-brand-800' : 'border-transparent text-slate-400');
-            bar.title = nPilih ? 'Susun Automatik & Kosongkan hanya untuk kelas ini; kelas lain tidak diubah.' : 'Tandakan kotak kelas untuk susun kelas tertentu sahaja (Shift + klik untuk pilih julat).';
-            bar.classList.toggle('hidden', jdlMode !== 'kelas' && !nPilih);
+            bar.title = nPilih ? 'Susun Automatik & Kosongkan hanya untuk pilihan ini; yang lain tidak diubah.' : 'Tandakan kotak kelas atau guru untuk susun kelas / guru tertentu sahaja (Shift + klik untuk pilih julat).';
+            bar.classList.toggle('hidden', jdlMode === 'bilik' && !nPilih);
             document.getElementById('jdlPilihBatal').classList.toggle('hidden', !nPilih);
-            document.getElementById('jdlPilihTeks').innerText = !nPilih ? 'Semua kelas · tanda kotak untuk pilih'
-                : nPilih === 1 ? `Susun 1 kelas sahaja: ${(inp.kelas.find(k => jdlPilihan.has(k[0])) || [])[1] || ''}`
-                : `${nPilih} kelas dipilih`;
+            const nama1 = nPilih === 1 ? jdlNamaPilih(inp)[0] || '' : '';
+            document.getElementById('jdlPilihTeks').innerText = !nPilih ? (jdlMode === 'guru' ? 'Semua guru · tanda kotak untuk pilih' : 'Semua kelas · tanda kotak untuk pilih')
+                : nPilih === 1 ? `Susun 1 ${jdlPilihan.size ? 'kelas' : 'guru'} sahaja: ${nama1}`
+                : `${jdlSkopTeks()} dipilih`;
             document.getElementById('jdlPilihNota').innerHTML = nPilih
-                ? '· Susun Automatik &amp; Kosongkan hanya untuk kelas ini; kelas lain tidak diubah.'
-                : '· Tandakan kotak kelas untuk susun kelas tertentu sahaja (<strong>Shift + klik</strong> untuk pilih julat).';
-            document.getElementById('jdlBtnSusunTeks').innerText = nPilih ? `Susun ${nPilih} Kelas` : 'Susun';
+                ? '· Susun Automatik &amp; Kosongkan hanya untuk pilihan ini; yang lain tidak diubah.'
+                : '· Tandakan kotak kelas atau guru untuk susun kelas / guru tertentu sahaja (<strong>Shift + klik</strong> untuk pilih julat).';
+            document.getElementById('jdlBtnSusunTeks').innerText = nPilih ? `Susun ${jdlSkopTeks()}` : 'Susun';
             ['alih', 'blok'].forEach(a => {
                 document.getElementById(a === 'alih' ? 'jdlAlatAlih' : 'jdlAlatBlok').className = 'px-2.5 py-1 rounded-md transition flex items-center gap-1 ' +
                     (jdlAlat === a ? (a === 'blok' ? 'bg-rose-600 text-white shadow-sm' : 'bg-white text-slate-800 shadow-sm') : 'text-slate-500 hover:text-slate-800');
@@ -11516,7 +11557,7 @@ window.VJSolver = (function () {
             document.getElementById('jdlIsu').innerHTML = isuHtml.join('');
             // Tray: sesi belum diletak (ditapis ikut kelas dipilih)
             const idBaris = T => jdlMode === 'guru' ? T.guru.map(g => B.guru[g].id) : jdlMode === 'bilik' ? [] : T.kelas.map(k => B.kelas[k].id);
-            const trayUnits = belum.filter(T => !jdlPilihan.size || T.kelas.some(k => jdlPilihan.has(B.kelas[k].id)));
+            const trayUnits = belum.filter(T => !jdlNPilih() || T.kelas.some(k => jdlPilihan.has(B.kelas[k].id)) || T.guru.some(g => jdlPilihanGuru.has(String(B.guru[g].id))));
             document.getElementById('jdlTrayBil').innerText = trayUnits.length + (trayUnits.length !== belum.length ? ' / ' + belum.length : '');
             document.getElementById('jdlTrayList').innerHTML = trayUnits.length ? trayUnits.map(T => {
                 const r0 = T.ahliRows[0];
@@ -11700,18 +11741,18 @@ window.VJSolver = (function () {
             const inp = VJStore.getSolverInput();
             if (!inp.transaksi.length) { showToast('Tiada agihan untuk dijadualkan.', 'warning'); return; }
             // Mod kelas dipilih: hanya agihan kelas dipilih disusun; sesi lain dikunci sementara & dipulihkan selepas itu
-            const separa = jdlPilihan.size > 0;
+            const separa = jdlNPilih() > 0;
             const asal = inp.jadual.sesi.slice();
             const trxDipilih = new Set();
             if (separa) {
                 inp.transaksi.forEach(t => { if (jdlTrxDipilih(t)) trxDipilih.add(String(t[8])); });
-                if (!trxDipilih.size) { showToast('Tiada agihan bagi kelas yang dipilih.', 'warning'); return; }
+                if (!trxDipilih.size) { showToast('Tiada agihan bagi kelas / guru yang dipilih.', 'warning'); return; }
                 const adaSesi = new Set(asal.map(x => x.uuid));
                 inp.transaksi = inp.transaksi.filter(t => trxDipilih.has(String(t[8])) || adaSesi.has(String(t[8])));
                 inp.jadual = Object.assign({}, inp.jadual, { sesi: asal.map(x => trxDipilih.has(x.uuid) ? x : Object.assign({}, x, { kunci: true })) });
-                const nama = inp.kelas.filter(k => jdlPilihan.has(k[0])).map(k => k[1]);
-                const kongsi = inp.transaksi.filter(t => trxDipilih.has(String(t[8])) && String(t[3]).split(',').some(k => !jdlPilihan.has(k.trim()))).length;
-                if (asal.some(x => trxDipilih.has(x.uuid) && !x.kunci) && !confirm(`Susun semula ${nama.length > 3 ? nama.length + ' kelas' : nama.join(', ')}? Sesi tidak berkunci bagi kelas ini akan disusun semula. Kelas lain tidak diubah.${kongsi ? `\n\n${kongsi} agihan dikongsi dengan kelas lain (gabung) turut akan dialih.` : ''}`)) return;
+                const nama = jdlNamaPilih(inp);
+                const kongsi = jdlPilihanGuru.size ? 0 : inp.transaksi.filter(t => trxDipilih.has(String(t[8])) && String(t[3]).split(',').some(k => !jdlPilihan.has(k.trim()))).length;
+                if (asal.some(x => trxDipilih.has(x.uuid) && !x.kunci) && !confirm(`Susun semula ${nama.length > 3 ? jdlSkopTeks() : nama.join(', ')}? Sesi tidak berkunci bagi pilihan ini akan disusun semula. Sesi lain tidak diubah.${kongsi ? `\n\n${kongsi} agihan dikongsi dengan kelas lain (gabung) turut akan dialih.` : ''}`)) return;
             } else if (inp.jadual.sesi.some(x => !x.kunci) && !confirm('Susun semula jadual? Semua sesi yang tidak dikunci akan disusun semula.')) return;
             jdlSedang = true;
             const btn = document.getElementById('jdlBtnSusun');
@@ -11751,8 +11792,8 @@ window.VJSolver = (function () {
                     const muat = [...perlu].filter(u => u.ahli.every(id => ada.has(id + '#' + u.ke))).length;
                     jdlTidakMuat = res.tidakMuat;
                     jdlRumusanSimpan(res, isyarat, true);
-                    showToast(muat === perlu.size ? `${jdlPilihan.size} kelas disusun: semua ${perlu.size} sesi diletak (${(res.stat.ms / 1000).toFixed(1)} s).`
-                        : `${jdlPilihan.size} kelas disusun: ${muat}/${perlu.size} sesi diletak — lihat senarai di bawah jadual.`, muat === perlu.size ? 'success' : 'warning', 6000);
+                    showToast(muat === perlu.size ? `${jdlSkopTeks()} disusun: semua ${perlu.size} sesi diletak (${(res.stat.ms / 1000).toFixed(1)} s).`
+                        : `${jdlSkopTeks()} disusun: ${muat}/${perlu.size} sesi diletak — lihat senarai di bawah jadual.`, muat === perlu.size ? 'success' : 'warning', 6000);
                     return;
                 }
                 VJStore.setJadual({ dijana: new Date().toISOString(), sesi: res.sesi });
@@ -11836,9 +11877,9 @@ window.VJSolver = (function () {
             const p = document.getElementById('jdlUjianPanel');
             p.classList.remove('hidden'); p.classList.add('flex');
             jdlUjian.hasil = {};
-            const n = jdlPilihan.size;
-            document.getElementById('jdlSusunSkop').textContent = n ? `Skop: ${n} kelas dipilih (kelas lain tidak diubah)` : 'Skop: semua kelas';
-            document.getElementById('jdlSusunMulaTeks').textContent = n ? `Mula Susun ${n} Kelas` : 'Mula Susun';
+            const n = jdlNPilih();
+            document.getElementById('jdlSusunSkop').textContent = n ? `Skop: ${jdlSkopTeks()} dipilih (yang lain tidak diubah)` : 'Skop: semua kelas';
+            document.getElementById('jdlSusunMulaTeks').textContent = n ? `Mula Susun ${jdlSkopTeks()}` : 'Mula Susun';
             jdlSetTahap(jdlTahap);
             jdlUjianRender();
             if (window.lucide) lucide.createIcons();
@@ -11864,20 +11905,26 @@ window.VJSolver = (function () {
         }
 
         // Skop ujian: kelas yang dipilih (Shift/Ctrl + tanda kotak) atau semua kelas
+        // Set indeks kelas dalam skop (kelas dipilih + kelas yang diajar guru dipilih);
+        // .pilihK / .pilihG = indeks kelas & guru yang benar-benar dipilih
         function jdlUjianSkop(B) {
-            if (!jdlPilihan.size) return null;
-            const s = new Set();
-            B.kelas.forEach((k, i) => { if (jdlPilihan.has(k.id)) s.add(i); });
-            return s.size ? s : null;
+            if (!jdlNPilih()) return null;
+            const s = new Set(), pilihK = new Set(), pilihG = new Set();
+            B.kelas.forEach((k, i) => { if (jdlPilihan.has(k.id)) { s.add(i); pilihK.add(i); } });
+            B.guru.forEach((g, i) => { if (jdlPilihanGuru.has(String(g.id))) pilihG.add(i); });
+            B.units.forEach(u => { if (u.guru.some(g => pilihG.has(g))) u.kelas.forEach(k => s.add(k)); });
+            if (!pilihK.size && !pilihG.size) return null;
+            s.pilihK = pilihK; s.pilihG = pilihG;
+            return s;
         }
-        const jdlUjianDalam = (u, skop) => !skop || u.kelas.some(k => skop.has(k));
+        const jdlUjianDalam = (u, skop) => !skop || u.kelas.some(k => skop.pilihK.has(k)) || u.guru.some(g => skop.pilihG.has(g));
 
         function jdlUjianRender() {
             const lbl = document.getElementById('jdlUjianSkop');
             if (lbl) {
-                const nama = (VJStore.getSolverInput().kelas || []).filter(k => jdlPilihan.has(k[0])).map(k => k[1]);
-                lbl.textContent = nama.length ? `Skop: ${nama.length} kelas dipilih (${nama.length > 8 ? nama.slice(0, 8).join(', ') + '…' : nama.join(', ')}). Tutup panel & ubah tanda kotak kelas (Shift + klik = julat) untuk menukar skop.`
-                    : 'Skop: semua kelas. Pilih kelas (tanda kotak, Shift + klik untuk julat) untuk menguji kelas tertentu sahaja.';
+                const nama = jdlNamaPilih(VJStore.getSolverInput());
+                lbl.textContent = nama.length ? `Skop: ${jdlSkopTeks()} dipilih (${nama.length > 8 ? nama.slice(0, 8).join(', ') + '…' : nama.join(', ')}). Tutup panel & ubah tanda kotak kelas / guru (Shift + klik = julat) untuk menukar skop.`
+                    : 'Skop: semua kelas. Pilih kelas atau guru (tanda kotak, Shift + klik untuk julat) untuk menguji kelas / guru tertentu sahaja.';
             }
             const wrap = document.getElementById('jdlUjianLangkah');
             wrap.innerHTML = JDL_UJIAN_LANGKAH.map(l => {
@@ -11952,7 +11999,8 @@ window.VJSolver = (function () {
             let isu = B.isu, tersembunyi = 0;
             if (skop) {
                 const sebut = nama => ({ test: t => { const al = c => /[A-Za-z0-9]/.test(c || ''); let i = t.indexOf(nama); while (i >= 0) { if (!al(t[i - 1]) && !al(t[i + nama.length])) return true; i = t.indexOf(nama, i + 1); } return false; } });
-                const semua = B.kelas.map(k => ({ i: k.id, re: sebut(k.nama), dipilih: jdlPilihan.has(k.id) }));
+                const semua = B.kelas.map((k, i) => ({ i: k.id, re: sebut(k.nama), dipilih: skop.has(i) }))
+                    .concat(B.guru.map(g => ({ i: g.id, re: sebut(g.nama), dipilih: jdlPilihanGuru.has(String(g.id)) })));
                 isu = B.isu.filter(x => {
                     const kena = semua.filter(c => c.re.test(x.teks));
                     return !kena.length || kena.some(c => c.dipilih);
@@ -12049,7 +12097,7 @@ window.VJSolver = (function () {
             const bK = mk(kelasP, B.kelas), bG = mk(guruP, B.guru);
             const gagal = diletak < unitSkop.length;
             const tm = (res.tidakMuat || []).slice(0, 15).map(t => `<li>✖ ${escapeHtml(t.desc)} (${t.len}w) — ${escapeHtml(t.sebab)}</li>`).join('');
-            const html = `<p class="text-[11px] mt-2 ${gagal ? 'text-rose-700' : 'text-emerald-700'} font-bold">${diletak} / ${unitSkop.length} sesi${skop ? ' (kelas dipilih)' : ''} berjaya diletak (${((res.stat.ms || 0) / 1000).toFixed(1)} s).</p>`
+            const html = `<p class="text-[11px] mt-2 ${gagal ? 'text-rose-700' : 'text-emerald-700'} font-bold">${diletak} / ${unitSkop.length} sesi${skop ? ' (pilihan)' : ''} berjaya diletak (${((res.stat.ms || 0) / 1000).toFixed(1)} s).</p>`
                 + (gagal ? '<p class="text-[11px] text-amber-700 mt-1">Belum tentu mustahil: penyusun hanya mencari dalam 10 saat. Cuba naikkan had masa / bilangan teras, longgarkan Hubungan, atau semak sebab di bawah dan jalankan semula.</p>' : '')
                 + (tm ? `<ul class="mt-1 text-[11px] text-rose-700 space-y-0.5 list-none max-h-32 overflow-auto">${tm}</ul>` : '')
                 + jdlUjianJadual('Jana — kelas (perlu vs diletak)', ['Kelas', 'Perlu', 'Diletak'], bK)
@@ -12131,7 +12179,7 @@ window.VJSolver = (function () {
             const ikon = { gagal: '✖', amaran: '⚠', info: 'ℹ' }, warna = { gagal: 'border-rose-200 bg-rose-50', amaran: 'border-amber-200 bg-amber-50', info: 'border-slate-200 bg-white' };
             const tarikh = new Date(R.tarikh).toLocaleString(VJI18N.locale());
             el.innerHTML = `<div class="rounded-xl px-3 py-2 text-xs font-bold ${kepala[0]}">${kepala[1]}</div>
-                <p class="text-[11px] text-slate-500">${R.semasa ? 'Analisis jadual semasa' : 'Hasil susunan'} · ${escapeHtml(tarikh)}${R.skop ? ' · kelas dipilih: ' + escapeHtml(R.skop) : ''}${S.unit ? ` · ${S.diletak}/${S.unit} sesi diletak` : ''}</p>
+                <p class="text-[11px] text-slate-500">${R.semasa ? 'Analisis jadual semasa' : 'Hasil susunan'} · ${escapeHtml(tarikh)}${R.skop ? ' · dipilih: ' + escapeHtml(R.skop) : ''}${S.unit ? ` · ${S.diletak}/${S.unit} sesi diletak` : ''}</p>
                 ${S.butir.map(b => `<div class="border rounded-xl p-3 ${warna[b.jenis]}">
                     <p class="text-xs font-bold text-slate-800">${ikon[b.jenis]} ${escapeHtml(b.tajuk)}</p>
                     ${b.teks ? `<p class="text-[11px] text-slate-600 mt-1 whitespace-pre-line">${escapeHtml(b.teks)}</p>` : ''}
@@ -12162,7 +12210,7 @@ window.VJSolver = (function () {
             if (jdlRumusanTerakhir && jdlRumusanTerakhir.semasa) jdlRumusanTerakhir = null;
         }
         function jdlRumusanSimpan(res, isyarat, separa) {
-            const nama = separa ? VJStore.getSolverInput().kelas.filter(k => jdlPilihan.has(k[0])).map(k => k[1]) : [];
+            const nama = separa ? jdlNamaPilih(VJStore.getSolverInput()) : [];
             jdlRumusanTerakhir = { res, tarikh: Date.now(), henti: !!(isyarat && isyarat.henti), semasa: false,
                 skop: nama.length ? (nama.length > 8 ? nama.slice(0, 8).join(', ') + '…' : nama.join(', ')) : '' };
             const S = jdlRumusanBina(jdlRumusanTerakhir);
@@ -12174,11 +12222,11 @@ window.VJSolver = (function () {
             if (!isEditMode) { ensureEditMode(() => jdlKosongkan()); return; }
             const j = VJStore.getJadual();
             if (!j.sesi.length) return;
-            if (jdlPilihan.size) {
+            if (jdlNPilih()) {
                 const trxDipilih = new Set(VJStore.getSolverInput().transaksi.filter(jdlTrxDipilih).map(t => String(t[8])));
                 const buang = j.sesi.filter(x => trxDipilih.has(x.uuid) && !x.kunci);
-                if (!buang.length) { showToast('Tiada sesi tidak berkunci bagi kelas dipilih.', 'info'); return; }
-                if (!confirm(`Kosongkan jadual ${jdlPilihan.size} kelas dipilih? ${buang.length} sesi akan dibuang. Kelas lain tidak diubah.`)) return;
+                if (!buang.length) { showToast('Tiada sesi tidak berkunci bagi kelas / guru dipilih.', 'info'); return; }
+                if (!confirm(`Kosongkan jadual ${jdlSkopTeks()} dipilih? ${buang.length} sesi akan dibuang. Sesi lain tidak diubah.`)) return;
                 VJStore.setJadual({ dijana: j.dijana, sesi: j.sesi.filter(x => !buang.includes(x)) });
                 renderJadualView();
                 return;

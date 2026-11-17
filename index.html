@@ -366,6 +366,34 @@ window.VJI18N = (function () {
         "Skop: semua kelas. Pilih kelas atau guru (tanda kotak, Shift + klik untuk julat) untuk menguji kelas / guru tertentu sahaja.": "Scope: all classes. Select classes or teachers (tick boxes, Shift + click for a range) to test specific classes / teachers only.",
         "Klik nama untuk lihat jadual penuh. Seret sesi ke petak lain untuk alih (lepas atas sesi sama panjang untuk tukar tempat). Seret sesi ke kotak di bawah untuk keluarkan; seret dari kotak bawah ke jadual untuk letak. Klik petak sesi untuk kunci / buka kunci. Mod Blok Slot: klik / seret petak kosong untuk blok, klik petak berblok untuk buka. Tandakan kotak kelas atau guru untuk susun kelas / guru itu sahaja (Shift + klik untuk pilih julat).": "Click a name to see the full timetable. Drag a session to another cell to move it (drop on a session of the same length to swap). Drag a session to the box below to remove it; drag from the box below to the timetable to place it. Click a session cell to lock / unlock. Block Slot mode: click / drag empty cells to block, click a blocked cell to open it. Tick a class or teacher box to build that class / teacher only (Shift + click to select a range).",
         "Tetapkan ikut hari": "Set per day",
+        "Hubungan Sesi": "Session Relations",
+        "Kekangan tambahan untuk penyusun jadual automatik, cth: maks waktu berturut setiap guru, subjek tidak sama hari.": "Extra constraints for the automatic timetable builder, e.g. max consecutive periods per teacher, subjects not on the same day.",
+        "Hubungan disalin.": "Relation copied.",
+        'Klik "Tambah Hubungan" untuk mula.': 'Click "Add Relation" to start.',
+        "Edit hubungan": "Edit relation",
+        "Simpan Perubahan": "Save Changes",
+        "Batal edit": "Cancel edit",
+        "Jenis hubungan": "Card relationship type",
+        "Dikenakan kepada": "Apply to",
+        "Penapis": "Filter",
+        "Kepentingan hubungan ini": "Importance of this relationship",
+        "Nama / nota (pilihan)": "Name / note (optional)",
+        "Tanda semua": "Tick all",
+        "Semua subjek": "All subjects",
+        "Tiada yang ditanda = semua": "Nothing ticked = all",
+        "Agihan dipilih jika sepadan dengan SEMUA penapis yang diisi; penapis kosong bermaksud semua.": "An allocation is chosen if it matches ALL filled filters; an empty filter means all.",
+        "Tukar: Guru A": "Change: Teachers A", "Tukar: Kelas A": "Change: Classes A", "Tukar: Subjek A": "Change: Subjects A",
+        "Tukar: Guru B": "Change: Teachers B", "Tukar: Kelas B": "Change: Classes B", "Tukar: Subjek B": "Change: Subjects B",
+        "Semua guru": "All teachers",
+        "Semua kelas": "All classes",
+        "Dikira untuk": "Counted for",
+        "Gabungan semua sesi": "All sessions combined",
+        "Setiap guru berasingan": "Each teacher separately",
+        "Setiap kelas berasingan": "Each class separately",
+        "Setiap guru": "Each teacher",
+        "Setiap kelas": "Each class",
+        "Semua agihan": "All allocations",
+        "Gabungan: semua sesi dipilih dikira bersama. Setiap guru / kelas: had dikenakan bagi setiap guru / kelas secara berasingan.": "Combined: all selected sessions are counted together. Each teacher / class: the limit applies to every teacher / class separately.",
         "Pilih hari yang dikenakan dan nilai bagi setiap hari. Hari tidak ditanda tidak dikenakan.": "Choose the days it applies to and the value for each day. Unticked days are not constrained.",
         "Tanda sekurang-kurangnya satu hari.": "Tick at least one day.",
         "Nilai setiap hari mesti sekurang-kurangnya 1.": "Each day's value must be at least 1.",
@@ -938,7 +966,7 @@ window.VJI18N = (function () {
         ['Muat naik gagal:', 'Upload failed:'], ['Log masuk Google gagal:', 'Google sign-in failed:'], ['Log masuk Google gagal (', 'Google sign-in failed ('],
         ['Jadual tidak sah:', 'Invalid timetable:'], ['Tidak boleh alih:', 'Cannot move:'], ['Tidak boleh letak:', 'Cannot place:'],
         ['Web Worker tidak tersedia, guna thread utama:', 'Web Worker unavailable, using main thread:'], ['Worker gagal dicipta:', 'Worker failed to start:'],
-        ['Worker penyusun:', 'Builder worker:'], ['Jumlah Beban:', 'Total Workload:'], ['Jumlah Waktu:', 'Total Periods:'], ['Guru:', 'Teacher:'], ['Kelas:', 'Class:'], ['Subjek:', 'Subject:'], ['Fail:', 'File:']
+        ['Worker penyusun:', 'Builder worker:'], ['Jumlah Beban:', 'Total Workload:'], ['Jumlah Waktu:', 'Total Periods:'], ['Guru:', 'Teacher:'], ['Kelas:', 'Class:'], ['Subjek:', 'Subject:'], ['Fail:', 'File:'], [' lagi ·', ' more ·']
     ];
 
     // ---------- patterns (dynamic strings) ----------
@@ -1098,7 +1126,11 @@ window.VJI18N = (function () {
         [/^Hubungan "(.*)" memerlukan Kumpulan B yang sepadan dengan sekurang-kurangnya satu agihan\. Hubungan diabaikan\.$/, function (m) { return 'Relation "' + m[1] + '" needs a Group B matching at least one allocation. Relation ignored.'; }],
         [/^Hubungan "(.*)" tidak sepadan dengan mana-mana agihan\.$/, function (m) { return 'Relation "' + m[1] + '" does not match any allocation.'; }],
         [/^Hubungan "(.*)": agihan yang dipilih mempunyai masa\/pecahan berbeza, jadi tidak boleh serentak\. Hubungan diabaikan\.$/, function (m) { return 'Relation "' + m[1] + '": the selected allocations have different time/splits, so they cannot be simultaneous. Relation ignored.'; }],
-        [/^Hubungan (.*) "(.*)" tidak dipenuhi sepenuhnya \((\d+) pelanggaran\)\.$/, function (m) { return 'Relation ' + (HUB[m[1]] || m[1]) + ' "' + m[2] + '" is not fully satisfied (' + pl(m[3], 'violation') + ').'; }],
+        [/^Hubungan (\S+) "(.*)"( \(.*\))? tidak dipenuhi sepenuhnya \((\d+) pelanggaran\)\.$/, function (m) { return 'Relation ' + (HUB[m[1]] || m[1]) + ' "' + m[2] + '"' + (m[3] || '') + ' is not fully satisfied (' + pl(m[4], 'violation') + ').'; }],
+        [/^Pilih (guru|kelas|subjek) — Kumpulan (A|B)$/, function (m) { return 'Select ' + ({ guru: 'teachers', kelas: 'classes', subjek: 'subjects' })[m[1]] + ' — Group ' + m[2]; }],
+        [/^(\d+) ditanda$/, function (m) { return m[1] + ' ticked'; }],
+        [/^· Dikira bagi setiap (guru|kelas) berasingan( \(kosong = semua (guru|kelas)\))?\.$/, function (m) { var e = m[1] === 'guru' ? 'teacher' : 'class'; return '· Counted for each ' + e + ' separately' + (m[2] ? ' (empty = all ' + (e === 'class' ? 'classes' : 'teachers') + ')' : '') + '.'; }],
+        [/^Hubungan dikemas kini \((\d+) agihan\)\.$/, function (m) { return 'Relation updated (' + pl(m[1], 'allocation') + ').'; }],
         [/^Hubungan ditambah \((\d+) agihan\)\.$/, function (m) { return 'Relation added (' + pl(m[1], 'allocation') + ').'; }],
         [/^Sesi berkunci tidak dapat dikekalkan \(bertembung\/diblok\): (.*)$/, function (m) { return 'Locked session could not be kept (clash/blocked): ' + m[1]; }],
         [/^(.*) \((\d+)w\) — (.*)$/, function (m) { return m[1] + ' (' + m[2] + 'w) — ' + tr(m[3]); }],
@@ -1403,6 +1435,7 @@ window.VJI18N = (function () {
             slot: ids(h.slot).filter(k => /^\d+-\d+$/.test(k)),
             slotB: ids(h.slotB).filter(k => /^\d+-\d+$/.test(k)),
             berat: ['ketat', 'optimum', 'longgar'].includes(h.berat) ? h.berat : '',
+            ikut: ['guru', 'kelas'].includes(h.ikut) ? h.ikut : '',   // '' = semua sesi dipilih digabung; guru/kelas = dikira berasingan
             aktif: h.aktif !== false
         }));
     }
@@ -4232,6 +4265,9 @@ window.VJSampleData = function () {
                     <button onclick="VJFile.openDataInduk()" class="nav-tab nav-sub" title="Setup nama guru, kelas, bilik & subjek">
                         <i data-lucide="database" class="w-4 h-4 shrink-0"></i><span class="nav-label">Data Induk (Setup)</span>
                     </button>
+                    <button onclick="switchTab('hubungan')" id="nav-hubungan" class="nav-tab nav-sub" title="Hubungan Antara Sesi">
+                        <i data-lucide="link-2" class="w-4 h-4 shrink-0"></i><span class="nav-label">Hubungan Sesi</span>
+                    </button>
                     <button onclick="switchTab('guru')" id="nav-guru" class="nav-tab nav-sub" title="Jadual Guru">
                         <i data-lucide="users" class="w-4 h-4 shrink-0"></i><span class="nav-label">Jadual Guru</span>
                     </button>
@@ -4271,6 +4307,180 @@ window.VJSampleData = function () {
     <main class="flex-1 min-w-0 overflow-y-auto p-4 sm:p-6 bg-slate-50/50 matrix-flush">
 
 
+
+        <!-- ============================================================== -->
+        <!-- VIEW 10: HUBUNGAN ANTARA SESI (TETAPAN)                        -->
+        <!-- ============================================================== -->
+        <div id="view-hubungan" class="view-section hidden bg-white border border-slate-200 rounded-2xl shadow-card overflow-hidden">
+            <div class="p-3.5 bg-slate-50/80 border-b border-slate-200 flex flex-wrap justify-between items-center gap-2">
+                <div class="min-w-0">
+                    <div class="flex items-center gap-2">
+                        <i data-lucide="link-2" class="w-4 h-4 text-brand-600"></i>
+                        <h3 class="text-sm font-heading font-bold text-slate-800">Hubungan Antara Sesi</h3>
+                        <span id="hubCountHal" class="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-brand-100 text-brand-700 empty:hidden"></span>
+                    </div>
+                    <p class="text-[11px] text-slate-500 mt-0.5">Kekangan tambahan untuk penyusun jadual automatik, cth: maks waktu berturut setiap guru, subjek tidak sama hari.</p>
+                </div>
+                <button onclick="hubBukaBorang()" class="px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow"><i data-lucide="plus" class="w-3.5 h-3.5"></i> Tambah Hubungan</button>
+            </div>
+            <div id="hubList" class="p-3.5 space-y-1.5"></div>
+        </div>
+
+        <!-- Hubungan antara sesi -->
+        <div id="hubPanel" class="hidden fixed inset-0 z-[60] bg-slate-900/50 items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="hubPanelTitle" onclick="if (event.target === this) hubTutupBorang()">
+          <div class="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[92vh] overflow-auto">
+            <div class="flex items-center justify-between gap-2 px-5 py-3.5 border-b border-slate-200 sticky top-0 bg-white z-10">
+                <h4 id="hubPanelTitle" class="font-heading font-bold text-sm text-slate-800 flex items-center gap-2"><i data-lucide="link-2" class="w-4 h-4 text-brand-600"></i> <span id="hubFormTajuk">Tambah hubungan</span></h4>
+                <button onclick="hubTutupBorang()" class="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500" title="Tutup (Esc)"><i data-lucide="x" class="w-4 h-4"></i></button>
+            </div>
+            <div class="p-4 sm:p-5 space-y-4 bg-indigo-50/30">
+            <div id="hubFormBox" class="bg-white border border-slate-200 rounded-xl p-3 space-y-3">
+                <!-- 1. Jenis hubungan -->
+                <fieldset class="border border-slate-200 rounded-lg px-3 pb-3 pt-1">
+                    <legend class="px-1 text-[11px] font-bold text-slate-600">Jenis hubungan</legend>
+                    <div class="flex gap-3">
+                        <div class="hidden sm:flex w-10 h-10 shrink-0 rounded-lg bg-brand-50 text-brand-600 items-center justify-center"><i data-lucide="shapes" class="w-5 h-5"></i></div>
+                        <div class="flex-1 min-w-0 space-y-2">
+                            <select id="hubJenis" onchange="hubJenisTukar()" class="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-xs bg-white font-semibold"></select>
+                            <div class="flex flex-wrap items-start gap-3">
+                                <label id="hubNilaiBox" class="flex items-center gap-2"><input id="hubNilai" type="number" min="0" max="50" value="1" class="w-20 border border-slate-300 rounded-lg px-2 py-1.5 text-xs font-bold"><span id="hubNilaiLabel" class="text-[11px] font-bold text-slate-600"></span></label>
+                                <p id="hubJenisHint" class="flex-1 min-w-[200px] text-[11px] text-slate-500"></p>
+                            </div>
+                            <div id="hubHariBox" class="hidden rounded-lg border border-slate-200 bg-slate-50/60 px-3 py-2">
+                                <label class="inline-flex items-center gap-1.5 text-[11px] font-bold text-slate-700 cursor-pointer">
+                                    <input id="hubIkutHari" type="checkbox" onchange="hubIkutHariTukar()" class="w-3.5 h-3.5 accent-brand-600"> Tetapkan ikut hari</label>
+                                <span class="text-[10px] text-slate-500 ml-1">Pilih hari yang dikenakan dan nilai bagi setiap hari. Hari tidak ditanda tidak dikenakan.</span>
+                                <div id="hubHariGrid" class="hidden mt-2 flex flex-wrap gap-2"></div>
+                            </div>
+                        </div>
+                    </div>
+                </fieldset>
+                <!-- 2. Dikenakan kepada -->
+                <fieldset id="hubIkutBox" class="border border-slate-200 rounded-lg px-3 pb-3 pt-1">
+                    <legend class="px-1 text-[11px] font-bold text-slate-600">Dikenakan kepada</legend>
+                    <div class="flex items-center gap-3">
+                        <div class="hidden sm:flex w-10 h-10 shrink-0 rounded-lg bg-indigo-50 text-indigo-600 items-center justify-center"><i data-lucide="git-fork" class="w-5 h-5"></i></div>
+                        <select id="hubIkut" onchange="hubFormUpdate()" class="border border-slate-300 rounded-lg px-2 py-1.5 text-xs bg-white font-semibold min-w-[240px]" title="Gabungan: semua sesi dipilih dikira bersama. Setiap guru / kelas: had dikenakan bagi setiap guru / kelas secara berasingan.">
+                            <option value="">Gabungan semua sesi</option>
+                            <option value="guru">Setiap guru berasingan</option>
+                            <option value="kelas">Setiap kelas berasingan</option>
+                        </select>
+                    </div>
+                </fieldset>
+                <!-- 3. Penapis -->
+                <fieldset class="border border-slate-200 rounded-lg px-3 pb-3 pt-1">
+                    <legend class="px-1 text-[11px] font-bold text-slate-600">Penapis</legend>
+                    <div class="flex gap-3">
+                        <div class="hidden sm:flex w-10 h-10 shrink-0 rounded-lg bg-emerald-50 text-emerald-600 items-center justify-center"><i data-lucide="filter" class="w-5 h-5"></i></div>
+                        <div class="flex-1 min-w-0 space-y-3">
+                            <div class="grid md:grid-cols-2 gap-3">
+                                <div class="space-y-1.5 min-w-0">
+                                    <p id="hubTajukA" class="text-[11px] font-bold text-slate-700"></p>
+                            <div class="flex items-center gap-2">
+                                <button type="button" onclick="hubPilihBuka('Guru', '')" class="w-32 shrink-0 px-2 py-1 text-[11px] font-bold rounded-md border border-slate-300 bg-slate-50 hover:bg-brand-50 hover:border-brand-300 text-slate-700 text-left">Tukar: Guru A</button>
+                                <span id="hubRingGuru" class="text-[11px] text-slate-600 truncate"></span>
+                                <select id="hubGuru" multiple class="hidden"></select>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <button type="button" onclick="hubPilihBuka('Kelas', '')" class="w-32 shrink-0 px-2 py-1 text-[11px] font-bold rounded-md border border-slate-300 bg-slate-50 hover:bg-brand-50 hover:border-brand-300 text-slate-700 text-left">Tukar: Kelas A</button>
+                                <span id="hubRingKelas" class="text-[11px] text-slate-600 truncate"></span>
+                                <select id="hubKelas" multiple class="hidden"></select>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <button type="button" onclick="hubPilihBuka('Subjek', '')" class="w-32 shrink-0 px-2 py-1 text-[11px] font-bold rounded-md border border-slate-300 bg-slate-50 hover:bg-brand-50 hover:border-brand-300 text-slate-700 text-left">Tukar: Subjek A</button>
+                                <span id="hubRingSubjek" class="text-[11px] text-slate-600 truncate"></span>
+                                <select id="hubSubjek" multiple class="hidden"></select>
+                            </div>
+                                    <p id="hubPadanA" class="text-[11px] text-slate-600"></p>
+                                </div>
+                                <div id="hubBoxB" class="hidden space-y-1.5 min-w-0">
+                                    <p id="hubTajukB" class="text-[11px] font-bold text-slate-700"></p>
+                            <div class="flex items-center gap-2">
+                                <button type="button" onclick="hubPilihBuka('Guru', 'B')" class="w-32 shrink-0 px-2 py-1 text-[11px] font-bold rounded-md border border-slate-300 bg-slate-50 hover:bg-brand-50 hover:border-brand-300 text-slate-700 text-left">Tukar: Guru B</button>
+                                <span id="hubRingGuruB" class="text-[11px] text-slate-600 truncate"></span>
+                                <select id="hubGuruB" multiple class="hidden"></select>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <button type="button" onclick="hubPilihBuka('Kelas', 'B')" class="w-32 shrink-0 px-2 py-1 text-[11px] font-bold rounded-md border border-slate-300 bg-slate-50 hover:bg-brand-50 hover:border-brand-300 text-slate-700 text-left">Tukar: Kelas B</button>
+                                <span id="hubRingKelasB" class="text-[11px] text-slate-600 truncate"></span>
+                                <select id="hubKelasB" multiple class="hidden"></select>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <button type="button" onclick="hubPilihBuka('Subjek', 'B')" class="w-32 shrink-0 px-2 py-1 text-[11px] font-bold rounded-md border border-slate-300 bg-slate-50 hover:bg-brand-50 hover:border-brand-300 text-slate-700 text-left">Tukar: Subjek B</button>
+                                <span id="hubRingSubjekB" class="text-[11px] text-slate-600 truncate"></span>
+                                <select id="hubSubjekB" multiple class="hidden"></select>
+                            </div>
+                                    <p id="hubPadanB" class="text-[11px] text-slate-600"></p>
+                                </div>
+                            </div>
+                            <p class="text-[10px] text-slate-400">Agihan dipilih jika sepadan dengan SEMUA penapis yang diisi; penapis kosong bermaksud semua.</p>
+                            <div class="flex flex-wrap gap-4">
+                                <div id="hubSlotBox" class="hidden">
+                                    <p id="hubSlotLabel" class="text-[10px] font-bold text-slate-500 mb-1"></p>
+                                    <div class="overflow-x-auto"><table id="hubSlotGrid" data-draf="A" class="text-[10px] select-none"></table></div>
+                                </div>
+                                <div id="hubSlotBoxB" class="hidden">
+                                    <p id="hubSlotLabelB" class="text-[10px] font-bold text-slate-500 mb-1"></p>
+                                    <div class="overflow-x-auto"><table id="hubSlotGridB" data-draf="B" class="text-[10px] select-none"></table></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </fieldset>
+                <!-- 4. Kepentingan & nota -->
+                <div class="grid sm:grid-cols-2 gap-3">
+                    <fieldset class="border border-slate-200 rounded-lg px-3 pb-3 pt-1">
+                        <legend class="px-1 text-[11px] font-bold text-slate-600">Kepentingan hubungan ini</legend>
+                        <div class="flex items-center gap-3">
+                            <div class="hidden sm:flex w-10 h-10 shrink-0 rounded-full bg-sky-50 text-sky-600 items-center justify-center"><i data-lucide="gauge" class="w-5 h-5"></i></div>
+                            <select id="hubBerat" onchange="hubFormUpdate()" class="border border-slate-300 rounded-lg px-2 py-1.5 text-xs bg-white font-bold min-w-[140px]">
+                                <option value="ketat">Ketat</option>
+                                <option value="optimum">Optimum</option>
+                                <option value="longgar">Longgar</option>
+                            </select>
+                        </div>
+                    </fieldset>
+                    <fieldset class="border border-slate-200 rounded-lg px-3 pb-3 pt-1">
+                        <legend class="px-1 text-[11px] font-bold text-slate-600">Nama / nota (pilihan)</legend>
+                        <input id="hubNama" type="text" placeholder="Cth: Makmal Sains, BM pagi sahaja" class="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-xs">
+                    </fieldset>
+                </div>
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                    <p id="hubPadan" class="text-[11px] text-slate-600"></p>
+                    <div class="flex items-center gap-2">
+                        <button id="hubBtnBatal" onclick="hubTutupBorang()" class="px-3 py-1.5 rounded-lg border border-slate-300 text-xs font-bold text-slate-600 hover:bg-slate-50">Batal</button>
+                        <button id="hubBtnSimpan" onclick="hubTambah()" class="px-4 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5"><i data-lucide="plus" class="w-3.5 h-3.5"></i> <span id="hubBtnTeks">Tambah Hubungan</span></button>
+                    </div>
+                </div>
+            </div>
+            <!-- Pemilih penapis (guru / kelas / subjek) -->
+            <div id="hubPilihBox" class="hidden fixed inset-0 z-[70] bg-slate-900/40 items-center justify-center p-4" onclick="if (event.target === this) hubPilihTutup(false)">
+                <div class="bg-white rounded-xl shadow-2xl w-full max-w-md max-h-[80vh] flex flex-col">
+                    <div class="px-4 py-3 border-b border-slate-200 flex items-center justify-between gap-2">
+                        <p id="hubPilihTajuk" class="text-sm font-bold text-slate-800"></p>
+                        <button onclick="hubPilihTutup(false)" class="p-1 rounded hover:bg-slate-100 text-slate-500"><i data-lucide="x" class="w-4 h-4"></i></button>
+                    </div>
+                    <div class="px-4 py-2 border-b border-slate-100 space-y-2">
+                        <input id="hubPilihCari" type="text" oninput="hubPilihTapis()" placeholder="Cari…" class="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-xs">
+                        <div class="flex items-center gap-2 text-[11px]">
+                            <button onclick="hubPilihSemua(true)" class="px-2 py-0.5 rounded border border-slate-300 hover:bg-slate-50 font-bold text-slate-600">Tanda semua</button>
+                            <button onclick="hubPilihSemua(false)" class="px-2 py-0.5 rounded border border-slate-300 hover:bg-slate-50 font-bold text-slate-600">Kosongkan</button>
+                            <span id="hubPilihBil" class="ml-auto text-slate-500"></span>
+                        </div>
+                    </div>
+                    <div id="hubPilihList" class="flex-1 overflow-auto px-2 py-1"></div>
+                    <div class="px-4 py-3 border-t border-slate-200 flex items-center justify-between gap-2">
+                        <span class="text-[10px] text-slate-400">Tiada yang ditanda = semua</span>
+                        <div class="flex gap-2">
+                            <button onclick="hubPilihTutup(false)" class="px-3 py-1.5 rounded-lg border border-slate-300 text-xs font-bold text-slate-600 hover:bg-slate-50">Batal</button>
+                            <button onclick="hubPilihTutup(true)" class="px-4 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold">OK</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            </div>
+          </div>
+        </div>
 
         <!-- ============================================================== -->
         <!-- VIEW 1: GRID JADUAL GURU (MASTER TABLE)                        -->
@@ -4725,86 +4935,6 @@ window.VJSampleData = function () {
               </div>
             </div>
 
-            <!-- Hubungan antara sesi -->
-            <div id="hubPanel" class="hidden fixed inset-0 z-[60] bg-slate-900/50 items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="hubPanelTitle" onclick="if (event.target === this) hubTogglePanel()">
-              <div class="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[92vh] overflow-auto">
-                <div class="flex items-center justify-between gap-2 px-5 py-3.5 border-b border-slate-200 sticky top-0 bg-white z-10">
-                    <h4 id="hubPanelTitle" class="font-heading font-bold text-sm text-slate-800 flex items-center gap-2"><i data-lucide="link-2" class="w-4 h-4 text-brand-600"></i> Hubungan Antara Sesi</h4>
-                    <button onclick="hubTogglePanel()" class="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500" title="Tutup (Esc)"><i data-lucide="x" class="w-4 h-4"></i></button>
-                </div>
-                <div class="p-5 space-y-4 bg-indigo-50/30">
-                <div>
-                    <p class="text-xs font-bold text-slate-700 mb-1.5">Senarai hubungan</p>
-                    <div id="hubList" class="space-y-1.5"></div>
-                </div>
-                <div class="bg-white border border-slate-200 rounded-xl p-3 space-y-3">
-                    <p class="text-xs font-bold text-slate-700">Tambah hubungan</p>
-                    <div class="flex flex-wrap items-end gap-2">
-                        <label class="block"><span class="block text-[10px] font-bold text-slate-500 mb-0.5">Jenis</span>
-                            <select id="hubJenis" onchange="hubJenisTukar()" class="border border-slate-300 rounded-lg px-2 py-1.5 text-xs bg-white max-w-[320px]"></select></label>
-                        <label class="block"><span class="block text-[10px] font-bold text-slate-500 mb-0.5">Pemberat</span>
-                            <select id="hubBerat" onchange="hubFormUpdate()" class="border border-slate-300 rounded-lg px-2 py-1.5 text-xs bg-white font-bold">
-                                <option value="ketat">Ketat</option>
-                                <option value="optimum">Optimum</option>
-                                <option value="longgar">Longgar</option>
-                            </select></label>
-                        <label id="hubNilaiBox" class="block"><span id="hubNilaiLabel" class="block text-[10px] font-bold text-slate-500 mb-0.5"></span>
-                            <input id="hubNilai" type="number" min="0" max="50" value="1" class="w-20 border border-slate-300 rounded-lg px-2 py-1.5 text-xs"></label>
-                        <label class="block flex-1 min-w-[160px]"><span class="block text-[10px] font-bold text-slate-500 mb-0.5">Nama (pilihan)</span>
-                            <input id="hubNama" type="text" placeholder="Cth: Makmal Sains, BM pagi sahaja" class="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-xs"></label>
-                    </div>
-                    <p id="hubJenisHint" class="text-[11px] text-slate-500"></p>
-                    <div id="hubHariBox" class="hidden rounded-lg border border-slate-200 bg-slate-50/60 px-3 py-2">
-                        <label class="inline-flex items-center gap-1.5 text-[11px] font-bold text-slate-700 cursor-pointer">
-                            <input id="hubIkutHari" type="checkbox" onchange="hubIkutHariTukar()" class="w-3.5 h-3.5 accent-brand-600"> Tetapkan ikut hari</label>
-                        <span class="text-[10px] text-slate-500 ml-1">Pilih hari yang dikenakan dan nilai bagi setiap hari. Hari tidak ditanda tidak dikenakan.</span>
-                        <div id="hubHariGrid" class="hidden mt-2 flex flex-wrap gap-2"></div>
-                    </div>
-                    <div>
-                        <p id="hubTajukA" class="text-[11px] font-bold text-slate-700 mb-1"></p>
-                        <div class="grid sm:grid-cols-3 gap-2">
-                            <label class="block"><span class="block text-[10px] font-bold text-slate-500 mb-0.5">Subjek</span>
-                                <select id="hubSubjek" multiple size="5" onchange="hubFormUpdate()" class="w-full border border-slate-300 rounded-lg px-1 py-1 text-xs bg-white"></select></label>
-                            <label class="block"><span class="block text-[10px] font-bold text-slate-500 mb-0.5">Guru</span>
-                                <select id="hubGuru" multiple size="5" onchange="hubFormUpdate()" class="w-full border border-slate-300 rounded-lg px-1 py-1 text-xs bg-white"></select></label>
-                            <label class="block"><span class="block text-[10px] font-bold text-slate-500 mb-0.5">Kelas</span>
-                                <select id="hubKelas" multiple size="5" onchange="hubFormUpdate()" class="w-full border border-slate-300 rounded-lg px-1 py-1 text-xs bg-white"></select></label>
-                        </div>
-                        <p id="hubPadanA" class="text-[11px] text-slate-600 mt-1"></p>
-                    </div>
-                    <div id="hubBoxB" class="hidden">
-                        <p id="hubTajukB" class="text-[11px] font-bold text-slate-700 mb-1"></p>
-                        <div class="grid sm:grid-cols-3 gap-2">
-                            <label class="block"><span class="block text-[10px] font-bold text-slate-500 mb-0.5">Subjek</span>
-                                <select id="hubSubjekB" multiple size="5" onchange="hubFormUpdate()" class="w-full border border-slate-300 rounded-lg px-1 py-1 text-xs bg-white"></select></label>
-                            <label class="block"><span class="block text-[10px] font-bold text-slate-500 mb-0.5">Guru</span>
-                                <select id="hubGuruB" multiple size="5" onchange="hubFormUpdate()" class="w-full border border-slate-300 rounded-lg px-1 py-1 text-xs bg-white"></select></label>
-                            <label class="block"><span class="block text-[10px] font-bold text-slate-500 mb-0.5">Kelas</span>
-                                <select id="hubKelasB" multiple size="5" onchange="hubFormUpdate()" class="w-full border border-slate-300 rounded-lg px-1 py-1 text-xs bg-white"></select></label>
-                        </div>
-                        <p id="hubPadanB" class="text-[11px] text-slate-600 mt-1"></p>
-                    </div>
-                    <p class="text-[10px] text-slate-400">Ctrl/Shift + klik untuk pilih berbilang. Agihan dipilih jika sepadan dengan SEMUA penapis yang diisi; penapis kosong bermaksud semua.</p>
-                    <div class="flex flex-wrap gap-4">
-                        <div id="hubSlotBox" class="hidden">
-                            <p id="hubSlotLabel" class="text-[10px] font-bold text-slate-500 mb-1"></p>
-                            <div class="overflow-x-auto"><table id="hubSlotGrid" data-draf="A" class="text-[10px] select-none"></table></div>
-                        </div>
-                        <div id="hubSlotBoxB" class="hidden">
-                            <p id="hubSlotLabelB" class="text-[10px] font-bold text-slate-500 mb-1"></p>
-                            <div class="overflow-x-auto"><table id="hubSlotGridB" data-draf="B" class="text-[10px] select-none"></table></div>
-                        </div>
-                    </div>
-                    <div class="flex flex-wrap items-center justify-between gap-2">
-                        <p id="hubPadan" class="text-[11px] text-slate-600"></p>
-                        <button onclick="hubTambah()" class="px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5"><i data-lucide="plus" class="w-3.5 h-3.5"></i> Tambah Hubungan</button>
-                    </div>
-                </div>
-                </div>
-              </div>
-            </div>
-
-
             <div class="flex flex-col lg:flex-row jdl-fokus-keep">
 
                 <div id="jdlKolum" class="flex-1 min-w-0 px-1 py-1 space-y-1">
@@ -4829,7 +4959,7 @@ window.VJSampleData = function () {
                             </div>
                             <p id="jdlSemuaStats" class="ml-auto text-[11px] text-slate-500"></p>
                             <div class="flex items-center gap-1">
-                                <button onclick="hubTogglePanel()" class="relative p-1.5 border border-slate-200 bg-white hover:bg-slate-100 rounded-lg text-slate-700" title="Hubungan antara sesi" aria-label="Hubungan"><i data-lucide="link-2" class="w-4 h-4"></i><span id="hubCount" class="absolute -top-1 -right-1 text-[9px] min-w-[14px] text-center px-1 rounded-full bg-brand-600 text-white empty:hidden"></span></button>
+                                <button onclick="switchTab('hubungan')" class="relative p-1.5 border border-slate-200 bg-white hover:bg-slate-100 rounded-lg text-slate-700" title="Hubungan antara sesi" aria-label="Hubungan"><i data-lucide="link-2" class="w-4 h-4"></i><span id="hubCount" class="absolute -top-1 -right-1 text-[9px] min-w-[14px] text-center px-1 rounded-full bg-brand-600 text-white empty:hidden"></span></button>
                                 <button onclick="jdlRumusanBuka(false)" class="p-1.5 border border-slate-200 bg-white hover:bg-slate-100 rounded-lg text-slate-700" title="Rumusan kualiti jadual: sesi tidak muat, hubungan, lompong, beban guru" aria-label="Rumusan"><i data-lucide="clipboard-check" class="w-4 h-4"></i></button>
                                 <button onclick="jdlKosongkan()" class="p-1.5 border border-rose-200 bg-rose-50 hover:bg-rose-100 rounded-lg text-rose-700" title="Kosongkan jadual (kelas / guru dipilih sahaja jika ada)" aria-label="Kosongkan"><i data-lucide="eraser" class="w-4 h-4"></i></button>
                                 <button id="jdlBtnSusun" onclick="jdlUjianBuka()" class="px-2.5 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-[11px] font-bold shadow flex items-center gap-1.5" title="Susun jadual / Mod Ujian"><i data-lucide="wand-sparkles" class="w-4 h-4"></i> <span id="jdlBtnSusunTeks">Susun</span></button>
@@ -7480,6 +7610,7 @@ window.VJSampleData = function () {
             if (tabName === 'arkib') loadArkibData();
             if (tabName === 'banding') populateSystemDropdowns();
             if (tabName === 'bilik') renderBilikView();
+            if (tabName === 'hubungan') hubRenderList();
             if (tabName === 'matrix') {
                 populateMatrixBarTeachers();
                 highlightMatrixCells();
@@ -10063,7 +10194,8 @@ window.VJSolver = (function () {
         });
 
         // Hubungan lain: senarai unit yang terlibat
-        const hubUnit = hub.filter(h => h.jenis !== 'serentak' && !h._abai && JENIS_HUB[h.jenis]).map(h => {
+        // ikut = 'guru' / 'kelas': satu hubungan dipecah kepada satu sub-hubungan bagi setiap guru / kelas
+        const hubUnit = hub.filter(h => h.jenis !== 'serentak' && !h._abai && JENIS_HUB[h.jenis]).flatMap(h => {
             const meta = JENIS_HUB[h.jenis];
             const adaB = !!meta.ab && !pilihKosong(h.pilihB);
             const inA = new Uint8Array(units.length), inB = new Uint8Array(units.length);
@@ -10072,12 +10204,21 @@ window.VJSolver = (function () {
                 if (adaB && u.ahliRows.some(r => padanHub(h, r, 'B'))) inB[u.id] = 1;
             });
             const tahap = tahapHub(h);
-            return {
-                h, meta, adaB, inA, inB, tahap, w: TAHAP_HUB[tahap].berat,
+            const buat = (fA, fB, sub) => ({
+                h, meta, adaB, inA: fA, inB: fB, tahap, w: TAHAP_HUB[tahap].berat, sub,
                 keras: !meta.lembut && tahap === 'ketat',
                 slot: new Set(h.slot || []), slotB: new Set(h.slotB || []),
-                units: units.filter(u => inA[u.id] || inB[u.id]).map(u => u.id)
-            };
+                units: units.filter(u => fA[u.id] || fB[u.id]).map(u => u.id)
+            });
+            if (h.ikut !== 'guru' && h.ikut !== 'kelas') return [buat(inA, inB, '')];
+            const senarai = h.ikut === 'guru' ? guru : kelas;
+            const entiti = new Set();
+            units.forEach(u => { if (inA[u.id] || inB[u.id]) u[h.ikut].forEach(e => entiti.add(e)); });
+            return Array.from(entiti).sort((a, b) => a - b).map(e => {
+                const fA = new Uint8Array(units.length), fB = new Uint8Array(units.length);
+                units.forEach(u => { if (u[h.ikut].includes(e)) { fA[u.id] = inA[u.id]; fB[u.id] = inB[u.id]; } });
+                return buat(fA, fB, senarai[e].nama);
+            });
         });
 
         // Bilik khas: setiap agihan yang subjeknya ditetapkan ke bilik memerlukan satu bilik (berbeza) daripada senarainya
@@ -11106,7 +11247,7 @@ window.VJSolver = (function () {
             B.hubUnit.forEach((R, ri) => {
                 if (R.keras) return;
                 const langgar = langgarHubungan(ri);
-                if (langgar > 0) isu.push({ jenis: 'amaran', teks: `Hubungan ${TAHAP_HUB[R.tahap].nama.toLowerCase()} "${namaHub(R.h)}" tidak dipenuhi sepenuhnya (${langgar} pelanggaran).` });
+                if (langgar > 0) isu.push({ jenis: 'amaran', teks: `Hubungan ${TAHAP_HUB[R.tahap].nama.toLowerCase()} "${namaHub(R.h)}"${R.sub ? ` (${R.sub})` : ''} tidak dipenuhi sepenuhnya (${langgar} pelanggaran).` });
             });
             const kualiti = ukurKualiti();
             return { sesi, tidakMuat, isu, stat: { unit: U, diletak: U - tidakMuat.length, iter, ms: Math.round(ms), hentiBuntu, bilAuto: B.bilAuto, kosongDepan: kualiti.kosongDepanKelas, kualiti } };
@@ -12659,37 +12800,127 @@ window.VJSolver = (function () {
             else hubHariDraf[d].v = Math.max(0, parseInt(v) || 0);
         }
 
-        function hubTogglePanel() {
+        // Sediakan pilihan borang (jenis, subjek, guru, kelas) dan kosongkan draf
+        function hubSediaBorang() {
+            const inp = VJStore.getSolverInput();
+            const opt = (rows, label) => rows.slice().sort((a, b) => String(a[1]).localeCompare(String(b[1]), 'ms', { numeric: true }))
+                .map(r => `<option value="${escapeHtml(r[0])}">${escapeHtml(label(r))}</option>`).join('');
+            const kat = {};
+            Object.entries(VJSolver.JENIS_HUB).forEach(([k, m]) => { (kat[m.kat] = kat[m.kat] || []).push([k, m]); });
+            document.getElementById('hubJenis').innerHTML = Object.entries(kat).map(([nama, list]) =>
+                `<optgroup label="${escapeHtml(nama)}">${list.map(([k, m]) => `<option value="${k}">${escapeHtml(m.nama)}${m.lembut ? ' (lembut)' : ''}</option>`).join('')}</optgroup>`).join('');
+            ['', 'B'].forEach(sfx => {
+                document.getElementById('hubSubjek' + sfx).innerHTML = opt(inp.subjek, r => r[2] ? `${r[1]} (${r[2]})` : r[1]);
+                document.getElementById('hubGuru' + sfx).innerHTML = opt(inp.guru, r => r[1]);
+                document.getElementById('hubKelas' + sfx).innerHTML = opt(inp.kelas, r => r[1]);
+            });
+            hubSlotDraf = new Set();
+            hubSlotDrafB = new Set();
+            hubHariDraf = [];
+            document.getElementById('hubIkutHari').checked = false;
+            document.getElementById('hubIkut').value = '';
+            document.getElementById('hubNama').value = '';
+            hubEditSet(null);
+            hubJenisTukar();
+        }
+
+        // Pop-up borang tambah / edit hubungan (id = edit hubungan sedia ada)
+        function hubBukaBorang(id) {
+            hubSediaBorang();
+            if (id) hubIsiBorang(id);
             const box = document.getElementById('hubPanel');
-            if (box.classList.contains('hidden')) {
-                const inp = VJStore.getSolverInput();
-                const opt = (rows, label) => rows.slice().sort((a, b) => String(a[1]).localeCompare(String(b[1]), 'ms', { numeric: true }))
-                    .map(r => `<option value="${escapeHtml(r[0])}">${escapeHtml(label(r))}</option>`).join('');
-                const kat = {};
-                Object.entries(VJSolver.JENIS_HUB).forEach(([k, m]) => { (kat[m.kat] = kat[m.kat] || []).push([k, m]); });
-                document.getElementById('hubJenis').innerHTML = Object.entries(kat).map(([nama, list]) =>
-                    `<optgroup label="${escapeHtml(nama)}">${list.map(([k, m]) => `<option value="${k}">${escapeHtml(m.nama)}${m.lembut ? ' (lembut)' : ''}</option>`).join('')}</optgroup>`).join('');
-                ['', 'B'].forEach(sfx => {
-                    document.getElementById('hubSubjek' + sfx).innerHTML = opt(inp.subjek, r => r[2] ? `${r[1]} (${r[2]})` : r[1]);
-                    document.getElementById('hubGuru' + sfx).innerHTML = opt(inp.guru, r => r[1]);
-                    document.getElementById('hubKelas' + sfx).innerHTML = opt(inp.kelas, r => r[1]);
-                });
-                hubSlotDraf = new Set();
-                hubSlotDrafB = new Set();
-                hubHariDraf = [];
-                document.getElementById('hubIkutHari').checked = false;
-                hubJenisTukar();
-                hubRenderList();
-            }
-            const buka = box.classList.contains('hidden');
-            box.classList.toggle('hidden', !buka);
-            box.classList.toggle('flex', buka);
-            if (buka) document.addEventListener('keydown', hubPanelEsc);
-            else document.removeEventListener('keydown', hubPanelEsc);
+            box.classList.remove('hidden'); box.classList.add('flex');
+            box.firstElementChild.scrollTop = 0;
+            document.removeEventListener('keydown', hubPanelEsc);
+            document.addEventListener('keydown', hubPanelEsc);
             lucide.createIcons();
         }
 
-        function hubPanelEsc(e) { if (e.key === 'Escape') hubTogglePanel(); }
+        function hubTutupBorang() {
+            hubPilihTutup(false);
+            const box = document.getElementById('hubPanel');
+            box.classList.add('hidden'); box.classList.remove('flex');
+            document.removeEventListener('keydown', hubPanelEsc);
+            hubEditSet(null);
+            hubRenderList();
+        }
+
+        // Serasi dengan panggilan lama
+        function hubTogglePanel() {
+            if (document.getElementById('hubPanel').classList.contains('hidden')) switchTab('hubungan');
+            else hubTutupBorang();
+        }
+
+        function hubPanelEsc(e) {
+            if (e.key !== 'Escape') return;
+            if (!document.getElementById('hubPilihBox').classList.contains('hidden')) hubPilihTutup(false);
+            else hubTutupBorang();
+        }
+
+        // ---- Pemilih penapis gaya aSc: "Tukar: Guru A" → senarai bertanda ----
+        let hubPilihSasar = null, hubPilihDraf = new Set();
+        const HUB_MEDAN_NAMA = { Guru: 'guru', Kelas: 'kelas', Subjek: 'subjek' };
+
+        function hubPilihBuka(medan, sfx) {
+            const sel = document.getElementById('hub' + medan + sfx);
+            hubPilihSasar = sel;
+            hubPilihDraf = new Set(Array.from(sel.selectedOptions).map(o => o.value));
+            document.getElementById('hubPilihTajuk').innerText = `Pilih ${HUB_MEDAN_NAMA[medan]} — Kumpulan ${sfx || 'A'}`;
+            document.getElementById('hubPilihCari').value = '';
+            document.getElementById('hubPilihList').innerHTML = Array.from(sel.options).map(o => `
+                <label data-cari="${escapeHtml(o.text.toLowerCase())}" class="flex items-center gap-2 px-2 py-1 rounded hover:bg-slate-50 cursor-pointer text-xs text-slate-700">
+                    <input type="checkbox" value="${escapeHtml(o.value)}" ${hubPilihDraf.has(o.value) ? 'checked' : ''} onchange="hubPilihTanda(this)" class="w-3.5 h-3.5 accent-brand-600">${escapeHtml(o.text)}</label>`).join('');
+            hubPilihBil();
+            const box = document.getElementById('hubPilihBox');
+            box.classList.remove('hidden'); box.classList.add('flex');
+            lucide.createIcons();
+            document.getElementById('hubPilihCari').focus();
+        }
+
+        function hubPilihTanda(cb) { if (cb.checked) hubPilihDraf.add(cb.value); else hubPilihDraf.delete(cb.value); hubPilihBil(); }
+
+        function hubPilihBil() {
+            const n = hubPilihDraf.size;
+            document.getElementById('hubPilihBil').innerText = n ? `${n} ditanda` : 'Semua';
+        }
+
+        function hubPilihTapis() {
+            const q = document.getElementById('hubPilihCari').value.trim().toLowerCase();
+            document.querySelectorAll('#hubPilihList label').forEach(l => { l.style.display = !q || l.dataset.cari.includes(q) ? '' : 'none'; });
+        }
+
+        function hubPilihSemua(on) {
+            document.querySelectorAll('#hubPilihList label').forEach(l => {
+                if (l.style.display === 'none') return;
+                const cb = l.querySelector('input');
+                cb.checked = on;
+                if (on) hubPilihDraf.add(cb.value); else hubPilihDraf.delete(cb.value);
+            });
+            hubPilihBil();
+        }
+
+        function hubPilihTutup(simpan) {
+            if (simpan && hubPilihSasar) {
+                Array.from(hubPilihSasar.options).forEach(o => { o.selected = hubPilihDraf.has(o.value); });
+                hubFormUpdate();
+            }
+            hubPilihSasar = null;
+            const box = document.getElementById('hubPilihBox');
+            box.classList.add('hidden'); box.classList.remove('flex');
+        }
+
+        // Ringkasan setiap penapis di sebelah butang "Tukar"
+        function hubRingPenapis() {
+            ['', 'B'].forEach(sfx => Object.entries(HUB_MEDAN_NAMA).forEach(([medan, nm]) => {
+                const sel = document.getElementById('hub' + medan + sfx);
+                const on = Array.from(sel.selectedOptions).map(o => o.text);
+                const el = document.getElementById('hubRing' + medan + sfx);
+                el.innerText = !on.length ? `Semua ${nm}` : on.length <= 3 ? on.join(', ') : `${on.slice(0, 3).join(', ')} +${on.length - 3}`;
+                el.title = on.join(', ');
+                el.classList.toggle('font-semibold', !!on.length);
+                el.classList.toggle('text-brand-700', !!on.length);
+            }));
+        }
 
         function hubJenisTukar() {
             const m = VJSolver.JENIS_HUB[document.getElementById('hubJenis').value] || {};
@@ -12716,6 +12947,7 @@ window.VJSolver = (function () {
                 nilaiHari: ((VJSolver.JENIS_HUB[document.getElementById('hubJenis').value] || {}).harian && document.getElementById('hubIkutHari').checked)
                     ? VJStore.getSlot().hari.map((_, d) => hubHariDraf[d] && hubHariDraf[d].on ? hubHariDraf[d].v : null) : [],
                 berat: document.getElementById('hubBerat').value,
+                ikut: document.getElementById('hubJenis').value === 'serentak' ? '' : document.getElementById('hubIkut').value,
                 slot: Array.from(hubSlotDraf),
                 slotB: Array.from(hubSlotDrafB)
             };
@@ -12728,7 +12960,7 @@ window.VJSolver = (function () {
         }
 
         function hubTeksPadan(h, inp, sisi) {
-            if (VJSolver.pilihKosong(sisi === 'B' ? h.pilihB : h.pilih)) return '<span class="text-amber-700 font-semibold">Pilih sekurang-kurangnya satu subjek, guru atau kelas.</span>';
+            if (VJSolver.pilihKosong(sisi === 'B' ? h.pilihB : h.pilih) && !(h.ikut && sisi !== 'B')) return '<span class="text-amber-700 font-semibold">Pilih sekurang-kurangnya satu subjek, guru atau kelas.</span>';
             const padan = hubAgihanSepadan(h, inp, sisi);
             return `<strong>${padan.length}</strong> agihan sepadan${padan.length ? ': ' + escapeHtml(padan.slice(0, 5).map(t => `${t[6]} (${t[4]}, ${t[2]})`).join('; ')) + (padan.length > 5 ? '…' : '') : ''}`;
         }
@@ -12743,6 +12975,8 @@ window.VJSolver = (function () {
             document.getElementById('hubHariBox').classList.toggle('hidden', !m.harian);
             document.getElementById('hubHariGrid').classList.toggle('hidden', !ikutHari);
             if (ikutHari) hubRenderHari();
+            document.getElementById('hubIkutBox').classList.toggle('hidden', h.jenis === 'serentak');
+            hubRingPenapis();
             const beratEl = document.getElementById('hubBerat');
             beratEl.disabled = h.jenis === 'serentak';
             if (h.jenis === 'serentak') beratEl.value = 'ketat';
@@ -12760,7 +12994,8 @@ window.VJSolver = (function () {
             document.getElementById('hubSlotLabelB').innerText = (m.slotB || '') + ' — klik petak / nama hari / nombor waktu';
             if (m.slot) hubRenderSlotGrid('A', inp.slot);
             if (m.slotB) hubRenderSlotGrid('B', inp.slot);
-            document.getElementById('hubPadanA').innerHTML = hubTeksPadan(h, inp, 'A');
+            document.getElementById('hubPadanA').innerHTML = hubTeksPadan(h, inp, 'A') +
+                (h.ikut ? ` <span class="font-semibold text-indigo-700">· Dikira bagi setiap ${h.ikut === 'guru' ? 'guru' : 'kelas'} berasingan${VJSolver.pilihKosong(h.pilih) ? ` (kosong = semua ${h.ikut === 'guru' ? 'guru' : 'kelas'})` : ''}.</span>` : '');
             document.getElementById('hubPadanB').innerHTML = m.ab ? (m.ab === 'pilihan' && VJSolver.pilihKosong(h.pilihB) ? '<span class="text-slate-400">Tidak diisi — kekangan dikenakan sesama Kumpulan A.</span>' : hubTeksPadan(h, inp, 'B')) : '';
             document.getElementById('hubPadan').innerText = '';
         }
@@ -12792,15 +13027,19 @@ window.VJSolver = (function () {
 
         function hubRingkasan(h, inp) {
             const m = VJSolver.JENIS_HUB[h.jenis] || {};
-            const nama = (rows, ids, kod) => ids.map(id => { const r = rows.find(x => x[0] === id); return r ? (kod && r[2] ? r[2] : r[1]) : id; }).join(', ');
+            const nama = (rows, ids, kod) => {
+                const n = ids.map(id => { const r = rows.find(x => x[0] === id); return r ? (kod && r[2] ? r[2] : r[1]) : id; });
+                return n.length > 4 ? `${n.slice(0, 4).join(', ')} +${n.length - 4} lagi` : n.join(', ');
+            };
             const ringkas = p => {
                 const b = [];
                 if (p.subjek.length) b.push('Subjek: ' + nama(inp.subjek, p.subjek, true));
                 if (p.guru.length) b.push('Guru: ' + nama(inp.guru, p.guru));
                 if (p.kelas.length) b.push('Kelas: ' + nama(inp.kelas, p.kelas));
-                return b.join(' · ');
+                return b.join(' · ') || 'Semua agihan';
             };
             const bahagian = [];
+            if (h.ikut) bahagian.push(h.ikut === 'guru' ? 'Setiap guru' : 'Setiap kelas');
             const adaB = m.ab && !VJSolver.pilihKosong(h.pilihB);
             bahagian.push((adaB ? 'A — ' : '') + ringkas(h.pilih));
             if (adaB) bahagian.push('B — ' + ringkas(h.pilihB));
@@ -12816,10 +13055,11 @@ window.VJSolver = (function () {
             const list = VJStore.getHubungan();
             const inp = VJStore.getSolverInput();
             document.getElementById('hubCount').innerText = list.length || '';
+            document.getElementById('hubCountHal').innerText = list.length || '';
             const el = document.getElementById('hubList');
             if (!el) return;
             el.innerHTML = list.length ? list.map(h => `
-                <div class="flex items-start gap-2 bg-white border border-slate-200 rounded-lg px-2.5 py-2 ${h.aktif ? '' : 'opacity-50'}">
+                <div class="flex items-start gap-2 bg-white border ${h.id === hubEditId ? 'border-brand-400 ring-2 ring-brand-200' : 'border-slate-200'} rounded-lg px-2.5 py-2 ${h.aktif ? '' : 'opacity-50'}">
                     <input type="checkbox" ${h.aktif ? 'checked' : ''} onchange="hubAktif('${escapeHtml(h.id)}', this.checked)" class="mt-0.5 w-3.5 h-3.5 accent-brand-600" title="Aktif">
                     <div class="flex-1 min-w-0">
                         <div class="text-xs font-bold text-slate-800">${escapeHtml(VJSolver.namaHub(h))}${h.nama ? ` <span class="font-medium text-slate-400">· ${escapeHtml((VJSolver.JENIS_HUB[h.jenis] || {}).nama || h.jenis)}</span>` : ''}${(VJSolver.JENIS_HUB[h.jenis] || {}).lembut ? ' <span class="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">LEMBUT</span>' : ''}</div>
@@ -12831,8 +13071,10 @@ window.VJSolver = (function () {
                         return `<select onchange="hubBerat('${escapeHtml(h.id)}', this.value)" ${h.jenis === 'serentak' ? 'disabled' : ''} class="text-[10px] font-bold uppercase rounded-md border px-1 py-0.5 ${warna}" title="Pemberat">` +
                             Object.entries(VJSolver.TAHAP_HUB).map(([k, v]) => `<option value="${k}" ${k === t ? 'selected' : ''}>${v.nama}</option>`).join('') + '</select>';
                     })()}
+                    <button onclick="hubEdit('${escapeHtml(h.id)}')" class="text-slate-500 hover:text-brand-700 p-1" title="Edit"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button>
+                    <button onclick="hubSalin('${escapeHtml(h.id)}')" class="text-slate-500 hover:text-brand-700 p-1" title="Salin"><i data-lucide="copy" class="w-3.5 h-3.5"></i></button>
                     <button onclick="hubPadam('${escapeHtml(h.id)}')" class="text-rose-500 hover:text-rose-700 p-1" title="Padam"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
-                </div>`).join('') : '<p class="text-[11px] text-slate-400">Belum ada hubungan.</p>';
+                </div>`).join('') : '<div class="text-center py-10 text-slate-400"><i data-lucide="link-2" class="w-8 h-8 mx-auto mb-2 opacity-40"></i><p class="text-xs">Belum ada hubungan.</p><p class="text-[11px]">Klik "Tambah Hubungan" untuk mula.</p></div>';
             lucide.createIcons();
         }
 
@@ -12841,7 +13083,7 @@ window.VJSolver = (function () {
             const h = hubDraf();
             const m = VJSolver.JENIS_HUB[h.jenis] || {};
             const inp = VJStore.getSolverInput();
-            if (VJSolver.pilihKosong(h.pilih)) { showToast('Pilih sekurang-kurangnya satu subjek, guru atau kelas.', 'warning'); return; }
+            if (VJSolver.pilihKosong(h.pilih) && !h.ikut) { showToast('Pilih sekurang-kurangnya satu subjek, guru atau kelas.', 'warning'); return; }
             if (m.ab === 'wajib' && VJSolver.pilihKosong(h.pilihB)) { showToast('Jenis ini memerlukan Kumpulan B.', 'warning'); return; }
             if (m.slot && !h.slot.length) { showToast('Tanda sekurang-kurangnya satu slot.', 'warning'); return; }
             if (m.slotB && !h.slotB.length) { showToast('Tanda sekurang-kurangnya satu slot B.', 'warning'); return; }
@@ -12859,10 +13101,69 @@ window.VJSolver = (function () {
             const n = hubAgihanSepadan(h, inp).length;
             if (!n) { showToast('Tiada agihan sepadan dengan pilihan ini.', 'warning'); return; }
             if (m.ab && !VJSolver.pilihKosong(h.pilihB) && !hubAgihanSepadan(h, inp, 'B').length) { showToast('Tiada agihan sepadan dengan Kumpulan B.', 'warning'); return; }
-            VJStore.setHubungan(VJStore.getHubungan().concat([h]));
-            document.getElementById('hubNama').value = '';
-            showToast(`Hubungan ditambah (${n} agihan).`, 'success');
+            const senarai = VJStore.getHubungan();
+            const lama = hubEditId ? senarai.find(x => x.id === hubEditId) : null;
+            if (lama) {
+                Object.assign(h, { id: lama.id, aktif: lama.aktif });
+                VJStore.setHubungan(senarai.map(x => x.id === lama.id ? h : x));
+                showToast(`Hubungan dikemas kini (${n} agihan).`, 'success');
+            } else {
+                VJStore.setHubungan(senarai.concat([h]));
+                showToast(`Hubungan ditambah (${n} agihan).`, 'success');
+            }
+            hubTutupBorang();
+            renderJadualView();
+        }
+
+        // ---- Edit / Salin hubungan ----
+        let hubEditId = null;
+
+        function hubEditSet(id) {
+            hubEditId = id;
+            document.getElementById('hubFormTajuk').innerText = id ? 'Edit hubungan' : 'Tambah hubungan';
+            document.getElementById('hubBtnTeks').innerText = id ? 'Simpan Perubahan' : 'Tambah Hubungan';
+        }
+
+        function hubEdit(id) { hubBukaBorang(id); }
+
+        function hubIsiBorang(id) {
+            const h = VJStore.getHubungan().find(x => x.id === id);
+            if (!h) return;
+            const m = VJSolver.JENIS_HUB[h.jenis] || {};
+            document.getElementById('hubJenis').value = h.jenis;
+            document.getElementById('hubBerat').value = VJSolver.tahapHub(h);
+            document.getElementById('hubIkut').value = h.ikut || '';
+            document.getElementById('hubNilai').value = h.nilai;
+            document.getElementById('hubNama').value = h.nama || '';
+            const hari = VJStore.getSlot().hari;
+            const ikutHari = !!m.harian && (h.nilaiHari || []).length > 0;
+            document.getElementById('hubIkutHari').checked = ikutHari;
+            hubHariDraf = ikutHari ? hari.map((_, d) => { const v = VJSolver.nilaiHari(h, d); return { on: v !== null, v: v === null ? h.nilai : v }; }) : [];
+            ['', 'B'].forEach(sfx => {
+                const p = sfx ? h.pilihB : h.pilih;
+                [['Subjek', 'subjek'], ['Guru', 'guru'], ['Kelas', 'kelas']].forEach(([medan, k]) => {
+                    const on = new Set((p && p[k]) || []);
+                    Array.from(document.getElementById('hub' + medan + sfx).options).forEach(o => { o.selected = on.has(o.value); });
+                });
+            });
+            hubSlotDraf = new Set(h.slot || []);
+            hubSlotDrafB = new Set(h.slotB || []);
+            hubEditSet(id);
+            hubFormUpdate();
             hubRenderList();
+        }
+
+        function hubSalin(id) {
+            if (!isEditMode) { ensureEditMode(() => hubSalin(id)); return; }
+            const list = VJStore.getHubungan();
+            const i = list.findIndex(x => x.id === id);
+            if (i < 0) return;
+            const salinan = Object.assign(JSON.parse(JSON.stringify(list[i])), { id: undefined, nama: VJSolver.namaHub(list[i]) + ' (salinan)' });
+            list.splice(i + 1, 0, salinan);
+            VJStore.setHubungan(list);
+            const baru = VJStore.getHubungan()[i + 1];
+            showToast('Hubungan disalin.', 'success');
+            hubEdit(baru.id);
             renderJadualView();
         }
 
@@ -12878,6 +13179,7 @@ window.VJSolver = (function () {
             const h = VJStore.getHubungan().find(x => x.id === id);
             if (!h || !confirm(`Padam hubungan "${VJSolver.namaHub(h)}"?`)) return;
             VJStore.setHubungan(VJStore.getHubungan().filter(x => x.id !== id));
+            if (hubEditId === id) hubEditSet(null);
             hubRenderList();
             renderJadualView();
         }

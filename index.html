@@ -1035,7 +1035,7 @@ window.VJI18N = (function () {
         [/^Lompong kelas: (\d+) slot$/, function (m) { return 'Class gaps: ' + pl(m[1], 'slot'); }],
         [/^Subjek berulang sehari: (\d+)$/, function (m) { return 'Repeated subject in a day: ' + m[1]; }],
         [/^Optimum: kos (\d+) → (\d+)$/, function (m) { return 'Optimum: cost ' + m[1] + ' → ' + m[2]; }],
-        [/^Optimum: slot kosong di depan kelas (\d+)→(\d+), lompong guru (\d+)→(\d+), subjek berulang (\d+)→(\d+)\.$/, function (m) { return 'Optimum: empty slots at start of class ' + m[1] + '→' + m[2] + ', teacher gaps ' + m[3] + '→' + m[4] + ', repeated subjects ' + m[5] + '→' + m[6] + '.'; }],
+        [/^Optimum: slot kosong di depan kelas (\d+)→(\d+), subjek berulang (\d+)→(\d+)\.$/, function (m) { return 'Optimum: empty slots at start of class ' + m[1] + '→' + m[2] + ', repeated subjects ' + m[3] + '→' + m[4] + '.'; }],
         [/^Kos (\d+) → (\d+) · ([\d.]+) s(.*)$/, function (m) { return 'Cost ' + m[1] + ' → ' + m[2] + ' · ' + m[3] + ' s' + tr(m[4]); }],
         [/^(.* · )?(\d+) \/ (\d+) sesi diletak · ([\d.]+) s$/, function (m) { return (m[1] ? tr(m[1].replace(/ · $/, '')) + ' · ' : '') + m[2] + ' / ' + m[3] + ' sessions placed · ' + m[4] + ' s'; }],
         [/^Percubaan (\d+) · (\d+) \/ (\d+) sesi diletak · ([\d.]+) s$/, function (m) { return 'Attempt ' + m[1] + ' · ' + m[2] + ' / ' + m[3] + ' sessions placed · ' + m[4] + ' s'; }],
@@ -11402,11 +11402,13 @@ window.VJSolver = (function () {
         const subjekKelas = B.kelas.map(() => new Set());
         units.forEach(T => T.pairs.forEach(([k, sj]) => subjekKelas[k].add(sj)));
         function ulang(k, d) { return ulangKD[k * H + d]; }
-        const BERAT = { kelas: 40, guru: (+opt.beratGuru > 0 ? +opt.beratGuru : 3), ulang: 6, beban: 0.2, hub: 40 };
+        // Lompong guru tidak didenda secara lalai: guru memang perlu waktu lapang di antara kelas.
+        // (opt.beratGuru > 0 menghidupkan semula penalti & langkah "rapat guru".)
+        const BERAT = { kelas: 40, guru: (+opt.beratGuru > 0 ? +opt.beratGuru : 0), ulang: 6, beban: 0.2, hub: 40 };
         function kosBahagian(gs, ks, ds, rs) {
             let c = 0;
             for (const d of ds) {
-                for (const g of gs) c += BERAT.guru * lompong(occG[g], blokG[g], d);
+                if (BERAT.guru) for (const g of gs) c += BERAT.guru * lompong(occG[g], blokG[g], d);
                 for (const k of ks) c += BERAT.kelas * kosongDepan(occK[k], blokK[k], d) + BERAT.ulang * ulang(k, d) + BERAT.beban * dayLoadK[k][d] * dayLoadK[k][d];
             }
             for (const ri of rs) if (relLembut[ri] || relLonggar[ri]) c += B.hubUnit[ri].w * langgarHubungan(ri);
@@ -11848,7 +11850,7 @@ window.VJSolver = (function () {
                     lantai += BERAT.beban * (r * (q + 1) * (q + 1) + (H - r) * q * q);
                 });
                 // Campuran langkah (kumulatif): isi lubang, alih, tukar sama panjang, tukar bersebelahan, rapat guru
-                const w = [kelasBerlubang.length ? 0.12 : 0, bolehAlih.length ? 0.13 : 0, 0.35, 0.15, guruAktif.length ? 0.25 : 0];
+                const w = [kelasBerlubang.length ? 0.12 : 0, bolehAlih.length ? 0.13 : 0, 0.35, 0.15, (BERAT.guru && guruAktif.length) ? 0.25 : 0];
                 const jw = w.reduce((x, y) => x + y, 0);
                 const kum = []; w.reduce((acc, x, i) => (kum[i] = acc + x / jw), 0);
                 const awal = kosSemua() - lantai;
@@ -12621,7 +12623,7 @@ window.VJSolver = (function () {
                 const teksAuto = s.hentiAuto === 'sempurna' ? ' Optimum dihentikan automatik: kos sifar (sempurna).'
                     : s.hentiAuto === 'stabil' ? ' Optimum dihentikan automatik: tiada peningkatan selepas 2 kitaran (30 s setiap satu).' : '';
                 const teksTeras = s.teras > 1 ? ` ${s.teras} teras bekerjasama.` : '';
-                const teksOpt = o ? `${teksTeras} Optimum: slot kosong di depan kelas ${o.awal.kosongDepanKelas}→${o.kosongDepanKelas}, lompong guru ${o.awal.lompongGuru}→${o.lompongGuru}, subjek berulang ${o.awal.subjekBerulang}→${o.subjekBerulang}.` : '';
+                const teksOpt = o ? `${teksTeras} Optimum: slot kosong di depan kelas ${o.awal.kosongDepanKelas}→${o.kosongDepanKelas}, subjek berulang ${o.awal.subjekBerulang}→${o.subjekBerulang}.` : '';
                 showToast((s.diletak === s.unit ? `Jadual lengkap: semua ${s.unit} sesi diletak (${(s.ms / 1000).toFixed(1)} s).${teksOpt}`
                     : `${s.diletak}/${s.unit} sesi diletak. ${s.unit - s.diletak} sesi belum muat${s.hentiBuntu ? ' (carian dihentikan awal kerana tiada kemajuan)' : ''} — lihat senarai di bawah jadual.${teksOpt}${teksAuto}`) + teksDepan, s.diletak === s.unit && !s.kosongDepan ? 'success' : 'warning', o ? 10000 : 6000);
             } catch (e) {
@@ -12955,7 +12957,6 @@ window.VJSolver = (function () {
             });
             // 3. Kualiti jadual
             if (q.kosongDepanKelas > 0) tambah('amaran', `${q.kosongDepanKelas} slot kelas kosong sebelum waktu terakhir`, 'Ada kelas yang mula lewat atau berlompong di tengah hari, bukan di hujung hari.', 'Naikkan masa Optimum (atau guna Optimum tanpa had) supaya lompong dialihkan ke hujung hari.');
-            if (q.lompongGuru > 0) tambah('info', `Lompong guru: ${q.lompongGuru} slot`, 'Guru perlu menunggu antara dua sesi pada hari yang sama.', 'Optimum lebih lama biasanya mengurangkannya.');
             if (q.lompongKelas > 0) tambah('info', `Lompong kelas: ${q.lompongKelas} slot`, 'Kelas ada slot kosong di antara sesi.', '');
             if (q.subjekBerulang > 0) tambah('info', `Subjek berulang sehari: ${q.subjekBerulang}`, 'Subjek yang sama muncul lebih daripada satu sesi pada hari yang sama bagi sesuatu kelas.', 'Jika subjek 4+ waktu, pecahan 2,2 membantu menyebarkannya.');
             // 4. Beban guru (logik kumpulan) vs slot & had

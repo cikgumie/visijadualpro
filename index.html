@@ -148,6 +148,8 @@ window.VJI18N = (function () {
         "Buang Semua": "Remove All",
         "Buka": "Open",
         "Buka Fail ZIP": "Open ZIP File",
+        "Import dari aSc TimeTables": "Import from aSc TimeTables",
+        "Baca fail .roz atau sandaran .ziptt: guru, kelas, subjek, agihan & jadual": "Read a .roz file or .ziptt backup: teachers, classes, subjects, allocations & timetable",
         "Buka dari Drive": "Open from Drive",
         "Buka dari Google Drive": "Open from Google Drive",
         "Cadangan disusun ikut jumlah minit ganti terendah (adil). Hanya rekod disahkan dikira dalam beban.": "Suggestions are sorted by the fewest relief minutes (fair). Only confirmed records count toward the load.",
@@ -1129,6 +1131,21 @@ window.VJI18N = (function () {
         [/^Hubungan (\S+) "(.*)"( \(.*\))? tidak dipenuhi sepenuhnya \((\d+) pelanggaran\)\.$/, function (m) { return 'Relation ' + (HUB[m[1]] || m[1]) + ' "' + m[2] + '"' + (m[3] || '') + ' is not fully satisfied (' + pl(m[4], 'violation') + ').'; }],
         [/^Pilih (guru|kelas|subjek) — Kumpulan (A|B)$/, function (m) { return 'Select ' + ({ guru: 'teachers', kelas: 'classes', subjek: 'subjects' })[m[1]] + ' — Group ' + m[2]; }],
         [/^(\d+) ditanda$/, function (m) { return m[1] + ' ticked'; }],
+        [/^Mengimport fail aSc "(.*)"\.\.\.$/, function (m) { return 'Importing aSc file "' + m[1] + '"...'; }],
+        [/^Gagal mengimport fail aSc: (.*)$/, function (m) { return 'Failed to import aSc file: ' + m[1]; }],
+        [/^Fail aSc v(\d+) diimport: (\d+) guru, (\d+) kelas, (\d+) subjek, (\d+) agihan, (\d+) sesi jadual \((\d+) berkunci\), (\d+) hubungan\. Simpan sebagai fail ZIP VisiJadual\.([\s\S]*)$/, function (m) {
+            var t = m[9].replace(/Kelas dipecah ikut kumpulan: /, 'Classes split by group: ')
+                .replace(/Peraturan "1 sesi subjek sehari" diganti hubungan setiap subjek; dikecualikan: /, 'The "1 session of a subject per day" rule was replaced by a relation per subject; excluded: ')
+                .replace(/ sesi\)/g, ' sessions)')
+                .replace(/Hubungan aSc tidak diimport: /, 'aSc relations not imported: ').replace(/jenis (\d+)/g, 'type $1')
+                .replace(/(\d+) kumpulan elektif tidak dapat digabung serentak\./, '$1 elective group(s) could not be made simultaneous.')
+                .replace(/(\d+) kad di luar slot dilangkau\./, '$1 card(s) outside the slots were skipped.')
+                .replace(/(\d+) pelajaran tanpa kelas\/subjek dilangkau\./, '$1 lesson(s) without class/subject were skipped.');
+            return 'aSc file v' + m[1] + ' imported: ' + m[2] + ' teachers, ' + m[3] + ' classes, ' + m[4] + ' subjects, ' + m[5] + ' allocations, ' + m[6] + ' timetable sessions (' + m[7] + ' locked), ' + m[8] + ' relations. Save it as a VisiJadual ZIP file.' + t;
+        }],
+        [/^Kelas (.+): subjek (.+) ada (\d+) sesi tetapi hanya (\d+) hari \(had (\d+) sesi subjek sama sehari\)\. (\d+) sesi pasti tidak muat — gabungkan pecahan, beri label serentak, atau kurangkan sesi\.$/, function (m) { return 'Class ' + m[1] + ': subject ' + m[2] + ' has ' + m[3] + ' sessions but only ' + m[4] + ' days (limit ' + m[5] + ' session of the same subject per day). ' + m[6] + ' session(s) cannot fit — merge splits, give a simultaneous label, or reduce sessions.'; }],
+        [/^Hubungan ketat "(.*)" menggabungkan (\d+) (guru|kelas): had dikira bagi semua bersama, bukan setiap (guru|kelas)\. Jika maksudnya setiap (guru|kelas), tukar "Dikenakan kepada" → "Setiap (guru|kelas) berasingan"\.$/, function (m) { var e = m[3] === 'guru' ? 'teacher' : 'class', es = m[3] === 'guru' ? 'teachers' : 'classes'; return 'Strict relation "' + m[1] + '" combines ' + m[2] + ' ' + es + ': the limit counts all of them together, not each ' + e + '. If you mean each ' + e + ', change "Apply to" → "Each ' + e + ' separately".'; }],
+        [/^Hubungan ketat "(.*)": (\d+) waktu perlu diletak tetapi had gabungan hanya (\d+) waktu seminggu — mustahil dipenuhi\.$/, function (m) { return 'Strict relation "' + m[1] + '": ' + m[2] + ' periods must be placed but the combined limit is only ' + m[3] + ' periods per week — impossible.'; }],
         [/^· Dikira bagi setiap (guru|kelas) berasingan( \(kosong = semua (guru|kelas)\))?\.$/, function (m) { var e = m[1] === 'guru' ? 'teacher' : 'class'; return '· Counted for each ' + e + ' separately' + (m[2] ? ' (empty = all ' + (e === 'class' ? 'classes' : 'teachers') + ')' : '') + '.'; }],
         [/^Hubungan dikemas kini \((\d+) agihan\)\.$/, function (m) { return 'Relation updated (' + pl(m[1], 'allocation') + ').'; }],
         [/^Hubungan ditambah \((\d+) agihan\)\.$/, function (m) { return 'Relation added (' + pl(m[1], 'allocation') + ').'; }],
@@ -2252,6 +2269,568 @@ window.VJI18N = (function () {
 
     </script>
     <script>
+// =========================================================================
+// IMPORT FAIL aSc TimeTables (.roz / .rox / .ziptt)
+// Pembaca diadaptasi daripada projek Jadual Web (js/roz.js, docs/FORMAT-ROZ.md): nota format
+// hasil kejuruteraan balik untuk kebolehoperasian. Hanya membaca; tidak menulis format asal.
+// =========================================================================
+window.VJRoz = (function () {
+    const MARK = [2, 0, 0, 0, 2, 0, 0, 0, 2, 0, 1, 0];
+
+    function Pembaca(bytes) {
+        this.b = bytes;
+        this.dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+        this.dec = new TextDecoder('windows-1252');
+    }
+    Pembaca.prototype.i32 = function (i) { return this.dv.getInt32(i, true); };
+    // CString MFC CArchive: 1 bait panjang (0xFF → u16; 0xFFFF → u32; 0xFFFE → Unicode)
+    Pembaca.prototype.cstr = function (i) {
+        let len = this.b[i], p = i + 1;
+        if (len === 0xff) {
+            len = this.dv.getUint16(p, true); p += 2;
+            if (len === 0xfffe) {
+                const l2 = this.b[p]; p += 1;
+                return [new TextDecoder('utf-16le').decode(this.b.subarray(p, p + l2 * 2)), p + l2 * 2];
+            }
+            if (len === 0xffff) { len = this.dv.getUint32(p, true); p += 4; }
+        }
+        if (p + len > this.b.length) throw new Error('cstr');
+        return [this.dec.decode(this.b.subarray(p, p + len)), p + len];
+    };
+
+    function cariPengepala(r) {
+        const b = r.b, out = [];
+        luar: for (let i = 3; i < b.length - 40; i++) {
+            if (b[i] !== 2) continue;
+            for (let k = 1; k < 12; k++) if (b[i + k] !== MARK[k]) continue luar;
+            const nameAt = i + 12 + 16;
+            try {
+                let [name, after] = r.cstr(nameAt);
+                let isClass = false;
+                if (name === 'CLASSTT') { isClass = true; [name, after] = r.cstr(after); }
+                const nameEnd = after;
+                let short;
+                [short, after] = r.cstr(after);
+                const color = '#' + [b[i - 3], b[i - 2], b[i - 1]].map(x => x.toString(16).padStart(2, '0')).join('');
+                out.push({ pos: i, nameAt, nameEnd, name, short, after, isClass, color });
+            } catch (e) { /* bukan pengepala */ }
+            i += 11;
+        }
+        for (let k = 0; k < out.length; k++) out[k].size = (k + 1 < out.length ? out[k + 1].pos : b.length) - out[k].pos;
+        return out;
+    }
+
+    function bacaWaktu(r, h) {
+        const p = h.nameAt;
+        if (p + 40 > r.b.length) return null;
+        const num = r.i32(p);
+        if (!(num >= 0 && num < 40)) return null;
+        let name, short, q;
+        try { [name, q] = r.cstr(p + 7); [short, q] = r.cstr(q); } catch (e) { return null; }
+        if (name.length > 40 || short.length > 40) return null;
+        const sh = r.i32(q), sm = r.i32(q + 4), eh = r.i32(q + 8), em = r.i32(q + 12);
+        const ok = sh >= 0 && sh < 24 && sm >= 0 && sm < 60 && eh >= 0 && eh < 24 && em >= 0 && em < 60 && (eh * 60 + em) > (sh * 60 + sm);
+        if (!ok) return null;
+        const f = n => String(n).padStart(2, '0');
+        return { num, name: name || String(num), mula: f(sh) + ':' + f(sm), tamat: f(eh) + ':' + f(em) };
+    }
+
+    // Rekod guru mengulang bahagian nama pertama sebagai CString berasingan
+    function rupaGuru(r, h, nextPos) {
+        const name = h.name.trim();
+        if (name.length < 2) return false;
+        const b = r.b;
+        for (let i = h.after + 8; i < Math.min(nextPos, h.after + 2000) - 2; i++) {
+            const L = b[i];
+            if (L < 2 || L > name.length || i + 1 + L > nextPos) continue;
+            if (b[i + 1] !== name.charCodeAt(0)) continue;
+            const s = r.dec.decode(b.subarray(i + 1, i + 1 + L));
+            if (name.startsWith(s) && (L >= 3 || L === name.length)) return true;
+        }
+        return false;
+    }
+
+    function bacaSenarai(r, p) {
+        const n = r.i32(p); p += 4;
+        if (n < 0 || n > 500) throw new Error('senarai');
+        const a = [];
+        for (let k = 0; k < n; k++) { a.push(r.i32(p)); p += 4; }
+        return [a, p];
+    }
+
+    function bacaPelajaran(r, h) {
+        let p = h.after + 11;
+        const count = r.i32(p), len = r.i32(p + 4);
+        p += 8 + 5 + 4 + 4;
+        const subject = r.i32(p); p += 4;
+        let groups, teachers, rooms;
+        [groups, p] = bacaSenarai(r, p);
+        [teachers, p] = bacaSenarai(r, p);
+        [rooms, p] = bacaSenarai(r, p);
+        if (!(count >= 0 && count < 20 && len > 0 && len < 100)) throw new Error('pelajaran');
+        return { ppc: count + 1, cpw: len, subject, groups, teachers, rooms };
+    }
+
+    // Kad dikesan melalui badan tetap: waktu, tempoh, 0, topengHari, topengMinggu, 00 FFFFFFFF, K ...
+    function cariKad(r, start, end, nLesson, nPeriod, nRoom) {
+        const b = r.b, cards = [];
+        let last = 0, prevK = 0;
+        for (let q = start + 12; q < end - 40; q++) {
+            if (r.i32(q + 8) !== 0 || b[q + 20] !== 0 || r.i32(q + 21) !== -1) continue;
+            const days = r.i32(q + 12), weeks = r.i32(q + 16), period = r.i32(q), dur = r.i32(q + 4);
+            if (days <= 0 || days > 0x7f || weeks <= 0 || weeks > 0xffff) continue;
+            if (period < 0 || period > Math.max(nPeriod, 1) + 1 || dur < 0 || dur > 20) continue;
+            let found = null;
+            for (let n = 0; n <= 8 && !found; n++) {
+                const p = q - 4 * n;
+                if (p - 8 < start || r.i32(p - 4) !== n) continue;
+                const list = []; for (let k = 0; k < n; k++) list.push(r.i32(p + 4 * k));
+                const a = r.i32(p - 8), bb = r.i32(p - 12);
+                const withRoom = prevK === 1 && bb >= last && bb < nLesson && a >= 0 && a < Math.max(nRoom, 1);
+                if (withRoom) found = { lesson: bb, room: a };
+                else if (a >= last && a < nLesson) { const rm = list.find(x => x >= 0 && x < nRoom); found = { lesson: a, room: rm === undefined ? -1 : rm }; }
+            }
+            if (!found) continue;
+            cards.push({ lesson: found.lesson, room: found.room, period, len: dur + 1, days, locked: b[q + 59] === 1 });
+            last = found.lesson;
+            prevK = r.i32(q + 25);
+            q += 24;
+        }
+        return cards;
+    }
+
+    // Matriks masa: bilHari × 32 × int32 ikut nombor waktu (4 = boleh, 0 = tidak boleh, 6 = tiada waktu)
+    function bacaMasaTiada(r, start, end, nums, nHari) {
+        const ada = new Set(nums), maxNum = Math.max.apply(null, nums);
+        const need = nHari * 128;
+        luar: for (let p = start; p + need <= end; p++) {
+            if (r.i32(p) !== 6 && !ada.has(0)) continue;
+            for (let d = 0; d < nHari; d++) {
+                for (let k = 0; k < 32; k++) {
+                    const v = r.i32(p + d * 128 + k * 4);
+                    if (v < 0 || v > 6) continue luar;
+                    if (ada.has(k) ? v === 6 : (k > maxNum && v !== 6)) continue luar;
+                }
+            }
+            const blok = [];
+            nums.forEach((num, i) => { for (let d = 0; d < nHari; d++) if (r.i32(p + d * 128 + num * 4) === 0) blok.push(d + '-' + i); });
+            return blok;
+        }
+        return [];
+    }
+
+    function hadGuru(r, h) {
+        try {
+            const q = h.after + 17;
+            if (q + 40 > r.b.length) return {};
+            const gapsOn = r.i32(q - 8), daysOn = r.i32(q - 4), gapsWeek = r.i32(q), maxDays = r.i32(q + 4);
+            const flag = r.b[q + 12];
+            if (flag > 1) return {};
+            const after = q + 13 + (flag ? 10 * 128 : 0);
+            const consec = r.i32(after), consecOn = r.i32(after + 4), gapsDay = r.i32(after + 12);
+            const ok = v => v >= 0 && v < 100;
+            if (![gapsWeek, maxDays, consec, gapsDay].every(ok)) return {};
+            const out = {};
+            if (consecOn === 1 && consec > 0) out.maksBerturut = consec;
+            if (gapsOn === 1) out.maksLompongMinggu = gapsWeek;
+            if (daysOn === 1 && maxDays > 0) out.maksHari = maxDays;
+            if (gapsDay > 0) out.maksLompong = gapsDay;
+            return out;
+        } catch (e) { return {}; }
+    }
+
+    // Baca bait .roz/.rox (sudah dinyahzip) → struktur mentah
+    function baca(bytes) {
+        const r = new Pembaca(bytes);
+        const amaran = [];
+        const versi = r.i32(0);
+        let magic = '';
+        try { magic = r.cstr(4)[0]; } catch (e) { /* abaikan */ }
+        if (magic !== 'ASCTT') throw new Error('Bukan fail aSc TimeTables (.roz).');
+        if (versi < 600) amaran.push('Versi fail ' + versi + ' lebih lama daripada yang diuji (702/802); sesetengah data mungkin tidak dibaca.');
+        const H = cariPengepala(r);
+
+        const waktu = [];
+        let k = 0, firstP = -1;
+        for (; k < H.length; k++) {
+            const w = bacaWaktu(r, H[k]);
+            if (w) { if (firstP < 0) firstP = k; waktu.push(w); }
+            else if (firstP >= 0) break;
+        }
+        const lepasWaktu = firstP >= 0 ? firstP + waktu.length : 0;
+
+        const firstC = H.findIndex(h => h.isClass);
+        if (firstC < 0) throw new Error('Tiada kelas ditemui dalam fail — format tidak dikenali.');
+        let lastC = firstC;
+        while (lastC + 1 < H.length && H[lastC + 1].isClass) lastC++;
+        const kelasH = H.slice(firstC, lastC + 1);
+        const kelasInfo = kelasH.map(h => { try { const [g] = bacaSenarai(r, h.after + 5); return g; } catch (e) { return []; } });
+        const nGroup = Math.max.apply(null, [0].concat(...kelasInfo)) + 1;
+        const groupH = H.slice(firstC - nGroup, firstC);
+
+        const tengah = H.slice(lepasWaktu, firstC - nGroup);
+        const nextPos = j => (lepasWaktu + j + 1 < H.length ? H[lepasWaktu + j + 1].pos : r.b.length);
+        let t0 = tengah.length;
+        while (t0 > 0 && rupaGuru(r, tengah[t0 - 1], nextPos(t0 - 1))) t0--;
+        let s0 = 0;
+        while (s0 < t0 && tengah[s0].size <= 90) s0++;
+        if (s0 >= t0) s0 = 0;
+        const subjekH = tengah.slice(s0, t0), guruH = tengah.slice(t0);
+
+        const baki = H.slice(lastC + 1);
+        const mulaL = baki.findIndex(h => h.name === '' && h.short === '');
+        const bilikH = baki.slice(0, Math.max(0, mulaL));
+        const pelajaran = [];
+        let akhirL = null;
+        for (let j = mulaL; j >= 0 && j < baki.length; j++) {
+            const h = baki[j];
+            if (h.name !== '' || h.short !== '') break;
+            try { pelajaran.push(bacaPelajaran(r, h)); akhirL = h; } catch (e) { break; }
+        }
+        if (!pelajaran.length) amaran.push('Tiada rekod pelajaran ditemui.');
+        const mulaKad = akhirL ? akhirL.after + 40 : 0;
+        const hSeterus = H.find(h => h.pos > mulaKad);
+        const kad = cariKad(r, mulaKad, hSeterus ? hSeterus.pos : r.b.length, pelajaran.length, waktu.length, bilikH.length);
+
+        const groupKelas = new Array(nGroup).fill(-1);
+        kelasInfo.forEach((gs, ci) => gs.forEach(g => { groupKelas[g] = ci; }));
+        const kumpulan = groupH.map((h, gi) => ({ nama: h.name, seluruh: r.i32(h.nameEnd) === 1, bahagian: r.i32(h.nameEnd + 4), kelas: groupKelas[gi] }));
+
+        let maxBit = 4;
+        kad.forEach(c => { for (let d = 0; d < 16; d++) if (c.days & (1 << d)) maxBit = Math.max(maxBit, d); });
+        const nHari = maxBit + 1;
+        const numKeIdx = new Map(waktu.map((w, i) => [w.num, i]));
+        kad.forEach(c => { c.period = numKeIdx.has(c.period) ? numKeIdx.get(c.period) : c.period - 1; });
+
+        const nums = waktu.map(w => w.num);
+        const masaTiada = h => (nums.length ? bacaMasaTiada(r, h.after, h.pos + h.size, nums, nHari) : []);
+
+        const hubungan = [];
+        H.forEach(h => {
+            if (h.pos < mulaKad || r.i32(h.nameAt) !== 5) return;
+            try {
+                let [desc, p] = r.cstr(h.nameAt + 4);
+                if (desc.length < 3) return;
+                let kls, sbj;
+                [kls, p] = bacaSenarai(r, p);
+                [sbj, p] = bacaSenarai(r, p);
+                const jenis = r.i32(p);
+                if (!kls.length || !sbj.length) return;
+                if (kls.some(x => x < 0 || x >= kelasH.length) || sbj.some(x => x < 0 || x >= subjekH.length)) return;
+                if (jenis < 0 || jenis > 200) return;
+                hubungan.push({ jenis, desc, kelas: kls, subjek: sbj });
+            } catch (e) { /* bukan hubungan */ }
+        });
+
+        return {
+            versi, amaran, nHari, waktu,
+            subjek: subjekH.map(h => ({ nama: h.name, kod: h.short, masaTiada: masaTiada(h) })),
+            guru: guruH.map(h => ({ nama: h.name, kod: h.short, masaTiada: masaTiada(h), had: hadGuru(r, h) })),
+            kelas: kelasH.map(h => ({ nama: h.name, kod: h.short, masaTiada: masaTiada(h) })),
+            kumpulan,
+            bilik: bilikH.map(h => ({ nama: h.name, kod: h.short })),
+            pelajaran, kad, hubungan
+        };
+    }
+
+    const HARI = ['Isnin', 'Selasa', 'Rabu', 'Khamis', 'Jumaat', 'Sabtu', 'Ahad'];
+    const pad = (p, n) => p + String(n).padStart(2, '0');
+    const uid = () => (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : ('u' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10));
+    const hurufKe = n => { let s = ''; n++; while (n > 0) { const m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); } return s; };
+
+    // Tukar struktur mentah → data mentah VisiJadual (untuk VJStore.loadDb)
+    function keDb(d, namaFail) {
+        const lap = { amaran: d.amaran.slice(), dilangkau: 0, kadTakSah: 0, tidakSerentak: 0, hubDilangkau: {} };
+        const W = d.waktu.length;
+        const nHari = Math.min(d.nHari, 7);
+
+        const guru = d.guru.map((g, i) => [pad('G', i + 1), String(g.nama || g.kod).trim(), String(g.kod || '').trim(), 0]);
+        const subjek = d.subjek.map((s, i) => [pad('S', i + 1), String(s.nama || s.kod).trim(), String(s.kod || '').trim(), 0]);
+        const kelas = d.kelas.map((k, i) => {
+            const nama = String(k.kod || k.nama).trim();
+            const m = /\d+/.exec(nama) || /\d+/.exec(k.nama || '');
+            return [pad('K', i + 1), nama, m ? parseInt(m[0]) : '', '', i + 1];
+        });
+        const masaKelas = d.kelas.map(k => nHari * W - k.masaTiada.length);
+        const bilikSen = d.bilik.map((b, i) => ({ id: pad('B', i + 1), nama: String(b.nama || b.kod).trim() || pad('Bilik ', i + 1), kod: String(b.kod || '').trim() }));
+
+        // Pelajaran → kelas, kad sah, pecahan
+        const kadIkut = d.pelajaran.map(() => []);
+        d.kad.forEach(c => {
+            if (!kadIkut[c.lesson]) return;
+            for (let day = 0; day < 16; day++) {
+                if (!(c.days & (1 << day))) continue;
+                if (day >= nHari || c.period < 0 || c.period + c.len > W) { lap.kadTakSah++; continue; }
+                kadIkut[c.lesson].push({ hari: day, waktu: c.period, panjang: c.len, kunci: !!c.locked, bilik: c.room });
+            }
+        });
+        const L = d.pelajaran.map((l, li) => {
+            const gs = l.groups.map(g => d.kumpulan[g]).filter(g => g && g.kelas >= 0 && kelas[g.kelas]);
+            const kIdx = [...new Set(gs.map(g => g.kelas))];
+            const sub = subjek[l.subject];
+            if (!sub || !kIdx.length) return null;
+            const parts = Array(l.cpw).fill(l.ppc);
+            const kd = kadIkut[li].slice().sort((a, b) => b.panjang - a.panjang || a.hari - b.hari || a.waktu - b.waktu);
+            const sig = kd.map(c => c.hari + ':' + c.waktu + ':' + c.panjang).sort().join('|');
+            return { li, gs, kIdx, kumpulanSahaja: gs.length > 0 && gs.every(g => !g.seluruh), sub: l.subject, guru: [...new Set(l.teachers.filter(t => guru[t]))], bilik: l.rooms, parts, kad: kd, sig };
+        });
+
+        // Kelas berpecah: kumpulan dalam satu pembahagian aSc mempunyai jadual sendiri (cth. aliran vokasional
+        // dalam kelas biasa). VisiJadual tiada kumpulan dalam kelas, jadi kelas itu dipecah kepada sub-kelas
+        // (satu bagi setiap kumpulan); pelajaran seluruh kelas merangkumi semua sub-kelas.
+        const pecah = {};   // ci -> { dlmBhg, sub: Map(kumpulan -> idSub) }
+        const kumpulanDi = (x, ci) => x.gs.filter(g => g.kelas === ci);
+        const idKelas = ci => pecah[ci] ? [...pecah[ci].sub.values()] : [kelas[ci][0]];
+        const tetapkanKelas = () => L.forEach(x => {
+            if (!x) return;
+            x.tIds = [];
+            x.kIdx.forEach(ci => {
+                const P = pecah[ci];
+                if (!P) { x.tIds.push(kelas[ci][0]); return; }
+                const gs = P.dlmBhg(x);
+                if (gs) gs.forEach(g => x.tIds.push(P.sub.get(g)));
+                else P.sub.forEach(id => x.tIds.push(id));
+            });
+            x.tIds = [...new Set(x.tIds)];
+        });
+
+        // Kumpulan serentak (union-find atas pelajaran)
+        const samaPecah = (a, b) => a.parts.join(',') === b.parts.join(',');
+        const bolehSatu = (A, B) => samaPecah(A, B) && (!A.kad.length || !B.kad.length || A.sig === B.sig);
+        function kesatuan(kira) {
+            const par = L.map((_, i) => i);
+            const cari = i => { while (par[i] !== i) { par[i] = par[par[i]]; i = par[i]; } return i; };
+            const satu = (a, b) => { const ra = cari(a), rb = cari(b); if (ra !== rb) par[ra] = rb; };
+            // (a) pelajaran dalam kelas yang sama diletak pada slot yang sama dalam jadual asal
+            const ikutSig = {};
+            L.forEach((x, i) => { if (x && x.sig && x.kad.length === x.parts.length) (ikutSig[x.sig] = ikutSig[x.sig] || []).push(i); });
+            Object.values(ikutSig).forEach(list => {
+                for (let a = 0; a < list.length; a++) for (let b = 0; b < a; b++) {
+                    const A = L[list[a]], B = L[list[b]];
+                    if (samaPecah(A, B) && A.tIds.some(k => B.tIds.includes(k))) satu(list[a], list[b]);
+                }
+            });
+            // (b) hubungan aSc 12 (kumpulan mula serentak) & 13 (masa sama dalam semua kelas dipilih)
+            d.hubungan.forEach(h => {
+                if (h.jenis !== 12 && h.jenis !== 13) return;
+                const calon = L.map((x, i) => (x && h.subjek.includes(x.sub) && x.kIdx.some(k => h.kelas.includes(k)) && (h.jenis === 13 || x.kumpulanSahaja)) ? i : -1).filter(i => i >= 0);
+                const kunci = i => h.jenis === 12 ? L[i].kIdx.filter(k => h.kelas.includes(k)).map(idKelas).join(',') + '|' + L[i].parts.join(',') : L[i].parts.join(',');
+                const kmp = {};
+                calon.forEach(i => (kmp[kunci(i)] = kmp[kunci(i)] || []).push(i));
+                Object.values(kmp).forEach(list => list.forEach(i => { if (i !== list[0]) { if (bolehSatu(L[i], L[list[0]])) satu(i, list[0]); else if (kira) lap.tidakSerentak++; } }));
+            });
+            return cari;
+        }
+
+        // Laluan 1: tanpa pecahan — cari kelas yang masih bertindih atau melebihi slot selepas penggabungan
+        tetapkanKelas();
+        const cari1 = kesatuan(false);
+        d.kelas.forEach((k, ci) => {
+            const idx = L.map((x, i) => (x && x.kIdx.includes(ci)) ? i : -1).filter(i => i >= 0);
+            const ikutBhg = {};
+            idx.forEach(i => { const x = L[i], gs = kumpulanDi(x, ci); if (gs.length && gs.every(g => !g.seluruh)) gs.forEach(g => { ikutBhg[g.bahagian] = (ikutBhg[g.bahagian] || 0) + x.parts.reduce((a, b) => a + b, 0); }); });
+            const bhg = Object.keys(ikutBhg).sort((a, b) => ikutBhg[b] - ikutBhg[a])[0];
+            if (bhg === undefined) return;
+            const akar = {};
+            idx.forEach(i => { akar[cari1(i)] = L[i].parts.reduce((a, b) => a + b, 0); });
+            let perlu = Object.values(akar).reduce((a, b) => a + b, 0) > masaKelas[ci];
+            if (!perlu) {
+                const occ = {};
+                idx.forEach(i => L[i].kad.forEach(c => { for (let t = 0; t < c.panjang; t++) { const key = c.hari * W + c.waktu + t; const r0 = cari1(i); if (occ[key] !== undefined && occ[key] !== r0) perlu = true; occ[key] = r0; } }));
+            }
+            if (!perlu) return;
+            const dlmBhg = x => { const gs = kumpulanDi(x, ci); return gs.length && gs.every(g => !g.seluruh && String(g.bahagian) === bhg) ? gs : null; };
+            const sub = new Map();
+            d.kumpulan.forEach(g => { if (g.kelas === ci && !g.seluruh && String(g.bahagian) === bhg) sub.set(g, kelas[ci][0] + '-' + (sub.size + 1)); });
+            if (sub.size >= 2) pecah[ci] = { dlmBhg, sub };
+        });
+        // Laluan 2: dengan sub-kelas
+        tetapkanKelas();
+        const cari = kesatuan(true);
+        d.hubungan.forEach(h => { if (h.jenis !== 12 && h.jenis !== 13 && h.jenis !== 1) lap.hubDilangkau[h.jenis] = (lap.hubDilangkau[h.jenis] || 0) + 1; });
+
+        const kelasOut = [];
+        kelas.forEach((k, ci) => {
+            if (!pecah[ci]) { kelasOut.push(k); return; }
+            pecah[ci].sub.forEach((id, g) => kelasOut.push([id, k[1] + ' (' + g.nama + ')', k[2], '', 0]));
+        });
+        kelasOut.forEach((k, i) => { k[4] = i + 1; });
+        const namaKelas = {}; kelasOut.forEach(k => { namaKelas[k[0]] = k[1]; });
+        lap.kelasPecah = Object.keys(pecah).map(ci => kelas[ci][1]);
+
+        const kump = {};
+        L.forEach((x, i) => { if (x) (kump[cari(i)] = kump[cari(i)] || []).push(i); });
+
+        const transaksi = [], sesi = [], hubungan = [];
+        const ts = new Date().toISOString();
+        const bebanGuru = {}, masaSubjek = {};
+        let nLabel = 0;
+        const sesiKS = {};   // "idKelas|idSubjek" -> bil. sesi seminggu (kumpulan serentak dikira sekali)
+        Object.values(kump).forEach(ahli => {
+            const rows = [];
+            ahli.forEach(i => {
+                const x = L[i];
+                const masa = x.parts.reduce((a, b) => a + b, 0);
+                const kIds = x.tIds, kNama = x.tIds.map(k => namaKelas[k]);
+                const sb = subjek[x.sub];
+                (masaSubjek[sb[0]] = masaSubjek[sb[0]] || []).push(masa);
+                const gList = x.guru.length ? x.guru : [-1];
+                gList.forEach(t => {
+                    const g = guru[t];
+                    if (g) bebanGuru[g[0]] = (bebanGuru[g[0]] || 0) + masa;
+                    rows.push({ lesson: i, row: [ts, g ? g[0] : '', g ? g[1] : '', kIds.join(','), kNama.join(', '), sb[0], sb[1], masa, uid(), '', (x.parts.length === 1 && x.parts[0] >= 4) ? x.parts[0] + ' blok' : x.parts.join(',')] });
+                });
+            });
+            if (rows.length > 1) {
+                const label = hurufKe(nLabel++) + '1';
+                rows.forEach(r => { r.row[9] = label; });
+                // Ahli tanpa kelas berkongsi tidak digabung oleh label: tambah hubungan "serentak" jika padanan tepat
+                const kSet = rows.map(r => r.row[3].split(','));
+                const sambung = new Set([0]);
+                let ubah = true;
+                while (ubah) { ubah = false; kSet.forEach((ks, i) => { if (!sambung.has(i) && [...sambung].some(j => kSet[j].some(k => ks.includes(k)))) { sambung.add(i); ubah = true; } }); }
+                if (sambung.size < rows.length) rows.forEach(r => { r.perluHub = true; });
+            }
+            // Sesi jadual asal: ikut kad pelajaran pertama yang lengkap
+            const sumber = ahli.map(i => L[i]).find(x => x.kad.length) || null;
+            if (sumber) {
+                const guna = new Array(sumber.parts.length).fill(false);
+                const kadKe = [];
+                sumber.kad.forEach(c => {
+                    const ke = sumber.parts.findIndex((p, j) => !guna[j] && p === c.panjang);
+                    if (ke < 0) { lap.kadTakSah++; return; }
+                    guna[ke] = true; kadKe.push([ke, c]);
+                });
+                if (ahli.some(i => L[i] !== sumber && L[i].kad.length && L[i].sig !== sumber.sig)) lap.tidakSerentak++;
+                rows.forEach(r => kadKe.forEach(([ke, c]) => sesi.push({ uuid: r.row[8], ke, hari: c.hari, waktu: c.waktu, panjang: c.panjang, kunci: c.kunci, bilik: bilikSen[c.bilik] ? bilikSen[c.bilik].id : '' })));
+            }
+            rows.forEach(r => transaksi.push(r.row));
+            const ks = new Map();
+            rows.forEach(r => r.row[3].split(',').forEach(k => ks.set(k + '|' + r.row[5], r.row[10].split(',').length)));
+            ks.forEach((n, key) => { sesiKS[key] = (sesiKS[key] || 0) + n; });
+            if (rows.some(r => r.perluHub)) {
+                const pilih = { subjek: [...new Set(rows.map(r => r.row[5]))], guru: [...new Set(rows.map(r => r.row[1]).filter(Boolean))], kelas: [...new Set(rows.flatMap(r => r.row[3].split(',')))] };
+                hubungan.push({ _ahli: new Set(rows.map(r => r.row[8])), id: uid(), jenis: 'serentak', nama: 'aSc: serentak ' + rows[0].row[9], pilih, pilihB: { subjek: [], guru: [], kelas: [] }, nilai: 0, slot: [], slotB: [], berat: '', aktif: true });
+            }
+        });
+        // Buang hubungan serentak yang tersentuh agihan lain (padanan tidak tepat)
+        const padan = (p, row) => (!p.subjek.length || p.subjek.includes(row[5])) && (!p.guru.length || p.guru.includes(row[1])) && (!p.kelas.length || row[3].split(',').some(k => p.kelas.includes(k)));
+        for (let i = hubungan.length - 1; i >= 0; i--) {
+            const h = hubungan[i];
+            const kena = transaksi.filter(r => padan(h.pilih, r));
+            if (kena.length !== h._ahli.size || kena.some(r => !h._ahli.has(r[8]))) { hubungan.splice(i, 1); lap.tidakSerentak++; }
+            else delete h._ahli;
+        }
+        lap.dilangkau = L.filter(x => !x).length;
+
+        // Beban guru & masa lazim subjek
+        guru.forEach(g => { g[3] = bebanGuru[g[0]] || 0; });
+        subjek.forEach(s => {
+            const m = masaSubjek[s[0]] || [];
+            const kira = {}; m.forEach(v => { kira[v] = (kira[v] || 0) + 1; });
+            const top = Object.keys(kira).sort((a, b) => kira[b] - kira[a])[0];
+            s[3] = top ? parseInt(top) : 0;
+        });
+
+        // Masa tidak tersedia
+        const slot = { hari: HARI.slice(0, nHari), waktu: d.waktu.map(w => ({ mula: w.mula, tamat: w.tamat })), kelas: {}, guru: {}, label: null };
+        while (slot.hari.length < nHari) slot.hari.push('Hari ' + (slot.hari.length + 1));
+        const LBL_GURU = 'Tidak Tersedia';
+        let adaBlokGuru = false;
+        d.kelas.forEach((k, i) => { if (k.masaTiada.length) idKelas(i).forEach(id => { slot.kelas[id] = {}; k.masaTiada.forEach(s => { slot.kelas[id][s] = 'Tiada Kelas'; }); }); });
+        d.guru.forEach((g, i) => { if (g.masaTiada.length) { adaBlokGuru = true; slot.guru[guru[i][0]] = {}; g.masaTiada.forEach(s => { slot.guru[guru[i][0]][s] = LBL_GURU; }); } });
+        slot.label = [{ nama: 'Rehat', warna: 'amber' }, { nama: 'Perhimpunan', warna: 'sky' }, { nama: 'Kokurikulum', warna: 'emerald' }, { nama: 'Bina Insan', warna: 'violet' }, { nama: 'Tiada Kelas', warna: 'slate' }];
+        if (adaBlokGuru) slot.label.push({ nama: LBL_GURU, warna: 'rose' });
+        d.subjek.forEach((s, i) => {
+            if (!s.masaTiada.length) return;
+            hubungan.push({ id: uid(), jenis: 'slotLarang', nama: 'aSc: ' + subjek[i][1] + ' — masa tidak tersedia', pilih: { subjek: [subjek[i][0]], guru: [], kelas: [] }, pilihB: { subjek: [], guru: [], kelas: [] }, nilai: 0, slot: s.masaTiada.slice(), slotB: [], berat: 'ketat', aktif: true });
+        });
+
+        // "1 sesi subjek sama sehari": dalam aSc dikenakan setiap pelajaran, dalam VisiJadual setiap kelas+subjek.
+        // Jika ada kelas+subjek yang sesinya melebihi hari tersedia (cth. beberapa pelajaran EX), peraturan global
+        // dimatikan dan diganti hubungan "maks 1 sesi sehari" setiap subjek, tanpa pasangan yang mustahil.
+        const hariKelas = {};
+        kelasOut.forEach(k => {
+            const blok = slot.kelas[k[0]] || {};
+            let n = 0;
+            for (let dd = 0; dd < nHari; dd++) { for (let w = 0; w < W; w++) if (!blok[dd + '-' + w]) { n++; break; } }
+            hariKelas[k[0]] = n;
+        });
+        const lebih = Object.keys(sesiKS).filter(key => sesiKS[key] > hariKelas[key.split('|')[0]]);
+        let sesiSehariSubjek = 1;
+        if (lebih.length) {
+            sesiSehariSubjek = 0;
+            lap.lebihSehari = lebih.map(key => { const [k, sj] = key.split('|'); return (namaKelas[k] || k) + ' ' + ((subjek.find(x => x[0] === sj) || [])[2] || sj) + ' (' + sesiKS[key] + ' sesi)'; });
+            subjek.forEach(sb => {
+                const kls = Object.keys(sesiKS).filter(key => key.endsWith('|' + sb[0]));
+                if (!kls.some(key => sesiKS[key] >= 2)) return;
+                const kecuali = new Set(lebih.filter(key => key.endsWith('|' + sb[0])).map(key => key.split('|')[0]));
+                const pilihKelas = kecuali.size ? kls.map(key => key.split('|')[0]).filter(k => !kecuali.has(k)) : [];
+                if (kecuali.size && !pilihKelas.length) return;
+                hubungan.push({ id: uid(), jenis: 'maksSesiSehari', ikut: 'kelas', nama: 'aSc: ' + (sb[2] || sb[1]) + ' maks 1 sesi sehari', pilih: { subjek: [sb[0]], guru: [], kelas: pilihKelas }, pilihB: { subjek: [], guru: [], kelas: [] }, nilai: 1, slot: [], slotB: [], berat: '', aktif: true });
+            });
+        }
+
+        // Had guru (tetapan individu dalam aSc) — digabung ikut jenis & nilai
+        const NAMA_HAD = { maksBerturut: 'maks waktu berturut-turut', maksLompong: 'maks lompong sehari', maksLompongMinggu: 'maks lompong seminggu', maksHari: 'maks hari seminggu' };
+        const had = {};
+        d.guru.forEach((g, i) => Object.entries(g.had || {}).forEach(([j, v]) => { const key = j + '|' + v; (had[key] = had[key] || []).push(guru[i][0]); }));
+        Object.entries(had).forEach(([key, ids]) => {
+            const [jenis, v] = key.split('|');
+            hubungan.push({ id: uid(), jenis, nama: 'aSc: guru ' + NAMA_HAD[jenis] + ' ' + v, pilih: { subjek: [], guru: ids, kelas: [] }, pilihB: { subjek: [], guru: [], kelas: [] }, nilai: parseInt(v), slot: [], slotB: [], berat: '', ikut: 'guru', aktif: true });
+        });
+
+        // Hubungan aSc 1: subjek dipilih tidak pada hari yang sama (setiap kelas)
+        d.hubungan.forEach(h => {
+            if (h.jenis !== 1 || h.subjek.length < 2) { if (h.jenis === 1) lap.hubDilangkau[1] = (lap.hubDilangkau[1] || 0) + 1; return; }
+            h.kelas.forEach(k => {
+                if (!kelas[k]) return;
+                hubungan.push({ id: uid(), jenis: 'bezaHari', ikut: 'kelas', nama: 'aSc: ' + h.desc + ' (' + kelas[k][1] + ')', pilih: { subjek: h.subjek.map(s => subjek[s] && subjek[s][0]).filter(Boolean), guru: [], kelas: idKelas(k) }, pilihB: { subjek: [], guru: [], kelas: [] }, nilai: 0, slot: [], slotB: [], berat: '', aktif: true });
+            });
+        });
+
+        // Bilik: subjek → bilik hanya jika setiap pelajaran subjek itu menyenaraikan bilik khas (10001 = bilik kelas sendiri)
+        const bilikSubjek = {};
+        const ikutSub = {};
+        L.forEach(x => { if (x) (ikutSub[x.sub] = ikutSub[x.sub] || []).push(x.bilik.filter(b => bilikSen[b])); });
+        Object.entries(ikutSub).forEach(([s, lists]) => {
+            if (!lists.every(l => l.length)) return;
+            const ids = [...new Set(lists.flat().map(b => bilikSen[b].id))];
+            if (ids.length && subjek[s]) bilikSubjek[subjek[s][0]] = ids;
+        });
+
+        const namaSekolah = String(namaFail || '').replace(/\.(roz|rox|ziptt|zipsubst)$/i, '').replace(/^timetable_[\d_]+_/, '').replace(/_(open|save|auto)$/i, '').trim();
+        lap.kiraan = { guru: guru.length, kelas: kelasOut.length, subjek: subjek.length, bilik: bilikSen.length, pelajaran: d.pelajaran.length, agihan: transaksi.length, sesi: sesi.length, kunci: sesi.filter(s => s.kunci).length, hubungan: hubungan.length, waktu: W, hari: nHari };
+        return {
+            db: {
+                guru, kelas: kelasOut, subjek, transaksi,
+                slot, hubungan, peraturan: { sesiSehariSubjek },
+                bilik: { senarai: bilikSen, subjek: bilikSubjek },
+                jadual: { dijana: sesi.length ? new Date().toISOString() : null, sesi },
+                gantian: { tetapan: { namaSekolah } }
+            },
+            laporan: lap, namaSekolah, versi: d.versi
+        };
+    }
+
+    // Fail (File/Blob) → { db, laporan }
+    async function bukaFail(file) {
+        let bytes = new Uint8Array(await file.arrayBuffer());
+        if (bytes[0] === 0x50 && bytes[1] === 0x4b) {
+            const zip = await JSZip.loadAsync(bytes);
+            const nama = Object.keys(zip.files).filter(n => !zip.files[n].dir && /\.(roz|rox)$/i.test(n));
+            if (!nama.length) throw new Error('Fail ZIP ini tidak mengandungi fail jadual aSc (.roz/.rox).');
+            bytes = await zip.files[nama[0]].async('uint8array');
+        }
+        return keDb(baca(bytes), file.name);
+    }
+
+    function adalahFailAsc(name) { return /\.(roz|rox|ziptt)$/i.test(String(name || '')); }
+
+    return { baca, keDb, bukaFail, adalahFailAsc };
+})();
+    </script>
+    <script>
 /**
  * VISIJADUAL PRO V2 — DATA CONTOH (sample-data.js)
  * Digunakan oleh butang "Cuba Data Contoh" pada skrin permulaan.
@@ -2421,7 +3000,8 @@ window.VJSampleData = function () {
  */
 (function () {
     const supportsFsApi = typeof window.showSaveFilePicker === 'function' && typeof window.showOpenFilePicker === 'function';
-    const ZIP_PICKER_TYPES = [{ description: 'Fail Data VisiJadual (ZIP)', accept: { 'application/zip': ['.zip'] } }];
+    const ZIP_PICKER_TYPES = [{ description: 'Fail Data VisiJadual (ZIP) / aSc TimeTables', accept: { 'application/zip': ['.zip', '.ziptt'], 'application/octet-stream': ['.roz', '.rox'] } }];
+    const ASC_PICKER_TYPES = [{ description: 'Fail aSc TimeTables (.roz, .ziptt)', accept: { 'application/octet-stream': ['.roz', '.rox', '.ziptt'] } }];
     let fileHandle = null; // handle fail semasa (Chrome/Edge sahaja) untuk "Simpan" terus ke fail yang sama
 
     const $ = id => document.getElementById(id);
@@ -2518,7 +3098,49 @@ window.VJSampleData = function () {
         return confirm('⚠️ Ada perubahan yang BELUM disimpan ke fail ZIP.\n\nTeruskan dan buang perubahan tersebut?');
     }
 
+    // Import fail aSc TimeTables: data diganti, tiada handle fail (Simpan akan minta lokasi ZIP baharu)
+    async function loadAscFile(file) {
+        showLoading(`Mengimport fail aSc "${file.name}"...`);
+        try {
+            const res = await VJRoz.bukaFail(file);
+            VJStore.loadDb(res.db, { dirty: true });
+            fileHandle = null;
+            afterDataReplaced();
+            closeWelcome();
+            const k = res.laporan.kiraan, lap = res.laporan;
+            const nota = [];
+            if (lap.kelasPecah && lap.kelasPecah.length) nota.push(`Kelas dipecah ikut kumpulan: ${lap.kelasPecah.join(', ')}.`);
+            if (lap.lebihSehari && lap.lebihSehari.length) nota.push(`Peraturan "1 sesi subjek sehari" diganti hubungan setiap subjek; dikecualikan: ${lap.lebihSehari.join(', ')}.`);
+            const dil = Object.entries(lap.hubDilangkau || {}).map(([j, n]) => `jenis ${j} (${n})`);
+            if (dil.length) nota.push(`Hubungan aSc tidak diimport: ${dil.join(', ')}.`);
+            if (lap.tidakSerentak) nota.push(`${lap.tidakSerentak} kumpulan elektif tidak dapat digabung serentak.`);
+            if (lap.kadTakSah) nota.push(`${lap.kadTakSah} kad di luar slot dilangkau.`);
+            if (lap.dilangkau) nota.push(`${lap.dilangkau} pelajaran tanpa kelas/subjek dilangkau.`);
+            (lap.amaran || []).forEach(a => nota.push(a));
+            toast(`Fail aSc v${res.versi} diimport: ${k.guru} guru, ${k.kelas} kelas, ${k.subjek} subjek, ${k.agihan} agihan, ${k.sesi} sesi jadual (${k.kunci} berkunci), ${k.hubungan} hubungan. Simpan sebagai fail ZIP VisiJadual.` + (nota.length ? ' ' + nota.join(' ') : ''), 'success', 12000);
+        } catch (e) {
+            hideLoading();
+            console.error(e);
+            toast('Gagal mengimport fail aSc: ' + e.message, 'error', 8000);
+        }
+    }
+
+    async function importAsc() {
+        if (!confirmDiscard()) return;
+        if (supportsFsApi) {
+            try {
+                const [handle] = await window.showOpenFilePicker({ types: ASC_PICKER_TYPES, multiple: false });
+                await loadAscFile(await handle.getFile());
+            } catch (e) {
+                if (e.name !== 'AbortError') toast('Gagal mengimport fail aSc: ' + e.message, 'error');
+            }
+            return;
+        }
+        $('ascFileInput').click();
+    }
+
     async function loadZipFile(file, handle) {
+        if (VJRoz.adalahFailAsc(file.name)) return loadAscFile(file);
         showLoading(`Membuka fail "${file.name}"...`);
         try {
             const st = await VJStore.openZip(file);
@@ -2602,7 +3224,7 @@ window.VJSampleData = function () {
         });
         window.addEventListener('drop', e => {
             const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
-            if (!file || !/\.zip$/i.test(file.name)) return;
+            if (!file || !(/\.zip$/i.test(file.name) || VJRoz.adalahFailAsc(file.name))) return;
             e.preventDefault();
             if (confirmDiscard()) loadZipFile(file, null);
         });
@@ -2892,6 +3514,7 @@ window.VJSampleData = function () {
     function init() {
         VJStore.onChange(renderFileStatus);
         $('zipFileInput').addEventListener('change', onZipInputChange);
+        $('ascFileInput').addEventListener('change', ev => { const f = ev.target.files && ev.target.files[0]; ev.target.value = ''; if (f) loadAscFile(f); });
         $('diBody').addEventListener('input', diOnInput);
         $('diSearch').addEventListener('input', diRender);
         setupDragDrop();
@@ -2916,7 +3539,7 @@ window.VJSampleData = function () {
     }
 
     window.VJFile = {
-        init, saveZip, openZip, newFile, loadSample, openWelcome, closeWelcome, loadZipFile, confirmDiscard, showLoading, hideLoading,
+        init, saveZip, openZip, importAsc, newFile, loadSample, openWelcome, closeWelcome, loadZipFile, confirmDiscard, showLoading, hideLoading,
         openDataInduk, closeDataInduk, diSwitch, diAdd, diDelete, diTogglePaste, diApplyPaste, diSave, diTemplate, diUploadClick, diUploadFile,
         supportsFsApi
     };
@@ -3598,7 +4221,8 @@ window.VJSampleData = function () {
     <!-- ============================================================== -->
     <!-- FAIL ZIP: INPUT TERSEMBUNYI (pelayar tanpa File System Access) -->
     <!-- ============================================================== -->
-    <input type="file" id="zipFileInput" accept=".zip,application/zip" class="hidden">
+    <input type="file" id="zipFileInput" accept=".zip,application/zip,.roz,.rox,.ziptt" class="hidden">
+    <input type="file" id="ascFileInput" accept=".roz,.rox,.ziptt" class="hidden">
     <datalist id="diGuruNames"></datalist>
 
     <!-- ============================================================== -->
@@ -3625,6 +4249,14 @@ window.VJSampleData = function () {
                     <div>
                         <div class="text-sm font-bold text-slate-800">Buka Fail ZIP</div>
                         <div class="text-[11px] text-slate-500">Sambung kerja dari fail yang telah disimpan</div>
+                    </div>
+                </button>
+
+                <button onclick="VJFile.importAsc()" class="w-full flex items-center gap-3 p-3.5 rounded-xl border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-left transition">
+                    <div class="p-2 bg-emerald-600 text-white rounded-lg shrink-0"><i data-lucide="file-input" class="w-5 h-5"></i></div>
+                    <div>
+                        <div class="text-sm font-bold text-slate-800">Import dari aSc TimeTables</div>
+                        <div class="text-[11px] text-slate-500">Baca fail .roz atau sandaran .ziptt: guru, kelas, subjek, agihan & jadual</div>
                     </div>
                 </button>
 
@@ -10069,7 +10701,8 @@ window.VJSolver = (function () {
                 isu.push({ jenis: 'amaran', teks: `Pecahan "${pecahanTeks}" tidak berjumlah ${masa} waktu — ${t[6]} (${t[4]}, ${t[2]}). Dianggap satu blok.` });
             }
             let parts = pc.parts;
-            if (opt.pecahAuto && parts.length === 1 && masa >= 4) { parts = pecahAuto(masa, H); bilAuto++; }
+            // 'blok' dalam pecahan (cth. '4 blok') = kekal satu blok, tidak dipecah automatik
+            if (opt.pecahAuto && parts.length === 1 && masa >= 4 && !/blok/i.test(pecahanTeks)) { parts = pecahAuto(masa, H); bilAuto++; }
             const gId = String(t[1] || '');
             if (gId && guruIdx[gId] === undefined) {
                 guruIdx[gId] = guru.length;
@@ -10219,6 +10852,44 @@ window.VJSolver = (function () {
                 units.forEach(u => { if (u[h.ikut].includes(e)) { fA[u.id] = inA[u.id]; fB[u.id] = inB[u.id]; } });
                 return buat(fA, fB, senarai[e].nama);
             });
+        });
+
+        // Semakan awal: kes yang pasti mustahil / tetapan yang mungkin tersilap (supaya penyusun tidak buntu lama)
+        // (a) Subjek sama bagi satu kelas mempunyai lebih banyak sesi daripada hari × had sesi subjek sehari
+        const pr = inp.peraturan || {};
+        const hadSubjek = pr.sesiSehariSubjek === undefined ? 1 : Math.max(0, parseInt(pr.sesiSehariSubjek) || 0);
+        if (hadSubjek > 0) {
+            const kira = {};
+            units.forEach(u => u.pairs.forEach(([k, sj]) => { const key = k + '|' + sj; kira[key] = (kira[key] || 0) + 1; }));
+            Object.entries(kira).forEach(([key, n]) => {
+                const [k, sj] = key.split('|'); const ki = +k;
+                let hari = 0;
+                for (let d = 0; d < H; d++) { for (let p = 0; p < W; p++) if (!blokK[ki][d * W + p]) { hari++; break; } }
+                if (n > hari * hadSubjek) {
+                    const r = rows.find(x => x.subjek === sj);
+                    isu.push({ jenis: 'ralat', teks: `Kelas ${kelas[ki].nama}: subjek ${r ? r.kod : sj} ada ${n} sesi tetapi hanya ${hari} hari (had ${hadSubjek} sesi subjek sama sehari). ${n - hari * hadSubjek} sesi pasti tidak muat — gabungkan pecahan, beri label serentak, atau kurangkan sesi.` });
+                }
+            });
+        }
+        // (b) Hubungan Ketat jenis had/kiraan yang menggabungkan ramai guru / kelas
+        const JENIS_ENTITI = new Set(['maksSehari', 'minSehari', 'minSehariAda', 'maksSesiSehari', 'maksBerturut', 'maksJulat', 'minJulat', 'maksLompong', 'maksLompongAwal', 'maksLompongAkhir', 'maksLompongMinggu', 'maksHari']);
+        hub.forEach(h => {
+            if (h._abai || h.ikut || !JENIS_ENTITI.has(h.jenis) || tahapHub(h) !== 'ketat') return;
+            const padan = rows.filter(r => padanHub(h, r));
+            const bilG = new Set(padan.map(r => r.guru).filter(Boolean)).size;
+            const bilK = new Set(padan.flatMap(r => r.kelas)).size;
+            const nm = `"${namaHub(h)}"`;
+            if (bilG >= 3 || bilK >= 3) {
+                const apa = bilG >= 3 ? `${bilG} guru` : `${bilK} kelas`;
+                isu.push({ jenis: 'amaran', teks: `Hubungan ketat ${nm} menggabungkan ${apa}: had dikira bagi semua bersama, bukan setiap ${bilG >= 3 ? 'guru' : 'kelas'}. Jika maksudnya setiap ${bilG >= 3 ? 'guru' : 'kelas'}, tukar "Dikenakan kepada" → "Setiap ${bilG >= 3 ? 'guru' : 'kelas'} berasingan".` });
+            }
+            if (h.jenis === 'maksSehari') {
+                const uuidPadan = new Set(padan.map(r => r.uuid));
+                const perlu = units.filter(u => u.ahli.some(id => uuidPadan.has(id))).reduce((a, u) => a + u.len, 0);
+                let had = 0;
+                for (let d = 0; d < H; d++) { const v = nilaiHari(h, d); had += v === null ? W : v; }
+                if (perlu > had) isu.push({ jenis: 'ralat', teks: `Hubungan ketat ${nm}: ${perlu} waktu perlu diletak tetapi had gabungan hanya ${had} waktu seminggu — mustahil dipenuhi.` });
+            }
         });
 
         // Bilik khas: setiap agihan yang subjeknya ditetapkan ke bilik memerlukan satu bilik (berbeza) daripada senarainya
@@ -11895,6 +12566,11 @@ window.VJSolver = (function () {
                 const kongsi = jdlPilihanGuru.size ? 0 : inp.transaksi.filter(t => trxDipilih.has(String(t[8])) && String(t[3]).split(',').some(k => !jdlPilihan.has(k.trim()))).length;
                 if (asal.some(x => trxDipilih.has(x.uuid) && !x.kunci) && !confirm(`Susun semula ${nama.length > 3 ? jdlSkopTeks() : nama.join(', ')}? Sesi tidak berkunci bagi pilihan ini akan disusun semula. Sesi lain tidak diubah.${kongsi ? `\n\n${kongsi} agihan dikongsi dengan kelas lain (gabung) turut akan dialih.` : ''}`)) return;
             } else if (inp.jadual.sesi.some(x => !x.kunci) && !confirm('Susun semula jadual? Semua sesi yang tidak dikunci akan disusun semula.')) return;
+            // Semakan awal: maklumkan kes mustahil / hubungan gabungan sebelum penyusun berjalan lama
+            const isuAwal = VJSolver.bina(inp, jdlOptBina()).isu.filter(i => i.jenis === 'ralat' || /^Hubungan ketat .* menggabungkan /.test(i.teks));
+            if (isuAwal.length && !confirm(`Semakan awal menemui ${isuAwal.length} masalah yang boleh menyebabkan sesi tidak muat atau penyusunan buntu lama:\n\n` +
+                isuAwal.slice(0, 6).map(i => '• ' + i.teks).join('\n\n') + (isuAwal.length > 6 ? `\n\n… dan ${isuAwal.length - 6} lagi` : '') +
+                '\n\nTeruskan menyusun juga?')) return;
             jdlSedang = true;
             const btn = document.getElementById('jdlBtnSusun');
             btn.disabled = true; btn.classList.add('opacity-60');

@@ -661,6 +661,10 @@ window.VJI18N = (function () {
         "Maks waktu + lompong sehari": "Max periods + gaps per day",
         "Maks waktu berturut-turut": "Max consecutive periods",
         "Maks waktu sehari": "Max periods per day",
+        "Maks waktu seminggu": "Max periods per week",
+        "Slot dikira (kosong = semua slot)": "Counted slots (empty = all slots)",
+        "Jumlah waktu bagi sesi yang dipilih dalam seminggu tidak melebihi nilai ini. Jika slot ditanda, hanya waktu dalam slot itu dikira. Cth: guru maks 2 kali waktu terakhir seminggu.": "Total periods of the selected sessions in a week do not exceed this value. If slots are marked, only periods in those slots are counted. E.g. a teacher has the last period at most 2 times a week.",
+        "Semua slot": "All slots",
         "Maks. Waktu": "Max. Periods",
         "Maksimum 7 hari dan 20 waktu sehari.": "Maximum 7 days and 20 periods per day.",
         "Masa Diperuntukkan": "Allocated Time",
@@ -731,7 +735,7 @@ window.VJI18N = (function () {
         "Semua Bilik": "All Rooms",
         "Semua Guru": "All Teachers",
         "Semua Kelas": "All Classes",
-        "Semua agihan yang dipilih diletak pada waktu yang sama. Masa & pecahan mesti sama. Cth: dua kumpulan elektif.": "All selected allocations are placed at the same time. The time & split must be the same. E.g. two elective groups.",
+        "Semua agihan yang dipilih diletak pada waktu yang sama. Masa & pecahan mesti sama; jika pecahan berbeza, agihan dipasangkan ikut pecahan yang sama (cth. 3 dengan 3, 2 dengan 2). Cth: dua kumpulan elektif.": "All selected allocations are placed at the same time. The time & split must be the same; if the splits differ, allocations are paired by identical split (e.g. 3 with 3, 2 with 2). E.g. two elective groups.",
         "Semua kedudukan bertembung dengan sesi berkunci.": "Every position clashes with a locked session.",
         "Semua kelas · tanda kotak untuk pilih": "All classes · tick the box to select",
         "Semua sesi A berlaku lebih awal dalam minggu berbanding semua sesi B.": "All sessions of A happen earlier in the week than all sessions of B.",
@@ -1135,9 +1139,15 @@ window.VJI18N = (function () {
         [/^Gagal mengimport fail aSc: (.*)$/, function (m) { return 'Failed to import aSc file: ' + m[1]; }],
         [/^Fail aSc v(\d+) diimport: (\d+) guru, (\d+) kelas, (\d+) subjek, (\d+) agihan, (\d+) sesi jadual \((\d+) berkunci\), (\d+) hubungan\. Simpan sebagai fail ZIP VisiJadual\.([\s\S]*)$/, function (m) {
             var t = m[9].replace(/Kelas dipecah ikut kumpulan: /, 'Classes split by group: ')
-                .replace(/Peraturan "1 sesi subjek sehari" diganti hubungan setiap subjek; dikecualikan: /, 'The "1 session of a subject per day" rule was replaced by a relation per subject; excluded: ')
+                .replace(/Peraturan "1 sesi subjek sehari" dikecualikan bagi: /, 'The "1 session of a subject per day" rule is not applied to: ')
                 .replace(/ sesi\)/g, ' sessions)')
                 .replace(/Hubungan aSc tidak diimport: /, 'aSc relations not imported: ').replace(/jenis (\d+)/g, 'type $1')
+                .replace(/Hubungan aSc dianggarkan: /, 'aSc relations approximated: ')
+                .replace(/\(tiada padanan dalam VisiJadual\)/g, '(no equivalent in VisiJadual)').replace(/\(tidak aktif, tiada padanan dalam VisiJadual\)/g, '(inactive, no equivalent in VisiJadual)')
+                .replace(/\(tiada pelajaran sepadan\)/g, '(no matching lessons)').replace(/\(penapis tidak sepadan\)/g, '(filter matches nothing)')
+                .replace(/\(digabung melalui label serentak\)/g, '(merged through simultaneous labels)').replace(/\(tiada posisi ditanda\)/g, '(no positions marked)')
+                .replace(/semua posisi ditanda — tiada kesan/g, 'all positions marked — no effect').replace(/penapis bilik diabaikan/g, 'room filter ignored')
+                .replace(/hanya hari bertanda diambil kira, bukan waktu tertentu/g, 'only marked days are used, not specific periods').replace(/(\d+) hari pengecualian diabaikan/g, '$1 exception day(s) ignored')
                 .replace(/(\d+) kumpulan elektif tidak dapat digabung serentak\./, '$1 elective group(s) could not be made simultaneous.')
                 .replace(/(\d+) kad di luar slot dilangkau\./, '$1 card(s) outside the slots were skipped.')
                 .replace(/(\d+) pelajaran tanpa kelas\/subjek dilangkau\./, '$1 lesson(s) without class/subject were skipped.');
@@ -1360,7 +1370,7 @@ window.VJI18N = (function () {
     // PANGKALAN DATA DALAM MEMORI
     // =========================================================================
     function emptyDb() {
-        return { guru: [], kelas: [], subjek: [], transaksi: [], arkib: [], tetapan: { Kata_Laluan: DEFAULT_PASSWORD }, slot: defaultSlot(), peraturan: Object.assign({}, PERATURAN_DEFAULT), jadual: emptyJadual(), hubungan: [], gantian: emptyGantian(), bilik: emptyBilik() };
+        return { guru: [], kelas: [], subjek: [], transaksi: [], arkib: [], tetapan: { Kata_Laluan: DEFAULT_PASSWORD }, slot: defaultSlot(), peraturan: normalizePeraturan(null), jadual: emptyJadual(), hubungan: [], gantian: emptyGantian(), bilik: emptyBilik() };
     }
 
     // Bilik khas (makmal, bengkel, bilik komputer...). Subjek yang ditetapkan mesti diajar di salah satu biliknya.
@@ -1416,13 +1426,18 @@ window.VJI18N = (function () {
     const PERATURAN_DEFAULT = {
         sesiSehariSubjek: 1,   // bil. sesi maksimum subjek yang sama bagi satu kelas dalam sehari
         maxGuruSehari: 0,      // waktu mengajar maksimum seorang guru dalam sehari
-        maxGuruBerturut: 0     // waktu mengajar berturut-turut maksimum seorang guru tanpa rehat
+        maxGuruBerturut: 0,    // waktu mengajar berturut-turut maksimum seorang guru tanpa rehat
+        sesiSehariKecuali: []  // pasangan "idKelas|idSubjek" yang dikecualikan daripada had sesiSehariSubjek
     };
 
     function normalizePeraturan(raw) {
-        const out = Object.assign({}, PERATURAN_DEFAULT);
+        const out = Object.assign({}, PERATURAN_DEFAULT, { sesiSehariKecuali: [] });
         if (raw && typeof raw === 'object') {
             Object.keys(PERATURAN_DEFAULT).forEach(k => {
+                if (Array.isArray(PERATURAN_DEFAULT[k])) {
+                    if (Array.isArray(raw[k])) out[k] = raw[k].map(String).filter(s => /^[^|]+\|[^|]+$/.test(s));
+                    return;
+                }
                 const n = parseInt(raw[k]);
                 if (!isNaN(n) && n >= 0) out[k] = n;
             });
@@ -1433,7 +1448,7 @@ window.VJI18N = (function () {
     function emptyJadual() { return { dijana: null, sesi: [] }; }
 
     const JENIS_HUBUNGAN = ['serentak', 'bezaWaktu', 'maksSerentak',
-        'bezaHari', 'maksSehari', 'minSehari', 'minSehariAda', 'maksSesiSehari', 'maksHari', 'minHari', 'maksHariBerturut', 'maksHariLapang',
+        'bezaHari', 'maksSehari', 'minSehari', 'minSehariAda', 'maksSesiSehari', 'maksMinggu', 'maksHari', 'minHari', 'maksHariBerturut', 'maksHariLapang',
         'maksBerturut', 'maksJulat', 'minJulat', 'maksLompong', 'maksLompongMinggu', 'maksLompongAwal', 'maksLompongAkhir',
         'slotHanya', 'slotLarang', 'tidakMula', 'tidakTamat', 'hariBerikut',
         'tidakIkut', 'tidakBersebelahan', 'aSebelumBHari', 'aSebelumBMinggu', 'hariASebelumB', 'aBersebelahanB'];
@@ -2505,22 +2520,7 @@ window.VJRoz = (function () {
         const nums = waktu.map(w => w.num);
         const masaTiada = h => (nums.length ? bacaMasaTiada(r, h.after, h.pos + h.size, nums, nHari) : []);
 
-        const hubungan = [];
-        H.forEach(h => {
-            if (h.pos < mulaKad || r.i32(h.nameAt) !== 5) return;
-            try {
-                let [desc, p] = r.cstr(h.nameAt + 4);
-                if (desc.length < 3) return;
-                let kls, sbj;
-                [kls, p] = bacaSenarai(r, p);
-                [sbj, p] = bacaSenarai(r, p);
-                const jenis = r.i32(p);
-                if (!kls.length || !sbj.length) return;
-                if (kls.some(x => x < 0 || x >= kelasH.length) || sbj.some(x => x < 0 || x >= subjekH.length)) return;
-                if (jenis < 0 || jenis > 200) return;
-                hubungan.push({ jenis, desc, kelas: kls, subjek: sbj });
-            } catch (e) { /* bukan hubungan */ }
-        });
+        const { hubungan, hubLanjut } = cariHubungan(r, mulaKad, { kelas: kelasH.length, subjek: subjekH.length });
 
         return {
             versi, amaran, nHari, waktu,
@@ -2529,8 +2529,60 @@ window.VJRoz = (function () {
             kelas: kelasH.map(h => ({ nama: h.name, kod: h.short, masaTiada: masaTiada(h) })),
             kumpulan,
             bilik: bilikH.map(h => ({ nama: h.name, kod: h.short })),
-            pelajaran, kad, hubungan
+            pelajaran, kad, hubungan, hubLanjut
         };
+    }
+
+    // Hubungan kad aSc. Setiap rekod: pengepala 02 00 00 00 · 02 00 00 00 · 02 00 0A 00 (A = 1 aktif, 0 dinyahaktif) + 16 bait ID.
+    // (a) Rekod lama (versi 5): keterangan CString, senarai kelas, senarai subjek, jenis, ... kepentingan, no. dalam senarai aSc.
+    // (b) Rekod lanjutan ("Advanced", cth. #10 Max periods per day): 5 bendera "semua" [guru, kelas, bilik, subjek, kumpulan],
+    //     5 senarai [kelas, bilik, subjek, kumpulan, guru], jenis, param A, param B, bil. hari, bait ada-grid,
+    //     grid 10 hari × 32 int ikut nombor waktu (4 = ditanda, 0 = tidak, 6 = tiada waktu), ekor 62 bait
+    //     (kepentingan di +17: 3 = Strict; no. dalam senarai aSc di +46).
+    function cariHubungan(r, mula, bil) {
+        const b = r.b, hubungan = [], hubLanjut = [];
+        const senarai = p => { const n = r.i32(p); if (n < 0 || n > 5000 || p + 4 + 4 * n > b.length) throw new Error('senarai'); const a = []; for (let k = 0; k < n; k++) a.push(r.i32(p + 4 + 4 * k)); return [a, p + 4 + 4 * n]; };
+        for (let i = Math.max(0, mula); i < b.length - 120; i++) {
+            if (b[i] !== 2 || b[i + 1] || b[i + 2] || b[i + 3] || r.i32(i + 4) !== 2 || b[i + 8] !== 2 || b[i + 9] || b[i + 10] > 1 || b[i + 11]) continue;
+            const aktif = b[i + 10] === 1, p0 = i + 28;
+            try {
+                if (r.i32(p0) === 5) {
+                    let [desc, p] = r.cstr(p0 + 4);
+                    if (desc.length < 3) continue;
+                    let kls, sbj;
+                    [kls, p] = senarai(p);
+                    [sbj, p] = senarai(p);
+                    const jenis = r.i32(p);
+                    if (!kls.length || !sbj.length) continue;
+                    if (kls.some(x => x < 0 || x >= bil.kelas) || sbj.some(x => x < 0 || x >= bil.subjek)) continue;
+                    if (jenis < 0 || jenis > 200) continue;
+                    const imp = r.i32(p + 29), no = r.i32(p + 33);
+                    hubungan.push({ jenis, desc: desc.replace(/\s+/g, ' ').trim(), kelas: kls, subjek: sbj, aktif, imp, no: no > 0 && no < 10000 ? no : 0 });
+                    i = p + 36;
+                    continue;
+                }
+                const flags = [0, 1, 2, 3, 4].map(k => r.i32(p0 + 4 * k));
+                if (flags.some(f => f !== 0 && f !== 1)) continue;
+                let p = p0 + 20;
+                const lists = [];
+                for (let k = 0; k < 5; k++) { let a; [a, p] = senarai(p); if (a.some(x => x < 0)) throw new Error('senarai'); lists.push(a); }
+                const jenis = r.i32(p), A = r.i32(p + 4), B = r.i32(p + 8), hari = r.i32(p + 12), adaGrid = b[p + 16];
+                if (jenis < 1 || jenis > 500 || hari < 1 || hari > 10 || adaGrid > 1) continue;
+                let t = p + 17;
+                let tanda = null;
+                if (adaGrid) {
+                    if (t + 1280 > b.length) continue;
+                    tanda = [];
+                    for (let d = 0; d < 10; d++) for (let k = 0; k < 32; k++) { const v = r.i32(t + d * 128 + k * 4); if (v >= 1 && v <= 5) tanda.push([d, k]); }
+                    t += 1280;
+                }
+                if (t + 62 > b.length || r.i32(t) !== hari || b[t + 59] !== 0xff || b[t + 60] !== 0xff || b[t + 61] !== 0xff) continue;
+                const no = r.i32(t + 46);
+                hubLanjut.push({ jenis, a: A, b: B, flags, lists, tanda, aktif, imp: r.i32(t + 17), no: no > 0 && no < 10000 ? no : 0 });
+                i = t + 61;
+            } catch (e) { /* bukan hubungan */ }
+        }
+        return { hubungan, hubLanjut };
     }
 
     const HARI = ['Isnin', 'Selasa', 'Rabu', 'Khamis', 'Jumaat', 'Sabtu', 'Ahad'];
@@ -2540,7 +2592,7 @@ window.VJRoz = (function () {
 
     // Tukar struktur mentah → data mentah VisiJadual (untuk VJStore.loadDb)
     function keDb(d, namaFail) {
-        const lap = { amaran: d.amaran.slice(), dilangkau: 0, kadTakSah: 0, tidakSerentak: 0, hubDilangkau: {} };
+        const lap = { amaran: d.amaran.slice(), dilangkau: 0, kadTakSah: 0, tidakSerentak: 0, hubDilangkau: [], hubAnggaran: [] };
         const W = d.waktu.length;
         const nHari = Math.min(d.nHari, 7);
 
@@ -2612,7 +2664,7 @@ window.VJRoz = (function () {
             });
             // (b) hubungan aSc 12 (kumpulan mula serentak) & 13 (masa sama dalam semua kelas dipilih)
             d.hubungan.forEach(h => {
-                if (h.jenis !== 12 && h.jenis !== 13) return;
+                if ((h.jenis !== 12 && h.jenis !== 13) || h.aktif === false) return;
                 const calon = L.map((x, i) => (x && h.subjek.includes(x.sub) && x.kIdx.some(k => h.kelas.includes(k)) && (h.jenis === 13 || x.kumpulanSahaja)) ? i : -1).filter(i => i >= 0);
                 const kunci = i => h.jenis === 12 ? L[i].kIdx.filter(k => h.kelas.includes(k)).map(idKelas).join(',') + '|' + L[i].parts.join(',') : L[i].parts.join(',');
                 const kmp = {};
@@ -2647,7 +2699,6 @@ window.VJRoz = (function () {
         // Laluan 2: dengan sub-kelas
         tetapkanKelas();
         const cari = kesatuan(true);
-        d.hubungan.forEach(h => { if (h.jenis !== 12 && h.jenis !== 13 && h.jenis !== 1) lap.hubDilangkau[h.jenis] = (lap.hubDilangkau[h.jenis] || 0) + 1; });
 
         const kelasOut = [];
         kelas.forEach((k, ci) => {
@@ -2662,6 +2713,7 @@ window.VJRoz = (function () {
         L.forEach((x, i) => { if (x) (kump[cari(i)] = kump[cari(i)] || []).push(i); });
 
         const transaksi = [], sesi = [], hubungan = [];
+        const uuidIkutL = {};   // indeks pelajaran aSc -> [uuid agihan]
         const ts = new Date().toISOString();
         const bebanGuru = {}, masaSubjek = {};
         let nLabel = 0;
@@ -2704,7 +2756,7 @@ window.VJRoz = (function () {
                 if (ahli.some(i => L[i] !== sumber && L[i].kad.length && L[i].sig !== sumber.sig)) lap.tidakSerentak++;
                 rows.forEach(r => kadKe.forEach(([ke, c]) => sesi.push({ uuid: r.row[8], ke, hari: c.hari, waktu: c.waktu, panjang: c.panjang, kunci: c.kunci, bilik: bilikSen[c.bilik] ? bilikSen[c.bilik].id : '' })));
             }
-            rows.forEach(r => transaksi.push(r.row));
+            rows.forEach(r => { transaksi.push(r.row); (uuidIkutL[r.lesson] = uuidIkutL[r.lesson] || []).push(r.row[8]); });
             const ks = new Map();
             rows.forEach(r => r.row[3].split(',').forEach(k => ks.set(k + '|' + r.row[5], r.row[10].split(',').length)));
             ks.forEach((n, key) => { sesiKS[key] = (sesiKS[key] || 0) + n; });
@@ -2746,9 +2798,9 @@ window.VJRoz = (function () {
             hubungan.push({ id: uid(), jenis: 'slotLarang', nama: 'aSc: ' + subjek[i][1] + ' — masa tidak tersedia', pilih: { subjek: [subjek[i][0]], guru: [], kelas: [] }, pilihB: { subjek: [], guru: [], kelas: [] }, nilai: 0, slot: s.masaTiada.slice(), slotB: [], berat: 'ketat', aktif: true });
         });
 
-        // "1 sesi subjek sama sehari": dalam aSc dikenakan setiap pelajaran, dalam VisiJadual setiap kelas+subjek.
-        // Jika ada kelas+subjek yang sesinya melebihi hari tersedia (cth. beberapa pelajaran EX), peraturan global
-        // dimatikan dan diganti hubungan "maks 1 sesi sehari" setiap subjek, tanpa pasangan yang mustahil.
+        // "1 sesi subjek sama sehari": dalam aSc ini peraturan terbina (kad pelajaran yang sama pada hari berbeza), bukan
+        // hubungan kad. Dalam VisiJadual ia peraturan global setiap kelas+subjek; kelas+subjek yang sesinya melebihi hari
+        // tersedia (cth. beberapa pelajaran EX) dikecualikan supaya tidak mustahil.
         const hariKelas = {};
         kelasOut.forEach(k => {
             const blok = slot.kelas[k[0]] || {};
@@ -2757,19 +2809,7 @@ window.VJRoz = (function () {
             hariKelas[k[0]] = n;
         });
         const lebih = Object.keys(sesiKS).filter(key => sesiKS[key] > hariKelas[key.split('|')[0]]);
-        let sesiSehariSubjek = 1;
-        if (lebih.length) {
-            sesiSehariSubjek = 0;
-            lap.lebihSehari = lebih.map(key => { const [k, sj] = key.split('|'); return (namaKelas[k] || k) + ' ' + ((subjek.find(x => x[0] === sj) || [])[2] || sj) + ' (' + sesiKS[key] + ' sesi)'; });
-            subjek.forEach(sb => {
-                const kls = Object.keys(sesiKS).filter(key => key.endsWith('|' + sb[0]));
-                if (!kls.some(key => sesiKS[key] >= 2)) return;
-                const kecuali = new Set(lebih.filter(key => key.endsWith('|' + sb[0])).map(key => key.split('|')[0]));
-                const pilihKelas = kecuali.size ? kls.map(key => key.split('|')[0]).filter(k => !kecuali.has(k)) : [];
-                if (kecuali.size && !pilihKelas.length) return;
-                hubungan.push({ id: uid(), jenis: 'maksSesiSehari', ikut: 'kelas', nama: 'aSc: ' + (sb[2] || sb[1]) + ' maks 1 sesi sehari', pilih: { subjek: [sb[0]], guru: [], kelas: pilihKelas }, pilihB: { subjek: [], guru: [], kelas: [] }, nilai: 1, slot: [], slotB: [], berat: '', aktif: true });
-            });
-        }
+        if (lebih.length) lap.lebihSehari = lebih.map(key => { const [k, sj] = key.split('|'); return (namaKelas[k] || k) + ' ' + ((subjek.find(x => x[0] === sj) || [])[2] || sj) + ' (' + sesiKS[key] + ' sesi)'; });
 
         // Had guru (tetapan individu dalam aSc) — digabung ikut jenis & nilai
         const NAMA_HAD = { maksBerturut: 'maks waktu berturut-turut', maksLompong: 'maks lompong sehari', maksLompongMinggu: 'maks lompong seminggu', maksHari: 'maks hari seminggu' };
@@ -2780,14 +2820,115 @@ window.VJRoz = (function () {
             hubungan.push({ id: uid(), jenis, nama: 'aSc: guru ' + NAMA_HAD[jenis] + ' ' + v, pilih: { subjek: [], guru: ids, kelas: [] }, pilihB: { subjek: [], guru: [], kelas: [] }, nilai: parseInt(v), slot: [], slotB: [], berat: '', ikut: 'guru', aktif: true });
         });
 
-        // Hubungan aSc 1: subjek dipilih tidak pada hari yang sama (setiap kelas)
+        // ---- Hubungan kad aSc (Card relationships) → hubungan VisiJadual, satu demi satu ikut nombor dalam aSc ----
+        const hubAsc = [];   // { no, h }
+        const kosong = () => ({ subjek: [], guru: [], kelas: [] });
+        const unik = a => [...new Set(a)];
+        const ringkasNama = a => a.length > 4 ? a.slice(0, 4).join(', ') + ' +' + (a.length - 4) : a.join(', ');
+        const tambahAsc = (no, h) => hubAsc.push({ no, h: Object.assign({ id: uid(), pilihB: kosong(), nilai: 0, slot: [], slotB: [], berat: '', aktif: true }, h) });
+        const label = (no, teks) => 'aSc #' + (no || '?') + ': ' + teks;
+
+        // (a) Rekod lama: 12/13 = mula serentak, 1 = tidak pada hari yang sama
+        const akarUuid = {};
+        L.forEach((x, i) => { if (x) (uuidIkutL[i] || []).forEach(id => { akarUuid[id] = cari(i); }); });
         d.hubungan.forEach(h => {
-            if (h.jenis !== 1 || h.subjek.length < 2) { if (h.jenis === 1) lap.hubDilangkau[1] = (lap.hubDilangkau[1] || 0) + 1; return; }
-            h.kelas.forEach(k => {
-                if (!kelas[k]) return;
-                hubungan.push({ id: uid(), jenis: 'bezaHari', ikut: 'kelas', nama: 'aSc: ' + h.desc + ' (' + kelas[k][1] + ')', pilih: { subjek: h.subjek.map(s => subjek[s] && subjek[s][0]).filter(Boolean), guru: [], kelas: idKelas(k) }, pilihB: { subjek: [], guru: [], kelas: [] }, nilai: 0, slot: [], slotB: [], berat: '', aktif: true });
-            });
+            const nmSub = h.subjek.map(s => subjek[s] && subjek[s][0]).filter(Boolean);
+            if (h.jenis === 12 || h.jenis === 13) {
+                const calon = L.map((x, i) => (x && h.subjek.includes(x.sub) && x.kIdx.some(k => h.kelas.includes(k)) && (h.jenis === 13 || x.kumpulanSahaja)) ? i : -1).filter(i => i >= 0);
+                if (!calon.length) { lap.hubDilangkau.push('#' + h.no + ' ' + h.desc + ' (tiada pelajaran sepadan)'); return; }
+                const kelasRel = unik(calon.flatMap(i => L[i].tIds.filter(id => h.kelas.some(k => idKelas(k).includes(id)))));
+                if (h.aktif === false) {
+                    tambahAsc(h.no, { jenis: 'serentak', nama: label(h.no, h.desc), pilih: { subjek: nmSub, guru: [], kelas: kelasRel }, aktif: false });
+                    return;
+                }
+                // Hubungan "serentak" VisiJadual memasangkan agihan ikut pecahan yang sama — sama seperti kumpulan yang
+                // dibentuk di atas. Ditambah hanya jika setiap pasangan pecahan itu memang satu kumpulan serentak dan
+                // pilihan tidak terkena agihan lain (jika tidak, penggabungan dikekalkan melalui label serentak sahaja).
+                const uuids = calon.flatMap(i => uuidIkutL[i] || []);
+                const sah = p => {
+                    const kena = transaksi.filter(r => padan(p, r));
+                    if (kena.length < uuids.length || kena.some(r => !uuids.includes(r[8]))) return false;
+                    const ikutP = {};
+                    kena.forEach(r => (ikutP[r[10]] = ikutP[r[10]] || []).push(r));
+                    const g = Object.values(ikutP);
+                    return g.every(x => new Set(x.map(r => akarUuid[r[8]])).size === 1 && (g.length === 1 || x.length > 1));
+                };
+                let pilih = { subjek: nmSub, guru: [], kelas: kelasRel };
+                if (!sah(pilih)) pilih = Object.assign({}, pilih, { guru: unik(transaksi.filter(r => uuids.includes(r[8])).map(r => r[1]).filter(Boolean)) });
+                if (!sah(pilih)) { lap.hubAnggaran.push('#' + h.no + ' ' + h.desc + ' (digabung melalui label serentak)'); return; }
+                tambahAsc(h.no, { jenis: 'serentak', nama: label(h.no, h.desc), pilih, berat: 'ketat' });
+                return;
+            }
+            if (h.jenis === 1 && nmSub.length >= 2) {
+                h.kelas.forEach(k => {
+                    if (!kelas[k]) return;
+                    tambahAsc(h.no, { jenis: 'bezaHari', ikut: 'kelas', nama: label(h.no, h.desc + (h.kelas.length > 1 ? ' (' + kelas[k][1] + ')' : '')), pilih: { subjek: nmSub, guru: [], kelas: idKelas(k) }, aktif: h.aktif !== false });
+                });
+                return;
+            }
+            lap.hubDilangkau.push('#' + h.no + ' ' + h.desc + ' (tiada padanan dalam VisiJadual)');
         });
+
+        // (b) Rekod lanjutan ("Advanced", cth. "Strict - Max periods per day: 8")
+        const NAMA_ASC = { 6: 'Max consecutive periods', 10: 'Max periods per day', 13: 'Max periods per week', 26: 'If gap exists, it has to be 2 or more periods long', 55: 'Max 3 consecutive periods, or 2 doubles', 60: 'Cards must only be placed on selected positions' };
+        const PARAM_ASC = { 6: true, 10: true, 13: true, 26: true };
+        const numKeIdx = new Map(d.waktu.map((w, i) => [w.num, i]));
+        d.hubLanjut.forEach(h => {
+            const [semuaG, semuaK, semuaB, semuaS, semuaKump] = h.flags;
+            const p = kosong(), nota = [];
+            if (!semuaG) p.guru = unik(h.lists[4].filter(t => guru[t]).map(t => guru[t][0]));
+            if (!semuaS) p.subjek = unik(h.lists[2].filter(s => subjek[s]).map(s => subjek[s][0]));
+            if (!semuaK) p.kelas = unik(h.lists[0].filter(k => kelas[k]).flatMap(idKelas));
+            if (!semuaKump) h.lists[3].forEach(x => {
+                const g = d.kumpulan[x];
+                if (!g || g.kelas < 0 || !kelas[g.kelas]) return;
+                const P = pecah[g.kelas];
+                if (P && P.sub.has(g)) p.kelas.push(P.sub.get(g)); else p.kelas.push(...idKelas(g.kelas));
+            });
+            p.kelas = unik(p.kelas);
+            if (!semuaB) nota.push('penapis bilik diabaikan');
+            // Lajur "Subjects" dan "Apply to" seperti dalam senarai aSc
+            const kolSub = semuaS ? 'All' : ringkasNama(p.subjek.map(id => { const s = subjek.find(x => x[0] === id); return s ? (s[2] || s[1]) : id; }));
+            const kolGuna = !semuaG ? ringkasNama(p.guru.map(id => { const g = guru.find(x => x[0] === id); return g ? (g[2] || g[1]) : id; }))
+                : (!semuaK || !semuaKump) ? ringkasNama(p.kelas.map(id => namaKelas[id] || id)) : 'All teachers';
+            const namaJ = NAMA_ASC[h.jenis] || ('Type #' + h.jenis);
+            const teks = kolSub + ' - ' + kolGuna + ' - ' + namaJ + (PARAM_ASC[h.jenis] ? ': ' + h.a : '');
+            const nama = label(h.no, kolSub + ' - ' + kolGuna + ' - ' + (h.imp >= 3 ? 'Strict - ' : '') + namaJ + (PARAM_ASC[h.jenis] ? ': ' + h.a : ''));
+            const lapor = ket => '#' + h.no + ' ' + teks + ' (' + ket + ')';
+            if ((!semuaG && !p.guru.length) || (!semuaS && !p.subjek.length) || ((!semuaK || !semuaKump) && !p.kelas.length)) { lap.hubDilangkau.push(lapor('penapis tidak sepadan')); return; }
+
+            // Posisi bertanda (grid aSc ikut nombor waktu) → slot "hari-waktu"
+            const slotTanda = h.tanda ? unik(h.tanda.filter(([dd, num]) => dd < nHari && numKeIdx.has(num)).map(([dd, num]) => dd + '-' + numKeIdx.get(num))) : null;
+            const semuaSlot = !slotTanda || slotTanda.length >= nHari * W;
+            const perHari = () => {
+                if (semuaSlot) return [];
+                const n = Array(nHari).fill(0);
+                slotTanda.forEach(k => { n[+k.split('-')[0]]++; });
+                if (n.some(x => x > 0 && x < W)) nota.push('hanya hari bertanda diambil kira, bukan waktu tertentu');
+                return n.map(x => x > 0 ? h.a : null);
+            };
+            const ikut = (!semuaG || (semuaK && semuaKump)) ? 'guru' : 'kelas';
+            const asas = { nama, pilih: p, aktif: h.aktif, berat: h.imp >= 3 ? 'ketat' : 'optimum' };
+            let hv = null;
+            if (h.jenis === 60) {
+                if (semuaSlot) { lap.hubDilangkau.push(lapor('semua posisi ditanda — tiada kesan')); return; }
+                hv = { jenis: 'slotHanya', slot: slotTanda };
+            } else if (h.jenis === 10 || h.jenis === 6) {
+                const nh = perHari();
+                if (nh.length && nh.every(v => v === null)) { lap.hubDilangkau.push(lapor('tiada posisi ditanda')); return; }
+                hv = { jenis: h.jenis === 10 ? 'maksSehari' : 'maksBerturut', ikut, nilai: h.a, nilaiHari: nh };
+                if (h.jenis === 10 && h.b > 0) nota.push(h.b + ' hari pengecualian diabaikan');
+            } else if (h.jenis === 13) {
+                hv = { jenis: 'maksMinggu', ikut, nilai: h.a, slot: semuaSlot ? [] : slotTanda };
+            } else {
+                lap.hubDilangkau.push(lapor((h.aktif ? '' : 'tidak aktif, ') + 'tiada padanan dalam VisiJadual'));
+                return;
+            }
+            if (nota.length) lap.hubAnggaran.push(lapor(nota.join('; ')));
+            tambahAsc(h.no, Object.assign(asas, hv));
+        });
+        hubAsc.sort((a, b) => a.no - b.no);
+        hubungan.unshift(...hubAsc.map(x => x.h));
 
         // Bilik: subjek → bilik hanya jika setiap pelajaran subjek itu menyenaraikan bilik khas (10001 = bilik kelas sendiri)
         const bilikSubjek = {};
@@ -2804,7 +2945,7 @@ window.VJRoz = (function () {
         return {
             db: {
                 guru, kelas: kelasOut, subjek, transaksi,
-                slot, hubungan, peraturan: { sesiSehariSubjek },
+                slot, hubungan, peraturan: { sesiSehariSubjek: 1, sesiSehariKecuali: lebih },
                 bilik: { senarai: bilikSen, subjek: bilikSubjek },
                 jadual: { dijana: sesi.length ? new Date().toISOString() : null, sesi },
                 gantian: { tetapan: { namaSekolah } }
@@ -3110,9 +3251,9 @@ window.VJSampleData = function () {
             const k = res.laporan.kiraan, lap = res.laporan;
             const nota = [];
             if (lap.kelasPecah && lap.kelasPecah.length) nota.push(`Kelas dipecah ikut kumpulan: ${lap.kelasPecah.join(', ')}.`);
-            if (lap.lebihSehari && lap.lebihSehari.length) nota.push(`Peraturan "1 sesi subjek sehari" diganti hubungan setiap subjek; dikecualikan: ${lap.lebihSehari.join(', ')}.`);
-            const dil = Object.entries(lap.hubDilangkau || {}).map(([j, n]) => `jenis ${j} (${n})`);
-            if (dil.length) nota.push(`Hubungan aSc tidak diimport: ${dil.join(', ')}.`);
+            if (lap.lebihSehari && lap.lebihSehari.length) nota.push(`Peraturan "1 sesi subjek sehari" dikecualikan bagi: ${lap.lebihSehari.join(', ')}.`);
+            if ((lap.hubDilangkau || []).length) nota.push(`Hubungan aSc tidak diimport: ${lap.hubDilangkau.join('; ')}.`);
+            if ((lap.hubAnggaran || []).length) nota.push(`Hubungan aSc dianggarkan: ${lap.hubAnggaran.join('; ')}.`);
             if (lap.tidakSerentak) nota.push(`${lap.tidakSerentak} kumpulan elektif tidak dapat digabung serentak.`);
             if (lap.kadTakSah) nota.push(`${lap.kadTakSah} kad di luar slot dilangkau.`);
             if (lap.dilangkau) nota.push(`${lap.dilangkau} pelajaran tanpa kelas/subjek dilangkau.`);
@@ -10553,7 +10694,7 @@ window.VJSolver = (function () {
     // Jenis hubungan. ab: 'wajib' / 'pilihan' = perlu / boleh ada Kumpulan B.
     // lembut: diusahakan semasa menyusun & dilaporkan jika dilanggar (tidak dijamin).
     const JENIS_HUB = {
-        serentak: { kat: 'Waktu & serentak', nama: 'Mesti serentak (waktu sama)', hint: 'Semua agihan yang dipilih diletak pada waktu yang sama. Masa & pecahan mesti sama. Cth: dua kumpulan elektif.' },
+        serentak: { kat: 'Waktu & serentak', nama: 'Mesti serentak (waktu sama)', hint: 'Semua agihan yang dipilih diletak pada waktu yang sama. Masa & pecahan mesti sama; jika pecahan berbeza, agihan dipasangkan ikut pecahan yang sama (cth. 3 dengan 3, 2 dengan 2). Cth: dua kumpulan elektif.' },
         bezaWaktu: { kat: 'Waktu & serentak', nama: 'Tidak boleh pada waktu yang sama', ab: 'pilihan', hint: 'Sesi yang dipilih tidak boleh berlangsung serentak. Jika Kumpulan B diisi, hanya A dengan B yang dihalang.' },
         maksSerentak: { kat: 'Waktu & serentak', nama: 'Maks sesi pada satu waktu', nilai: 'Maks serentak', hint: 'Bilangan sesi yang berlangsung serentak tidak melebihi nilai ini. Cth: 1 makmal → maks 1 kelas Sains pada satu masa.' },
 
@@ -10562,6 +10703,7 @@ window.VJSolver = (function () {
         minSehari: { harian: true, kat: 'Hari', nama: 'Min waktu sehari', nilai: 'Min waktu', lembut: true, hint: 'Setiap hari sekurang-kurangnya sekian waktu. Cth: guru mengajar sekurang-kurangnya 2 waktu setiap hari.' },
         minSehariAda: { harian: true, kat: 'Hari', nama: 'Min waktu sehari (hari kosong dibenarkan)', nilai: 'Min waktu', lembut: true, hint: 'Jika ada sesi pada sesuatu hari, jumlahnya sekurang-kurangnya sekian waktu.' },
         maksSesiSehari: { harian: true, kat: 'Hari', nama: 'Maks sesi sehari', nilai: 'Maks sesi', hint: 'Bilangan sesi (bukan waktu) yang dipilih dalam sehari tidak melebihi nilai ini.' },
+        maksMinggu: { kat: 'Hari', nama: 'Maks waktu seminggu', nilai: 'Maks waktu', slot: 'Slot dikira (kosong = semua slot)', slotPilihan: true, hint: 'Jumlah waktu bagi sesi yang dipilih dalam seminggu tidak melebihi nilai ini. Jika slot ditanda, hanya waktu dalam slot itu dikira. Cth: guru maks 2 kali waktu terakhir seminggu.' },
         maksHari: { kat: 'Hari', nama: 'Maks hari seminggu', nilai: 'Maks hari', hint: 'Sesi yang dipilih hanya pada sekian hari seminggu. Cth: guru separuh masa 3 hari sahaja.' },
         minHari: { kat: 'Hari', nama: 'Min hari seminggu', nilai: 'Min hari', lembut: true, hint: 'Sesi yang dipilih tersebar sekurang-kurangnya pada sekian hari.' },
         maksHariBerturut: { kat: 'Hari', nama: 'Maks hari berturut-turut', nilai: 'Maks hari', lembut: true, hint: 'Sesi yang dipilih tidak berlaku lebih daripada sekian hari berturut-turut.' },
@@ -10762,11 +10904,16 @@ window.VJSolver = (function () {
                 return;
             }
             if (h.jenis !== 'serentak') return;
-            if (idx.some(i => rows[i].parts.join(',') !== rows[idx[0]].parts.join(','))) {
+            // Pecahan berbeza: dipasangkan ikut pecahan yang sama (seperti aSc "mula serentak": kad 3 waktu dengan
+            // kad 3 waktu, kad 2 waktu dengan kad 2 waktu). Setiap pecahan mesti ada sekurang-kurangnya dua agihan.
+            const ikutPecahan = {};
+            idx.forEach(i => (ikutPecahan[rows[i].parts.join(',')] = ikutPecahan[rows[i].parts.join(',')] || []).push(i));
+            const set = Object.values(ikutPecahan);
+            if (set.length > 1 && set.some(g => g.length < 2)) {
                 isu.push({ jenis: 'ralat', teks: `Hubungan "${namaHub(h)}": agihan yang dipilih mempunyai masa/pecahan berbeza, jadi tidak boleh serentak. Hubungan diabaikan.` });
                 return;
             }
-            idx.forEach(i => { par[cari(i)] = cari(idx[0]); });
+            set.forEach(g => g.forEach(i => { par[cari(i)] = cari(g[0]); }));
         });
 
         const kumpulan = {};
@@ -10860,7 +11007,8 @@ window.VJSolver = (function () {
         const hadSubjek = pr.sesiSehariSubjek === undefined ? 1 : Math.max(0, parseInt(pr.sesiSehariSubjek) || 0);
         if (hadSubjek > 0) {
             const kira = {};
-            units.forEach(u => u.pairs.forEach(([k, sj]) => { const key = k + '|' + sj; kira[key] = (kira[key] || 0) + 1; }));
+            const kecuali = new Set(pr.sesiSehariKecuali || []);
+            units.forEach(u => u.pairs.forEach(([k, sj]) => { if (kecuali.has(kelas[k].id + '|' + sj)) return; const key = k + '|' + sj; kira[key] = (kira[key] || 0) + 1; }));
             Object.entries(kira).forEach(([key, n]) => {
                 const [k, sj] = key.split('|'); const ki = +k;
                 let hari = 0;
@@ -10872,7 +11020,7 @@ window.VJSolver = (function () {
             });
         }
         // (b) Hubungan Ketat jenis had/kiraan yang menggabungkan ramai guru / kelas
-        const JENIS_ENTITI = new Set(['maksSehari', 'minSehari', 'minSehariAda', 'maksSesiSehari', 'maksBerturut', 'maksJulat', 'minJulat', 'maksLompong', 'maksLompongAwal', 'maksLompongAkhir', 'maksLompongMinggu', 'maksHari']);
+        const JENIS_ENTITI = new Set(['maksSehari', 'minSehari', 'minSehariAda', 'maksSesiSehari', 'maksMinggu', 'maksBerturut', 'maksJulat', 'minJulat', 'maksLompong', 'maksLompongAwal', 'maksLompongAkhir', 'maksLompongMinggu', 'maksHari']);
         hub.forEach(h => {
             if (h._abai || h.ikut || !JENIS_ENTITI.has(h.jenis) || tahapHub(h) !== 'ketat') return;
             const padan = rows.filter(r => padanHub(h, r));
@@ -10889,6 +11037,11 @@ window.VJSolver = (function () {
                 let had = 0;
                 for (let d = 0; d < H; d++) { const v = nilaiHari(h, d); had += v === null ? W : v; }
                 if (perlu > had) isu.push({ jenis: 'ralat', teks: `Hubungan ketat ${nm}: ${perlu} waktu perlu diletak tetapi had gabungan hanya ${had} waktu seminggu — mustahil dipenuhi.` });
+            }
+            if (h.jenis === 'maksMinggu' && !(h.slot || []).length) {
+                const uuidPadan = new Set(padan.map(r => r.uuid));
+                const perlu = units.filter(u => u.ahli.some(id => uuidPadan.has(id))).reduce((a, u) => a + u.len, 0);
+                if (perlu > h.nilai) isu.push({ jenis: 'ralat', teks: `Hubungan ketat ${nm}: ${perlu} waktu perlu diletak tetapi had gabungan hanya ${h.nilai} waktu seminggu — mustahil dipenuhi.` });
             }
         });
 
@@ -10943,8 +11096,10 @@ window.VJSolver = (function () {
         const pasang = units.map(() => []);   // unit -> [[kelas, asas]]
         {
             const idPasang = {};
+            const kecuali = new Set(P.sesiSehariKecuali || []);
             let nPasang = 0;
             units.forEach((T, u) => T.pairs.forEach(([k, sj]) => {
+                if (kecuali.has(B.kelas[k].id + '|' + sj)) return;   // dikecualikan daripada had sesi subjek sehari
                 const key = k + '|' + sj;
                 if (idPasang[key] === undefined) idPasang[key] = nPasang++;
                 pasang[u].push([k, idPasang[key] * H]);
@@ -11177,6 +11332,14 @@ window.VJSolver = (function () {
             } else if (J === 'maksSesiSehari' && n > 0) {
                 const ada = hariIni();
                 if (ada.length + 1 > n) ada.forEach(x => set.add(x));
+            } else if (J === 'maksMinggu') {
+                // Waktu dalam slot dikira (tiada slot = semua waktu dikira)
+                const kira = (p0, len) => { if (!R.slot.size) return len; let c = 0; for (let i = 0; i < len; i++) { const x = p0 + i; if (R.slot.has(`${Math.floor(x / W)}-${x % W}`)) c++; } return c; };
+                const milik = kira(s, T.len);
+                if (milik > 0) {
+                    const ada = R.units.filter(x => pos[x] >= 0 && hidup(x) && kira(pos[x], units[x].len) > 0);
+                    if (ada.reduce((a, x) => a + kira(pos[x], units[x].len), 0) + milik > n) ada.forEach(x => set.add(x));
+                }
             } else if (J === 'maksHari' && n > 0) {
                 const guna = [];
                 for (let dd = 0; dd < H; dd++) if (dd !== d && dayR[ri][dd].some(hidup)) guna.push(dd);
@@ -13724,7 +13887,8 @@ window.VJSolver = (function () {
                 const hari = inp.slot.hari;
                 bahagian.push(`${m.nilai}: ` + hari.map((nm, d) => { const v = VJSolver.nilaiHari(h, d); return v === null ? null : `${nm} ${v}`; }).filter(Boolean).join(', '));
             } else if (m.nilai) bahagian.push(`${m.nilai}: ${h.nilai}`);
-            if (m.slot) bahagian.push(`${h.slot.length} slot${m.slotB ? ' A, ' + h.slotB.length + ' slot B' : ''}`);
+            if (m.slot && m.slotPilihan && !h.slot.length) bahagian.push('Semua slot');
+            else if (m.slot) bahagian.push(`${h.slot.length} slot${m.slotB ? ' A, ' + h.slotB.length + ' slot B' : ''}`);
             return bahagian.join(' · ');
         }
 
@@ -13762,7 +13926,7 @@ window.VJSolver = (function () {
             const inp = VJStore.getSolverInput();
             if (VJSolver.pilihKosong(h.pilih) && !h.ikut) { showToast('Pilih sekurang-kurangnya satu subjek, guru atau kelas.', 'warning'); return; }
             if (m.ab === 'wajib' && VJSolver.pilihKosong(h.pilihB)) { showToast('Jenis ini memerlukan Kumpulan B.', 'warning'); return; }
-            if (m.slot && !h.slot.length) { showToast('Tanda sekurang-kurangnya satu slot.', 'warning'); return; }
+            if (m.slot && !m.slotPilihan && !h.slot.length) { showToast('Tanda sekurang-kurangnya satu slot.', 'warning'); return; }
             if (m.slotB && !h.slotB.length) { showToast('Tanda sekurang-kurangnya satu slot B.', 'warning'); return; }
             if (h.nilaiHari.length) {
                 if (h.nilaiHari.every(v => v === null)) { showToast('Tanda sekurang-kurangnya satu hari.', 'warning'); return; }

@@ -362,6 +362,10 @@ window.VJI18N = (function () {
         "Sistem Agihan Waktu & Kawalan Beban Guru": "Period Allocation & Teacher Workload Control System",
         "Sistem Pengurusan Guru Ganti (Relief)": "Relief Teacher Management System",
         "Kalendar Guru Ganti": "Relief Calendar",
+        "Masa penjanaan": "Generation time",
+        "Masa penjanaan:": "Generation time:",
+        "Masa penjanaan jadual terakhir": "Last timetable generation time",
+        "(dihentikan secara manual)": "(stopped manually)",
         "Slot Masa": "Time Slots",
         "Subjek": "Subject",
         "Subjek → Bilik": "Subject → Room",
@@ -1376,7 +1380,8 @@ window.VJI18N = (function () {
  *   tetapan   : { Kata_Laluan: 'admin123' }
  *   slot      : { hari, waktu, label, kelas: {ID: {"hari-waktu": Label}}, guru: {ID: {"hari-waktu": Label}} }
  *   peraturan : peraturan susunan jadual automatik (lihat PERATURAN_DEFAULT)
- *   jadual    : { dijana, sesi: [{ uuid, ke, hari, waktu, panjang, kunci }] } — kedudukan setiap sesi dalam jadual
+ *   jadual    : { dijana, tempohMs, sesi: [{ uuid, ke, hari, waktu, panjang, kunci }] } — kedudukan setiap sesi dalam jadual
+ *               (tempohMs = masa penjanaan automatik terakhir, milisaat)
  *   bilik     : { senarai: [{ id, nama, kod }], subjek: { ID_Subjek: [ID_Bilik] } } — bilik khas & subjek yang mesti di bilik itu
  *   hubungan  : [{ id, jenis, nama, pilih, pilihB, nilai, slot, slotB, aktif }] — kekangan antara sesi
  *               pilih / pilihB = { subjek, guru, kelas } (Kumpulan A / B); slot / slotB = ["hari-waktu"]
@@ -1465,7 +1470,7 @@ window.VJI18N = (function () {
         return out;
     }
 
-    function emptyJadual() { return { dijana: null, sesi: [] }; }
+    function emptyJadual() { return { dijana: null, tempohMs: null, sesi: [] }; }
 
     const JENIS_HUBUNGAN = ['serentak', 'bezaWaktu', 'maksSerentak',
         'bezaHari', 'maksSehari', 'minSehari', 'minSehariAda', 'maksSesiSehari', 'maksMinggu', 'maksHari', 'minHari', 'maksHariBerturut', 'maksHariLapang',
@@ -1496,6 +1501,7 @@ window.VJI18N = (function () {
         const out = emptyJadual();
         if (!raw || typeof raw !== 'object') return out;
         out.dijana = raw.dijana ? String(raw.dijana) : null;
+        out.tempohMs = Number.isFinite(+raw.tempohMs) && raw.tempohMs !== null && raw.tempohMs !== '' ? Math.max(0, Math.round(+raw.tempohMs)) : null;   // masa penjanaan terakhir
         out.sesi = (Array.isArray(raw.sesi) ? raw.sesi : []).filter(x => x && x.uuid).map(x => ({
             uuid: String(x.uuid),
             ke: parseInt(x.ke) || 0,
@@ -5817,6 +5823,7 @@ window.VJSampleData = function () {
                                 <button id="jdlPilihBatal" onclick="jdlPilihKosong()" class="px-1.5 py-0.5 rounded-md bg-white border border-brand-200 font-bold hover:bg-brand-100" title="Batal pilihan">✕</button>
                             </div>
                             <p id="jdlSemuaStats" class="ml-auto text-[11px] text-slate-500"></p>
+                            <span id="jdlSemuaTempoh" class="hidden items-center gap-1 px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 text-[11px] font-bold whitespace-nowrap" title="Masa penjanaan jadual terakhir"></span>
                         </div>
                         <div id="jdlGridWrap" class="overflow-auto max-h-[calc(100vh-330px)] min-h-[220px] border border-slate-200">
                             <table id="jdlSemuaGrid" class="text-[10px] border-separate border-spacing-0"></table>
@@ -12420,6 +12427,12 @@ window.VJSolver = (function () {
             document.getElementById('jdlSemuaStats').innerText = isBilik
                 ? `${items.length} bilik · ${jumA} waktu digunakan`
                 : `${items.length} ${isKelas ? 'kelas' : 'guru'} · ${jumA} daripada ${jumB} waktu telah dijadualkan`;
+            const tpEl = document.getElementById('jdlSemuaTempoh');
+            if (tpEl) {
+                const ms = VJStore.getJadual().tempohMs;
+                tpEl.textContent = ms != null ? '⏱ ' + jdlFmtTempoh(ms) : '';
+                tpEl.classList.toggle('hidden', ms == null); tpEl.classList.toggle('inline-flex', ms != null);
+            }
             setTimeout(jdlLaras, 0);
             ['kelas', 'guru', 'bilik'].forEach(m => {
                 document.getElementById({ kelas: 'jdlSemuaKelas', guru: 'jdlSemuaGuru', bilik: 'jdlSemuaBilik' }[m]).className =
@@ -12604,6 +12617,7 @@ window.VJSolver = (function () {
             document.getElementById('hubCount').innerText = (inp.hubungan || []).length || '';
             document.getElementById('jdlOverview').innerHTML = jadual.dijana
                 ? `· disusun ${escapeHtml(new Date(jadual.dijana).toLocaleString(VJI18N.locale()))} · ${totalSesi} sesi${dikunci ? ` · ${dikunci} dikunci` : ''}`
+                    + (jadual.tempohMs != null ? ` <span class="inline-flex items-center gap-0.5 ml-1 px-1.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 font-bold" title="Masa penjanaan">⏱ ${jdlFmtTempoh(jadual.tempohMs)}</span>` : '')
                 : '· belum disusun';
 
             const empty = document.getElementById('jdlEmpty'), modal = document.getElementById('jdlModal');
@@ -12939,7 +12953,7 @@ window.VJSolver = (function () {
                     // Kekalkan sesi kelas lain tepat seperti asal; ambil hasil baharu bagi agihan kelas dipilih sahaja
                     const baru = res.sesi.filter(x => trxDipilih.has(x.uuid));
                     const kekal = asal.filter(x => !trxDipilih.has(x.uuid));
-                    VJStore.setJadual({ dijana: new Date().toISOString(), sesi: kekal.concat(baru) });
+                    VJStore.setJadual({ dijana: new Date().toISOString(), tempohMs: res.stat.ms, sesi: kekal.concat(baru) });
                     const perlu = new Set(), ada = new Set(baru.map(x => x.uuid + '#' + x.ke));
                     VJSolver.bina(VJStore.getSolverInput(), jdlOptBina()).units
                         .forEach(u => { if (u.ahli.some(id => trxDipilih.has(id))) perlu.add(u); });
@@ -12950,7 +12964,7 @@ window.VJSolver = (function () {
                         : `${jdlSkopTeks()} disusun: ${muat}/${perlu.size} sesi diletak — lihat senarai di bawah jadual.`, muat === perlu.size ? 'success' : 'warning', 6000);
                     return;
                 }
-                VJStore.setJadual({ dijana: new Date().toISOString(), sesi: res.sesi });
+                VJStore.setJadual({ dijana: new Date().toISOString(), tempohMs: res.stat.ms, sesi: res.sesi });
                 jdlTidakMuat = res.tidakMuat;
                 jdlRumusanSimpan(res, isyarat, false);
                 const s = res.stat, o = s.optimum;
@@ -13321,6 +13335,14 @@ window.VJSolver = (function () {
             return { tahap, butir, q, unit: stat.unit, diletak: stat.diletak };
         }
 
+        // Format tempoh: "8.4 s" / "1 min 23 s" / "1 j 02 min"
+        function jdlFmtTempoh(ms) {
+            ms = Math.max(0, +ms || 0);
+            if (ms < 60000) return (ms / 1000).toFixed(1) + ' s';
+            const t = Math.round(ms / 1000), j = Math.floor(t / 3600), m = Math.floor(t % 3600 / 60), d = t % 60;
+            return j ? `${j} ${VJI18N.lang() === 'en' ? 'h' : 'j'} ${String(m).padStart(2, '0')} min` : `${m} min ${String(d).padStart(2, '0')} s`;
+        }
+
         function jdlRumusanRender() {
             const R = jdlRumusanTerakhir;
             const el = document.getElementById('jdlRumusanIsi');
@@ -13337,6 +13359,11 @@ window.VJSolver = (function () {
                     <code class="font-mono font-bold text-indigo-900 select-all">${escapeHtml(R.res.stat.kod)}</code>
                     <button type="button" onclick="jdlKodSalin('${escapeHtml(R.res.stat.kod)}')" class="ml-auto px-2 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-bold">Salin</button>
                     <span class="w-full text-[11px] text-indigo-700">${R.res.stat.kodTepat ? 'Masukkan kod ini dalam popup Susun untuk mengulang susunan yang sama (data & kunci mesti sama).' : 'Susunan dihentikan secara manual — kod ini mungkin tidak menghasilkan jadual yang sama.'}</span>
+                </div>` : ''}
+                ${!R.semasa && R.res.stat && R.res.stat.ms != null ? `<div class="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs">
+                    <span class="text-base leading-none">⏱</span><span class="font-bold text-slate-700">Masa penjanaan:</span>
+                    <span class="font-mono font-bold text-slate-900">${jdlFmtTempoh(R.res.stat.ms)}</span>
+                    ${R.henti ? '<span class="text-[11px] text-amber-700">(dihentikan secara manual)</span>' : ''}
                 </div>` : ''}
                 <p class="text-[11px] text-slate-500">${R.semasa ? 'Analisis jadual semasa' : 'Hasil susunan'} · ${escapeHtml(tarikh)}${R.skop ? ' · dipilih: ' + escapeHtml(R.skop) : ''}${S.unit ? ` · ${S.diletak}/${S.unit} sesi diletak` : ''}</p>
                 ${S.butir.map(b => `<div class="border rounded-xl p-3 ${warna[b.jenis]}">
@@ -13386,13 +13413,13 @@ window.VJSolver = (function () {
                 const buang = j.sesi.filter(x => trxDipilih.has(x.uuid) && !x.kunci);
                 if (!buang.length) { showToast('Tiada sesi tidak berkunci bagi kelas / guru dipilih.', 'info'); return; }
                 if (!confirm(`Kosongkan jadual ${jdlSkopTeks()} dipilih? ${buang.length} sesi akan dibuang. Sesi lain tidak diubah.`)) return;
-                VJStore.setJadual({ dijana: j.dijana, sesi: j.sesi.filter(x => !buang.includes(x)) });
+                VJStore.setJadual({ dijana: j.dijana, tempohMs: j.tempohMs, sesi: j.sesi.filter(x => !buang.includes(x)) });
                 renderJadualView();
                 return;
             }
             const kekal = j.sesi.filter(x => x.kunci);
             if (!confirm(`Kosongkan jadual?${kekal.length ? ` ${kekal.length} sesi berkunci akan dikekalkan.` : ''}`)) return;
-            VJStore.setJadual({ dijana: kekal.length ? j.dijana : null, sesi: kekal });
+            VJStore.setJadual({ dijana: kekal.length ? j.dijana : null, tempohMs: kekal.length ? j.tempohMs : null, sesi: kekal });
             jdlTidakMuat = null;
             renderJadualView();
         }

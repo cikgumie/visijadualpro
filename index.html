@@ -360,6 +360,8 @@ window.VJI18N = (function () {
         "Simpan ke Drive": "Save to Drive",
         "Sistem / Arkib": "System / Archive",
         "Sistem Agihan Waktu & Kawalan Beban Guru": "Period Allocation & Teacher Workload Control System",
+        "Sistem Pengurusan Guru Ganti (Relief)": "Relief Teacher Management System",
+        "Kalendar Guru Ganti": "Relief Calendar",
         "Slot Masa": "Time Slots",
         "Subjek": "Subject",
         "Subjek → Bilik": "Subject → Room",
@@ -3189,7 +3191,7 @@ window.VJSampleData = function () {
             ${st.dirty ? '<span class="w-2 h-2 rounded-full bg-amber-400 shrink-0" title="Ada perubahan belum disimpan"></span>' : ''}`;
         const saveBtn = $('btnSaveZip');
         if (saveBtn) saveBtn.classList.toggle('ring-2', !!st.dirty);
-        document.title = (st.dirty ? '• ' : '') + 'VisiJadual Pro v2' + (st.fileName ? ` — ${st.fileName}` : '');
+        document.title = (st.dirty ? '• ' : '') + (document.body?.dataset.sys === 'relief' ? 'VisiRelief' : 'VisiJadual') + ' Pro v2' + (st.fileName ? ` — ${st.fileName}` : '');
         icons();
     }
 
@@ -4078,6 +4080,17 @@ window.VJSampleData = function () {
             background: linear-gradient(135deg, #3730A3 0%, #4F46E5 50%, #6366F1 100%);
         }
 
+        /* Dua sistem: VisiJadual (jadual) / VisiRelief (guru ganti) */
+        body[data-sys="jadual"] .sys-relief,
+        body[data-sys="relief"] .sys-jadual { display: none !important; }
+        body[data-sys="relief"] #appHeader { background: linear-gradient(135deg, #115E59 0%, #0D9488 50%, #14B8A6 100%); }
+        .sys-switch { display: inline-flex; align-items: center; gap: 2px; padding: 2px; border-radius: 10px; background: rgba(255, 255, 255, 0.14); border: 1px solid rgba(255, 255, 255, 0.18); }
+        .sys-switch button { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 8px; font-family: inherit; font-weight: 800; font-size: 0.85rem; letter-spacing: 0.01em; color: rgba(255, 255, 255, 0.78); transition: all 0.15s ease; white-space: nowrap; }
+        .sys-switch button:hover { color: #fff; background: rgba(255, 255, 255, 0.12); }
+        .sys-switch button.on { background: #fff; color: #3730A3; box-shadow: 0 1px 3px rgba(15, 23, 42, 0.25); }
+        body[data-sys="relief"] .sys-switch button.on { color: #0F766E; }
+        @media (max-width: 420px) { .sys-switch button { padding: 3px 7px; font-size: 0.78rem; } .sys-switch button svg { display: none; } }
+
         /* Modern Modal System */
         .modal {
             display: none;
@@ -4381,7 +4394,7 @@ window.VJSampleData = function () {
     </style>
 </head>
 
-<body class="bg-min-bg text-min-text h-screen flex flex-col font-sans overflow-hidden select-none">
+<body data-sys="jadual" class="bg-min-bg text-min-text h-screen flex flex-col font-sans overflow-hidden select-none">
 
     <!-- Toast Notification Container -->
     <div id="toastContainer"></div>
@@ -4962,16 +4975,26 @@ window.VJSampleData = function () {
     <!-- ============================================================== -->
     <!-- TOP NAVBAR & BRAND HEADER                                      -->
     <!-- ============================================================== -->
-    <header class="h-[56px] bg-premium-header flex items-center justify-between px-3 sm:px-5 shadow-premium z-30 shrink-0 border-b border-white/10">
+    <header id="appHeader" class="h-[56px] bg-premium-header flex items-center justify-between px-3 sm:px-5 shadow-premium z-30 shrink-0 border-b border-white/10">
         <div class="flex items-center gap-3 min-w-0">
             <button onclick="toggleSideNav()" class="p-2 bg-white/10 hover:bg-white/20 rounded-xl backdrop-blur-md transition" title="Kecilkan / besarkan menu">
                 <i data-lucide="panel-left" class="w-5 h-5 text-white"></i>
             </button>
             <div class="min-w-0">
-                <div class="text-white font-heading font-extrabold text-base tracking-wide flex items-center gap-2">
-                    VisiJadual <span class="text-[10px] bg-white/20 text-white px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">Pro v2</span>
+                <div class="font-heading flex items-center gap-2">
+                    <div class="sys-switch" role="tablist" aria-label="Sistem" data-no-i18n>
+                        <button id="sysTabJadual" role="tab" aria-selected="true" class="on" onclick="setSistem('jadual')" title="VisiJadual — sistem jadual waktu">
+                            <i data-lucide="calendar-days" class="w-3.5 h-3.5"></i>VisiJadual
+                        </button>
+                        <button id="sysTabRelief" role="tab" aria-selected="false" onclick="setSistem('relief')" title="VisiRelief — sistem guru ganti">
+                            <i data-lucide="user-check" class="w-3.5 h-3.5"></i>VisiRelief
+                        </button>
+                    </div>
+                    <span class="hidden sm:inline text-[10px] bg-white/20 text-white px-2 py-0.5 rounded-full font-bold uppercase tracking-wider" data-no-i18n>Pro v2</span>
                 </div>
-                <div class="text-[10px] text-white/80 font-medium tracking-wide hidden sm:block truncate">Sistem Agihan Waktu & Kawalan Beban Guru</div>
+                <div class="text-[10px] text-white/80 font-medium tracking-wide hidden sm:block truncate mt-0.5">
+                    <span class="sys-jadual">Sistem Agihan Waktu & Kawalan Beban Guru</span><span class="sys-relief">Sistem Pengurusan Guru Ganti (Relief)</span>
+                </div>
             </div>
         </div>
 
@@ -5037,13 +5060,13 @@ window.VJSampleData = function () {
     <div id="tetapanMenu" class="hidden fixed z-[90] w-56 bg-white border border-slate-200 rounded-xl shadow-2xl py-1.5 no-print" onclick="event.stopPropagation()">
         <p class="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">Paparan & Data</p>
         <button onclick="closeTetapanMenu(); VJFile.openDataInduk()" class="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 text-left"><i data-lucide="database" class="w-4 h-4 text-slate-500"></i> Data Induk (Setup)</button>
-        <button onclick="tetapanGo('slot')" class="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 text-left"><i data-lucide="calendar-clock" class="w-4 h-4 text-slate-500"></i> Slot Masa</button>
-        <button onclick="tetapanGo('bilik')" class="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 text-left"><i data-lucide="door-open" class="w-4 h-4 text-slate-500"></i> Bilik Khas</button>
-        <button onclick="tetapanGo('guru')" class="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 text-left"><i data-lucide="users" class="w-4 h-4 text-slate-500"></i> Jadual Guru</button>
-        <button onclick="tetapanGo('kelas')" class="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 text-left"><i data-lucide="school" class="w-4 h-4 text-slate-500"></i> Rumusan Kelas</button>
-        <button onclick="tetapanGo('subjek')" class="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 text-left"><i data-lucide="book-open" class="w-4 h-4 text-slate-500"></i> Analisis Subjek</button>
-        <button onclick="tetapanGo('banding')" class="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 text-left"><i data-lucide="git-compare" class="w-4 h-4 text-slate-500"></i> Banding Jadual</button>
-        <button onclick="tetapanGo('arkib')" class="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 text-left"><i data-lucide="archive" class="w-4 h-4 text-slate-500"></i> Arkib Data</button>
+        <button onclick="tetapanGo('slot')" class="sys-jadual w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 text-left"><i data-lucide="calendar-clock" class="w-4 h-4 text-slate-500"></i> Slot Masa</button>
+        <button onclick="tetapanGo('bilik')" class="sys-jadual w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 text-left"><i data-lucide="door-open" class="w-4 h-4 text-slate-500"></i> Bilik Khas</button>
+        <button onclick="tetapanGo('guru')" class="sys-jadual w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 text-left"><i data-lucide="users" class="w-4 h-4 text-slate-500"></i> Jadual Guru</button>
+        <button onclick="tetapanGo('kelas')" class="sys-jadual w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 text-left"><i data-lucide="school" class="w-4 h-4 text-slate-500"></i> Rumusan Kelas</button>
+        <button onclick="tetapanGo('subjek')" class="sys-jadual w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 text-left"><i data-lucide="book-open" class="w-4 h-4 text-slate-500"></i> Analisis Subjek</button>
+        <button onclick="tetapanGo('banding')" class="sys-jadual w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 text-left"><i data-lucide="git-compare" class="w-4 h-4 text-slate-500"></i> Banding Jadual</button>
+        <button onclick="tetapanGo('arkib')" class="sys-jadual w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 text-left"><i data-lucide="archive" class="w-4 h-4 text-slate-500"></i> Arkib Data</button>
         <div class="my-1 border-t border-slate-200"></div>
         <button onclick="closeTetapanMenu(); openTetapanModal()" class="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 text-left"><i data-lucide="key-round" class="w-4 h-4 text-slate-500"></i> Tukar Kata Laluan</button>
         <div class="my-1 border-t border-slate-200"></div>
@@ -5052,23 +5075,31 @@ window.VJSampleData = function () {
 
         <aside id="sideNav" class="side-nav no-print">
             <nav class="flex-1 overflow-y-auto p-2 space-y-0.5">
-                <button onclick="switchTab('matrix')" id="nav-matrix" class="nav-tab active" title="Matriks Kelas">
+                <!-- VisiJadual -->
+                <button onclick="switchTab('matrix')" id="nav-matrix" class="nav-tab active sys-jadual" title="Matriks Kelas">
                     <i data-lucide="grid" class="w-4 h-4 shrink-0"></i><span class="nav-label">Matriks Kelas</span>
                 </button>
-                <button onclick="jdlBukaMod('kelas')" id="nav-jdl-kelas" class="nav-tab" title="Jadual ikut kelas">
+                <button onclick="jdlBukaMod('kelas')" id="nav-jdl-kelas" class="nav-tab sys-jadual" title="Jadual ikut kelas">
                     <i data-lucide="school" class="w-4 h-4 shrink-0"></i><span class="nav-label">Kelas</span>
                 </button>
-                <button onclick="jdlBukaMod('guru')" id="nav-jdl-guru" class="nav-tab" title="Jadual ikut guru">
+                <button onclick="jdlBukaMod('guru')" id="nav-jdl-guru" class="nav-tab sys-jadual" title="Jadual ikut guru">
                     <i data-lucide="user-round" class="w-4 h-4 shrink-0"></i><span class="nav-label">Guru</span>
                 </button>
-                <button onclick="jdlBukaMod('bilik')" id="nav-jdl-bilik" class="nav-tab" title="Penggunaan bilik khas">
+                <button onclick="jdlBukaMod('bilik')" id="nav-jdl-bilik" class="nav-tab sys-jadual" title="Penggunaan bilik khas">
                     <i data-lucide="door-closed" class="w-4 h-4 shrink-0"></i><span class="nav-label">Bilik</span>
                 </button>
-                <button onclick="jdlSusunDariMenu()" id="nav-susun" class="nav-tab" title="Susun Jadual">
+                <button onclick="jdlSusunDariMenu()" id="nav-susun" class="nav-tab sys-jadual" title="Susun Jadual">
                     <i data-lucide="wand-sparkles" class="w-4 h-4 shrink-0"></i><span class="nav-label">Susun Jadual</span>
                 </button>
-                <button onclick="switchTab('ganti')" id="nav-ganti" class="nav-tab" title="Guru Ganti">
-                    <i data-lucide="user-check" class="w-4 h-4 shrink-0"></i><span class="nav-label">Guru Ganti</span>
+                <!-- VisiRelief -->
+                <button onclick="bukaRelief('kalendar')" id="nav-gt-kalendar" class="nav-tab sys-relief" title="Kalendar Guru Ganti">
+                    <i data-lucide="calendar-days" class="w-4 h-4 shrink-0"></i><span class="nav-label">Kalendar</span>
+                </button>
+                <button onclick="bukaRelief('beban')" id="nav-gt-beban" class="nav-tab sys-relief" title="Beban Guru Ganti">
+                    <i data-lucide="bar-chart-3" class="w-4 h-4 shrink-0"></i><span class="nav-label">Beban Guru Ganti</span>
+                </button>
+                <button onclick="bukaRelief('tetapan')" id="nav-gt-tetapan" class="nav-tab sys-relief" title="Tetapan & Cuti">
+                    <i data-lucide="calendar-cog" class="w-4 h-4 shrink-0"></i><span class="nav-label">Tetapan & Cuti</span>
                 </button>
                 <button onclick="toggleNavTetapan()" id="navTetapanBtn" class="nav-tab" title="Tetapan" aria-expanded="false" aria-controls="navTetapanSub">
                     <i data-lucide="settings" class="w-4 h-4 shrink-0"></i><span class="nav-label">Tetapan</span><i data-lucide="chevron-right" id="navTetapanChev" class="w-3.5 h-3.5 shrink-0 nav-label"></i>
@@ -5077,28 +5108,28 @@ window.VJSampleData = function () {
                     <button onclick="VJFile.openDataInduk()" class="nav-tab nav-sub" title="Setup nama guru, kelas, bilik & subjek">
                         <i data-lucide="database" class="w-4 h-4 shrink-0"></i><span class="nav-label">Data Induk (Setup)</span>
                     </button>
-                    <button onclick="switchTab('slot')" id="nav-slot" class="nav-tab nav-sub" title="Slot Masa">
+                    <button onclick="switchTab('slot')" id="nav-slot" class="nav-tab nav-sub sys-jadual" title="Slot Masa">
                         <i data-lucide="calendar-clock" class="w-4 h-4 shrink-0"></i><span class="nav-label">Slot Masa</span>
                     </button>
-                    <button onclick="switchTab('bilik')" id="nav-bilik" class="nav-tab nav-sub" title="Bilik Khas">
+                    <button onclick="switchTab('bilik')" id="nav-bilik" class="nav-tab nav-sub sys-jadual" title="Bilik Khas">
                         <i data-lucide="door-open" class="w-4 h-4 shrink-0"></i><span class="nav-label">Bilik Khas</span>
                     </button>
-                    <button onclick="switchTab('hubungan')" id="nav-hubungan" class="nav-tab nav-sub" title="Hubungan Antara Sesi">
+                    <button onclick="switchTab('hubungan')" id="nav-hubungan" class="nav-tab nav-sub sys-jadual" title="Hubungan Antara Sesi">
                         <i data-lucide="link-2" class="w-4 h-4 shrink-0"></i><span class="nav-label">Hubungan Sesi</span>
                     </button>
-                    <button onclick="switchTab('guru')" id="nav-guru" class="nav-tab nav-sub" title="Jadual Guru">
+                    <button onclick="switchTab('guru')" id="nav-guru" class="nav-tab nav-sub sys-jadual" title="Jadual Guru">
                         <i data-lucide="users" class="w-4 h-4 shrink-0"></i><span class="nav-label">Jadual Guru</span>
                     </button>
-                    <button onclick="switchTab('kelas')" id="nav-kelas" class="nav-tab nav-sub" title="Rumusan Kelas">
+                    <button onclick="switchTab('kelas')" id="nav-kelas" class="nav-tab nav-sub sys-jadual" title="Rumusan Kelas">
                         <i data-lucide="school" class="w-4 h-4 shrink-0"></i><span class="nav-label">Rumusan Kelas</span>
                     </button>
-                    <button onclick="switchTab('subjek')" id="nav-subjek" class="nav-tab nav-sub" title="Analisis Subjek">
+                    <button onclick="switchTab('subjek')" id="nav-subjek" class="nav-tab nav-sub sys-jadual" title="Analisis Subjek">
                         <i data-lucide="book-open" class="w-4 h-4 shrink-0"></i><span class="nav-label">Analisis Subjek</span>
                     </button>
-                    <button onclick="switchTab('banding')" id="nav-banding" class="nav-tab nav-sub" title="Banding Jadual">
+                    <button onclick="switchTab('banding')" id="nav-banding" class="nav-tab nav-sub sys-jadual" title="Banding Jadual">
                         <i data-lucide="git-compare" class="w-4 h-4 shrink-0"></i><span class="nav-label">Banding Jadual</span>
                     </button>
-                    <button onclick="switchTab('arkib')" id="nav-arkib" class="nav-tab nav-sub" title="Arkib Data">
+                    <button onclick="switchTab('arkib')" id="nav-arkib" class="nav-tab nav-sub sys-jadual" title="Arkib Data">
                         <i data-lucide="archive" class="w-4 h-4 shrink-0"></i><span class="nav-label">Arkib Data</span>
                     </button>
                     <button onclick="openTetapanModal()" class="nav-tab nav-sub" title="Tukar Kata Laluan">
@@ -5113,13 +5144,13 @@ window.VJSampleData = function () {
                 <button onclick="VJFile.openDataInduk()" class="side-act text-slate-700 hover:bg-slate-100" title="Urus senarai Guru, Kelas, Bilik & Subjek">
                     <i data-lucide="database" class="w-4 h-4 shrink-0"></i><span class="nav-label">Data Induk</span>
                 </button>
-                <button onclick="openArkibModal()" class="side-act text-rose-600 hover:bg-rose-50" title="Urus Arkib dan Reset">
+                <button onclick="openArkibModal()" class="sys-jadual side-act text-rose-600 hover:bg-rose-50" title="Urus Arkib dan Reset">
                     <i data-lucide="archive-restore" class="w-4 h-4 shrink-0"></i><span class="nav-label">Arkib / Reset</span>
                 </button>
-                <button onclick="exportToExcel()" class="side-act text-emerald-700 hover:bg-emerald-50" title="Eksport ke fail Excel">
+                <button onclick="exportToExcel()" class="sys-jadual side-act text-emerald-700 hover:bg-emerald-50" title="Eksport ke fail Excel">
                     <i data-lucide="download" class="w-4 h-4 shrink-0"></i><span class="nav-label">Eksport Excel</span>
                 </button>
-                <button onclick="triggerImportExcel()" class="side-act text-brand-700 hover:bg-brand-50" title="Import jadual dari fail Excel">
+                <button onclick="triggerImportExcel()" class="sys-jadual side-act text-brand-700 hover:bg-brand-50" title="Import jadual dari fail Excel">
                     <i data-lucide="upload" class="w-4 h-4 shrink-0"></i><span class="nav-label">Import Excel</span>
                 </button>
             </div>
@@ -8384,6 +8415,25 @@ window.VJSampleData = function () {
             if (subActive) setNavTetapanOpen(true);
         }
 
+        // ---------- Dua sistem dalam satu aplikasi: VisiJadual / VisiRelief ----------
+        let vjTabJadualAkhir = 'matrix';
+        function applySistem(sys) {
+            document.body.dataset.sys = sys;
+            const tJ = document.getElementById('sysTabJadual'), tR = document.getElementById('sysTabRelief');
+            if (tJ) { tJ.classList.toggle('on', sys === 'jadual'); tJ.setAttribute('aria-selected', sys === 'jadual'); }
+            if (tR) { tR.classList.toggle('on', sys === 'relief'); tR.setAttribute('aria-selected', sys === 'relief'); }
+            document.title = document.title.replace(/Visi(Jadual|Relief)/, sys === 'relief' ? 'VisiRelief' : 'VisiJadual');
+            try { localStorage.setItem('vj_sys', sys); } catch (e) { }
+        }
+        function setSistem(sys) {
+            if (sys === 'relief') switchTab('ganti');
+            else switchTab(vjTabJadualAkhir || 'matrix');
+        }
+        function bukaRelief(mode) {
+            if (typeof gtMode !== 'undefined' && mode) gtMode = mode;
+            switchTab('ganti');
+        }
+
         function switchTab(tabName) {
             if (window.innerWidth < 768) document.getElementById('sideNav')?.classList.add('collapsed');
             document.querySelectorAll('.view-section').forEach(el => el.classList.add('hidden'));
@@ -8394,8 +8444,16 @@ window.VJSampleData = function () {
             const tbJ = document.getElementById('tbJadual');
             if (tbJ) { tbJ.classList.toggle('hidden', tabName !== 'jadual'); tbJ.classList.toggle('flex', tabName === 'jadual'); }
 
+            // Tab 'ganti' milik VisiRelief; tab lain milik VisiJadual
+            const sys = tabName === 'ganti' ? 'relief' : 'jadual';
+            if (sys === 'jadual') vjTabJadualAkhir = tabName;
+            applySistem(sys);
+
             document.querySelectorAll('.nav-tab').forEach(btn => btn.classList.remove('active'));
-            const activeNav = document.getElementById(tabName === 'jadual' && typeof jdlMode !== 'undefined' ? `nav-jdl-${jdlMode}` : `nav-${tabName}`);
+            const activeNav = document.getElementById(
+                tabName === 'jadual' && typeof jdlMode !== 'undefined' ? `nav-jdl-${jdlMode}`
+                : tabName === 'ganti' && typeof gtMode !== 'undefined' ? `nav-gt-${gtMode}`
+                : `nav-${tabName}`);
             if (activeNav) activeNav.classList.add('active');
             syncNavTetapan(!!(activeNav && activeNav.classList.contains('nav-sub')));
 
@@ -14359,7 +14417,11 @@ window.VJGanti = (function () {
             return inp;
         }
 
-        function gtSetMode(m) { gtMode = m; renderGantiView(); }
+        function gtSetMode(m) {
+            gtMode = m;
+            ['kalendar', 'beban', 'tetapan'].forEach(k => document.getElementById('nav-gt-' + k)?.classList.toggle('active', k === m));
+            renderGantiView();
+        }
         function gtBulan(n) {
             if (n === 0) { const t = new Date(); gtBulanAktif = new Date(t.getFullYear(), t.getMonth(), 1); gtTarikh = VJGanti.hariIni(); }
             else gtBulanAktif = new Date(gtBulanAktif.getFullYear(), gtBulanAktif.getMonth() + n, 1);
@@ -14646,6 +14708,15 @@ window.VJGanti = (function () {
                 origProcessData(data);
                 renderJadualView();
             };
+        })();
+
+        // Pulihkan sistem terakhir dipilih (VisiJadual / VisiRelief)
+        (function () {
+            let s = null;
+            try { s = localStorage.getItem('vj_sys'); } catch (e) { }
+            if (s !== 'relief') return;
+            const buka = () => { try { switchTab('ganti'); } catch (e) { console.warn('VisiRelief:', e); } };
+            if (document.readyState === 'complete') buka(); else window.addEventListener('load', buka);
         })();
     </script>
 </body>

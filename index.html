@@ -227,6 +227,14 @@ window.VJI18N = (function () {
         "Kod": "Code",
         "Kosongkan": "Clear",
         "Kumpulan sama serentak": "Same group simultaneous",
+        "Kod seed": "Seed code",
+        "Kod seed:": "Seed code:",
+        "(pilihan — kosongkan untuk susunan rawak baharu)": "(optional — leave empty for a new random run)",
+        "Kod yang sama + data yang sama = jadual yang sama. Tahap & teras diambil daripada kod.": "Same code + same data = same timetable. Level & cores are taken from the code.",
+        "Masukkan kod ini dalam popup Susun untuk mengulang susunan yang sama (data & kunci mesti sama).": "Enter this code in the Build popup to repeat exactly the same run (data & locks must be the same).",
+        "Susunan dihentikan secara manual — kod ini mungkin tidak menghasilkan jadual yang sama.": "The run was stopped manually — this code may not reproduce the same timetable.",
+        "Kod seed tidak sah. Contoh format: VJ1-O7K-3F9A21C7-1A2B3C": "Invalid seed code. Example format: VJ1-O7K-3F9A21C7-1A2B3C",
+        "Salin kod seed:": "Copy seed code:",
         "Kunci API (Picker, pilihan)": "API Key (Picker, optional)",
         "Kurang Waktu": "Under Periods",
         "Kursus": "Course",
@@ -977,6 +985,8 @@ window.VJI18N = (function () {
 
     // ---------- patterns (dynamic strings) ----------
     var P = [
+        [/^Kod seed disalin: (.*)$/, function (m) { return 'Seed code copied: ' + m[1]; }],
+        [/^Data \/ kunci \/ pilihan kelas sekarang berbeza daripada semasa kod (\S+) dijana \(cap (\w+) ≠ (\w+)\)\. Hasil mungkin tidak sama\.\n\nTeruskan juga\?$/, function (m) { return 'Current data / locks / class selection differ from when code ' + m[1] + ' was generated (fingerprint ' + m[2] + ' ≠ ' + m[3] + '). The result may differ.\n\nContinue anyway?'; }],
         [/^(\d+) Kelas Dipilih$/i, function (m) { return pl(m[1], 'class', 'classes') + ' selected'; }],
         [/^(\d+) kelas dipilih$/i, function (m) { return pl(m[1], 'class', 'classes') + ' selected'; }],
         [/^(\d+ (?:kelas|guru)(?: \+ \d+ guru)?) dipilih$/, function (m) { return skEn(m[1]) + ' selected'; }],
@@ -5689,6 +5699,10 @@ window.VJSampleData = function () {
                         <p id="jdlTahapNota" class="text-[11px] text-slate-500"></p>
                         <label class="flex items-start gap-2 text-xs font-semibold text-slate-700" title="Agihan berlabel huruf kumpulan yang sama (cth K1, K2, K3), bilangan waktu sama dan tingkatan sama diletak pada masa yang sama walaupun kelas berlainan">
                             <input id="jdlSerentakHuruf" type="checkbox" checked class="w-4 h-4 mt-0.5 accent-brand-600"> <span>Kumpulan sama serentak</span>
+                        </label>
+                        <label class="block text-xs font-semibold text-slate-700">Kod seed <span class="font-medium text-slate-400">(pilihan — kosongkan untuk susunan rawak baharu)</span>
+                            <input id="jdlKodSeed" type="text" spellcheck="false" autocomplete="off" placeholder="VJ1-O7K-3F9A21C7-1A2B3C" class="mt-1 w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-mono uppercase focus:outline-none focus:ring-2 focus:ring-brand-500">
+                            <span class="block text-[11px] font-medium text-slate-400 mt-0.5">Kod yang sama + data yang sama = jadual yang sama. Tahap &amp; teras diambil daripada kod.</span>
                         </label>
                     </div>
                     <button onclick="jdlSusunMula()" class="w-full px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-sm font-bold shadow flex items-center justify-center gap-2">
@@ -10732,6 +10746,27 @@ window.VJSolver = (function () {
     };
     const JENIS_DOMAIN = new Set(['slotHanya', 'slotLarang', 'tidakMula', 'tidakTamat']);
 
+    // Penjana rawak berbenih (mulberry32): urutan sama bagi benih sama
+    function rawakBerbenih(benih) {
+        let a = benih >>> 0;
+        return function () {
+            a = (a + 0x6D2B79F5) >>> 0;
+            let t = a;
+            t = Math.imul(t ^ (t >>> 15), t | 1);
+            t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+            return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+        };
+    }
+    function benihRawak() { return ((Math.random() * 4294967295) >>> 0) || 1; }
+    // Benih anak yang tetap daripada benih induk + nombor (cth. teras, pusingan) — supaya setiap worker berbeza tetapi boleh diulang
+    function campurBenih(benih, ...n) {
+        let h = (benih >>> 0) ^ 0x9E3779B9;
+        n.forEach(x => { h = Math.imul(h ^ ((x >>> 0) + 0x85EBCA6B), 0xC2B2AE35); h ^= h >>> 13; });
+        return (h >>> 0) || 1;
+    }
+    // Unit kerja bagi setiap "milisaat maya" (ditentukur supaya hampir sama dengan masa sebenar pada komputer biasa)
+    const KERJA_SEMS = 12500;
+
     // Nilai hubungan bagi hari d. h.nilaiHari (jika diisi) menetapkan nilai berbeza setiap hari:
     // nombor = nilai hari itu, null = tidak dikenakan pada hari itu, tiada entri = guna h.nilai.
     function nilaiHari(h, d) {
@@ -11079,6 +11114,12 @@ window.VJSolver = (function () {
 
     function susun(inp, opt, onProgress) {
         opt = opt || {};
+        // Benih (seed) & jam maya: setiap larian boleh diulang tepat. Rawak hanya daripada `rawak()` berbenih, dan had masa
+        // diukur dengan unit kerja (bukan masa sebenar), jadi benih + data + tetapan yang sama = jadual yang sama di mana-mana komputer.
+        const benih = (opt.benih >>> 0) || benihRawak();
+        const rawak = rawakBerbenih(benih);
+        let kerja = 0;
+        const jam = () => kerja / KERJA_SEMS;
         const B = bina(inp, opt);
         const { H, W, N, units, blokK, blokG } = B;
         const P = Object.assign({ sesiSehariSubjek: 1, maxGuruSehari: 0, maxGuruBerturut: 0 }, inp.peraturan || {});
@@ -11119,7 +11160,7 @@ window.VJSolver = (function () {
         const occB = B.bilik.map(() => new Int32Array(N).fill(-1));
         let bilikU = units.map(() => []);          // [{ uuid, r }] — kekal selepas angkat sebagai keutamaan
         const bilikSnap = new WeakMap();           // tatasusunan kedudukan → salinan bilikU pada masa itu
-        const salinPos = () => { const a = pos.slice(); bilikSnap.set(a, bilikU.map(x => x.slice())); return a; };
+        const salinPos = () => { kerja += U; const a = pos.slice(); bilikSnap.set(a, bilikU.map(x => x.slice())); return a; };
         {
             const idxB = {}; B.bilik.forEach((b, i) => { idxB[b.id] = i; });
             const unitKe = {}; units.forEach((T, u) => T.ahli.forEach(id => { unitKe[id + '#' + T.ke] = u; }));
@@ -11161,6 +11202,7 @@ window.VJSolver = (function () {
         const relLonggar = B.hubUnit.map(R => !R.meta.lembut && !R.keras);                        // jenis keras berpemberat optimum/longgar
 
         function letak(u, s) {
+            kerja += 2;
             const T = units[u], d = Math.floor(s / W);
             for (let i = 0; i < T.len; i++) {
                 T.kelas.forEach(k => { occK[k][s + i] = u; });
@@ -11184,6 +11226,7 @@ window.VJSolver = (function () {
         }
 
         function angkat(u) {
+            kerja += 2;
             const T = units[u], s = pos[u], d = Math.floor(s / W);
             for (let i = 0; i < T.len; i++) {
                 T.kelas.forEach(k => { occK[k][s + i] = -1; });
@@ -11229,6 +11272,7 @@ window.VJSolver = (function () {
 
         // Unit yang berkonflik jika u diletak di s; null jika bertembung dengan unit berkunci
         function konflik(u, s) {
+            kerja += 1 + relU[u].length;
             const T = units[u], d = Math.floor(s / W), set = new Set();
             for (let i = 0; i < T.len; i++) {
                 for (const k of T.kelas) { const o = occK[k][s + i]; if (o >= 0) set.add(o); }
@@ -11273,6 +11317,7 @@ window.VJSolver = (function () {
         const lambat = units.map((T, u) => T.bilikReq.length > 0 || relU[u].some(ri => relKeras[ri]));
         function bebas(u, s) {
             if (lambat[u]) { const c = konflik(u, s); return !!c && c.size === 0; }
+            kerja += 0.5;
             const T = units[u], len = T.len, d = Math.floor(s / W), ks = T.kelas, gs = T.guru;
             for (let j = 0; j < ks.length; j++) { const occ = occK[ks[j]]; for (let i = 0; i < len; i++) if (occ[s + i] >= 0) return false; }
             for (let j = 0; j < gs.length; j++) { const occ = occG[gs[j]]; for (let i = 0; i < len; i++) if (occ[s + i] >= 0) return false; }
@@ -11465,11 +11510,12 @@ window.VJSolver = (function () {
         const BERAT_DEPAN = 25;
 
         function kosLembut(u, s) {
+            kerja += 1 + relU[u].length;
             const T = units[u], d = Math.floor(s / W);
             let c = kosHubunganLembut(u, s, null) + BERAT_DEPAN * lompatDepan(T, s);
             for (const pg of pasang[u]) c += 10 * daySub[pg[1] + d].length;
             T.kelas.forEach(k => { c += 0.3 * dayLoadK[k][d]; });
-            return c + Math.random();
+            return c + rawak();
         }
 
         // Unit berkunci daripada jadual sedia ada
@@ -11506,12 +11552,12 @@ window.VJSolver = (function () {
         let iter = 0, terbaik = -1, posTerbaik = null;
         // Henti awal fasa 1 jika bilangan sesi diletak tidak bertambah dalam tempoh ini
         const hadBuntuMs = Math.max(5000, hadMs * 0.25);
-        let tKemajuan = performance.now(), hentiBuntu = false;
+        let tKemajuan = jam(), hentiBuntu = false;
         let diletak = units.filter((_, u) => pos[u] >= 0).length;
         if (opt.sambung) { terbaik = diletak; posTerbaik = salinPos(); }
         // Julat suhu fasa optimum [mula, akhir] dalam 0..1 (lalai keseluruhan jadual penyejukan)
         const suhuA = opt.suhu ? +opt.suhu[0] : 0, suhuB = opt.suhu ? +opt.suhu[1] : 1;
-        const mula = performance.now();
+        const mula = jam();
         const maxIter = 50000000;
         // Statistik konflik (Conflict-Based Statistics, Müller): bilangan kali penempatan (u di s) mengusir penempatan (x di p).
         // Pengusiran yang kerap berulang jadi semakin mahal, supaya carian tidak berpusing pada pasangan sesi yang sama.
@@ -11586,7 +11632,7 @@ window.VJSolver = (function () {
             list.forEach(([u, s]) => { units[u].guru.forEach(g => gs.add(g)); units[u].kelas.forEach(k => ks.add(k)); ds.add(Math.floor(s / W)); relU[u].forEach(ri => rs.add(ri)); });
             return [gs, ks, ds, rs];
         }
-        const terima = (delta, T) => delta <= 0 || Math.random() < Math.exp(-delta / T);
+        const terima = (delta, T) => delta <= 0 || rawak() < Math.exp(-delta / T);
         const domainSet = domain.map(a => new Set(a));
 
         // Alih satu sesi ke kedudukan lain yang sah. Pulangkan delta kos jika diterima, null jika ditolak.
@@ -11597,7 +11643,7 @@ window.VJSolver = (function () {
                 // Cuba beberapa kedudukan rawak; ambil yang slot pertamanya kosong bagi kelas pertama (tapisan murah)
                 const dm = domain[u], occ = occK[units[u].kelas[0]];
                 for (let c = 0; c < 6; c++) {
-                    const x = dm[Math.floor(Math.random() * dm.length)], o = occ[x];
+                    const x = dm[Math.floor(rawak() * dm.length)], o = occ[x];
                     if (x !== lama && (o < 0 || o === u)) { baru = x; break; }
                 }
                 if (baru === undefined) return null;
@@ -11622,7 +11668,7 @@ window.VJSolver = (function () {
         let kelasBerlubang = B.kelas.map((_, k) => k), rakanTukar = null, unitGuru = null, guruAktif = [];
         function cubaIsiLubang(T) {
             for (let cuba = 0; cuba < 12; cuba++) {
-                const k = kelasBerlubang[Math.floor(Math.random() * kelasBerlubang.length)], d = Math.floor(Math.random() * H);
+                const k = kelasBerlubang[Math.floor(rawak() * kelasBerlubang.length)], d = Math.floor(rawak() * H);
                 const occ = occK[k], blok = blokK[k];
                 let akhir = -1, lubang = -1;
                 for (let p = 0; p < W; p++) if (occ[d * W + p] >= 0) akhir = p;
@@ -11636,7 +11682,7 @@ window.VJSolver = (function () {
                     return pos[u] > s0;
                 });
                 if (!calon.length) continue;
-                return rantaiIsi(calon[Math.floor(Math.random() * calon.length)], s0, T);
+                return rantaiIsi(calon[Math.floor(rawak() * calon.length)], s0, T);
             }
             return null;
         }
@@ -11678,17 +11724,17 @@ window.VJSolver = (function () {
 
         // Tukar kedudukan dua sesi sama panjang yang berkongsi kelas atau guru
         function cubaTukar(T, boleh) {
-            const u = boleh[Math.floor(Math.random() * boleh.length)];
+            const u = boleh[Math.floor(rawak() * boleh.length)];
             const Tu = units[u];
             let v;
             if (rakanTukar) {
                 // Rakan = sesi sama panjang yang berkongsi kelas (disenarai awal), bukan slot rawak
                 const R = rakanTukar[u];
                 if (!R.length) return null;
-                v = R[Math.floor(Math.random() * R.length)];
+                v = R[Math.floor(rawak() * R.length)];
             } else {
-                const k = Tu.kelas[Math.floor(Math.random() * Tu.kelas.length)];
-                const d = Math.floor(Math.random() * H), p = Math.floor(Math.random() * W);
+                const k = Tu.kelas[Math.floor(rawak() * Tu.kelas.length)];
+                const d = Math.floor(rawak() * H), p = Math.floor(rawak() * W);
                 v = occK[k][d * W + p];
                 if (v < 0 || v === u || kunci[v] || units[v].len !== Tu.len || pos[v] !== d * W + p) return null;
             }
@@ -11710,11 +11756,11 @@ window.VJSolver = (function () {
         // Tukar susunan dua sesi BERSEBELAHAN yang berlainan panjang dalam kelas & hari yang sama (cth 3+2 -> 2+3).
         // Blok kelas kekal; hanya waktu guru berubah — berguna untuk merapatkan lompong guru dalam kelas yang penuh.
         function cubaTukarSebelah(T, boleh) {
-            const u = boleh[Math.floor(Math.random() * boleh.length)];
+            const u = boleh[Math.floor(rawak() * boleh.length)];
             const Tu = units[u], su = pos[u], d = Math.floor(su / W);
-            const k = Tu.kelas[Math.floor(Math.random() * Tu.kelas.length)];
+            const k = Tu.kelas[Math.floor(rawak() * Tu.kelas.length)];
             let v;
-            const depan = Math.random() < 0.5;
+            const depan = rawak() < 0.5;
             if (depan) {
                 const x = su + Tu.len;
                 if (x >= (d + 1) * W) return null;
@@ -11746,13 +11792,13 @@ window.VJSolver = (function () {
         // ke dalam lompong itu (sesi kelas yang menghalang dialih oleh rantaiIsi).
         function cubaRapatGuru(T) {
             if (!guruAktif.length) return null;
-            const g = guruAktif[Math.floor(Math.random() * guruAktif.length)], d = Math.floor(Math.random() * H);
+            const g = guruAktif[Math.floor(rawak() * guruAktif.length)], d = Math.floor(rawak() * H);
             const occ = occG[g], blok = blokG[g], d0 = d * W;
             let a = -1, b = -1;
             for (let q = 0; q < W; q++) if (occ[d0 + q] >= 0) { if (a < 0) a = q; b = q; }
             if (a < 0 || b - a < 2) return null;
             // Lubang pertama selepas titik mula rawak (pusing balik sekali)
-            const mulaCari = a + 1 + Math.floor(Math.random() * (b - a - 1));
+            const mulaCari = a + 1 + Math.floor(rawak() * (b - a - 1));
             let h1 = -1;
             for (let c = 0; c < b - a - 1; c++) {
                 const q = a + 1 + ((mulaCari - a - 1 + c) % (b - a - 1));
@@ -11764,15 +11810,16 @@ window.VJSolver = (function () {
             while (h2 < b - 1 && occ[d0 + h2 + 1] < 0 && !blok[d0 + h2 + 1]) h2++;
             const run = h2 - h1 + 1;
             const senarai = unitGuru[g];
-            const x = senarai[Math.floor(Math.random() * senarai.length)];
+            const x = senarai[Math.floor(rawak() * senarai.length)];
             const len = units[x].len;
             if (pos[x] < 0 || kunci[x] || len > run) return null;
-            const s0 = d0 + (Math.random() < 0.5 ? h1 : h2 - len + 1);
+            const s0 = d0 + (rawak() < 0.5 ? h1 : h2 - len + 1);
             if (s0 === pos[x] || !domainSet[x].has(s0)) return null;
             return rantaiIsi(x, s0, T);
         }
 
         function tetapkanKedudukan(akhir) {
+            kerja += U * 7;
             units.forEach((_, u) => { if (pos[u] >= 0) angkat(u); });
             const snap = bilikSnap.get(akhir);
             if (snap) bilikU = snap.map(x => x.slice());
@@ -11798,7 +11845,7 @@ window.VJSolver = (function () {
         const R_SORT = opt.rSort === undefined ? 0 : +opt.rSort;
         let rPanggil = 0;
         function rantaiLetak(u, kedalaman, tabu, tamat) {
-            if (performance.now() > tamat) return false;
+            if (jam() > tamat) return false;
             if (R_CALLS && ++rPanggil > R_CALLS) return false;
             let best = -1, bk = Infinity;
             for (const s of domain[u]) { if (bebas(u, s)) { const k = kosLembut(u, s); if (k < bk) { bk = k; best = s; } } }
@@ -11812,7 +11859,7 @@ window.VJSolver = (function () {
                 for (const x of c) if (tabu.has(x)) { ok = false; break; }
                 if (ok) cand.push([s, c]);
             }
-            for (let i = cand.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = cand[i]; cand[i] = cand[j]; cand[j] = t; }
+            for (let i = cand.length - 1; i > 0; i--) { const j = Math.floor(rawak() * (i + 1)); const t = cand[i]; cand[i] = cand[j]; cand[j] = t; }
             // Paling sedikit sesi diusir dahulu (susunan rawak dikekalkan antara yang seri)
             if (R_SORT) cand.sort((x, y) => x[1].size - y[1].size);
             tabu.add(u);
@@ -11825,7 +11872,7 @@ window.VJSolver = (function () {
                 for (const x of ev) { if (!rantaiLetak(x, kedalaman - 1, tabu, tamat)) { ok = false; break; } }
                 if (ok) { tabu.delete(u); return true; }
                 tetapkanKedudukan(snap);
-                if (performance.now() > tamat) break;
+                if (jam() > tamat) break;
                 if (R_CALLS && rPanggil > R_CALLS) break;
             }
             tabu.delete(u);
@@ -11836,7 +11883,7 @@ window.VJSolver = (function () {
         const R_BUDGET = opt.rBudget === undefined ? 0 : +opt.rBudget;
         const R_BKONF = opt.rBKonf === undefined ? 3 : +opt.rBKonf;
         function rantaiBajet(u, cubaan, tabu, tamat) {
-            if (performance.now() > tamat) return false;
+            if (jam() > tamat) return false;
             let best = -1, bk = Infinity;
             for (const s of domain[u]) { if (bebas(u, s)) { const k = kosLembut(u, s); if (k < bk) { bk = k; best = s; } } }
             if (best >= 0) { letak(u, best); return true; }
@@ -11855,7 +11902,7 @@ window.VJSolver = (function () {
                     w *= 0.15 + f;
                 }
                 if (!ok) continue;
-                w = w / (c.size * c.size) * (0.7 + Math.random() * 0.6);
+                w = w / (c.size * c.size) * (0.7 + rawak() * 0.6);
                 cand.push({ s, c, w, min: c.size, t: 0 });
                 jumlah += w;
             }
@@ -11882,19 +11929,19 @@ window.VJSolver = (function () {
                 }
                 if (ok) { tabu.delete(u); return true; }
                 tetapkanKedudukan(snap);
-                if (performance.now() > tamat) break;
+                if (jam() > tamat) break;
             }
             tabu.delete(u);
             return false;
         }
         function baikiTakMuat(ms) {
             if (R_BUDGET) {
-                const tamat = performance.now() + ms;
+                const tamat = jam() + ms;
                 let tak = units.map((_, u) => u).filter(u => pos[u] < 0 && !kunci[u] && !sebabMati[u] && domain[u].length);
                 let pusingan = 0;
-                while (tak.length && performance.now() < tamat) {
+                while (tak.length && jam() < tamat) {
                     // bajet kecil dahulu, besar kemudian (murah untuk yang mudah, mahal untuk yang sukar)
-                    const bajet = R_BUDGET * Math.pow(4, pusingan % 4);
+                    const bajet = R_BUDGET * Math.pow(4, pusingan % 4); kerja++;
                     const u = tak[pusingan % tak.length];
                     pusingan++;
                     const snap = salinPos();
@@ -11904,12 +11951,12 @@ window.VJSolver = (function () {
                 diletak = units.filter((_, u) => pos[u] >= 0).length;
                 return;
             }
-            const tamat = performance.now() + ms;
+            const tamat = jam() + ms;
             let tak = units.map((_, u) => u).filter(u => pos[u] < 0 && !kunci[u] && !sebabMati[u] && domain[u].length);
             let pusingan = 0;
-            while (tak.length && performance.now() < tamat) {
-                pusingan++;
-                const u = tak[Math.floor(Math.random() * tak.length)];
+            while (tak.length && jam() < tamat) {
+                pusingan++; kerja++;
+                const u = tak[Math.floor(rawak() * tak.length)];
                 const snap = salinPos();
                 rPanggil = 0;
                 if (rantaiLetak(u, R_DEPTH + (pusingan % 3), new Set(), tamat)) tak = tak.filter(x => pos[x] < 0);
@@ -11923,9 +11970,9 @@ window.VJSolver = (function () {
             const dibatal = () => { if (opt.isyarat && opt.isyarat.batal) { resolve({ batal: true }); return true; } return false; };
             function langkah() {
                 if (dibatal()) return;
-                const t0 = performance.now();
-                while (pending.length && performance.now() - t0 < 40) {
-                    iter++;
+                const t0 = jam();
+                while (pending.length && jam() - t0 < 40) {
+                    iter++; kerja++;
                     const u = pending.pop();
                     if (pos[u] >= 0 || sebabMati[u]) continue;
                     if (!domain[u].length) { sebabMati[u] = 'Tiada slot berturut-turut yang cukup panjang (slot diblok / rehat / hubungan slot).'; continue; }
@@ -11936,7 +11983,7 @@ window.VJSolver = (function () {
                         let kos;
                         if (set.size === 0) kos = kosLembut(u, s) + (FRAG_W ? FRAG_W * serpihan(u, s, null) : 0);
                         else {
-                            kos = 1000 + Math.random() * 300 + kosHubunganLembut(u, s, set) + BERAT_DEPAN * lompatDepan(units[u], s);
+                            kos = 1000 + rawak() * 300 + kosHubunganLembut(u, s, set) + BERAT_DEPAN * lompatDepan(units[u], s);
                             if (FRAG_W) kos += FRAG_W * serpihan(u, s, set);
                             for (const x of set) {
                                 kos += 200 * units[x].len + (iter - placedAt[x] < 25 ? RECENT_W : 0);
@@ -11957,11 +12004,11 @@ window.VJSolver = (function () {
                     letak(u, best);
                     placedAt[u] = iter;
                     diletak++;
-                    if (diletak > terbaik) { terbaik = diletak; posTerbaik = salinPos(); tKemajuan = performance.now(); }
+                    if (diletak > terbaik) { terbaik = diletak; posTerbaik = salinPos(); tKemajuan = jam(); }
                 }
-                const ms = performance.now() - mula;
+                const ms = jam() - mula;
                 if (onProgress) onProgress({ iter, diletak, terbaik: Math.max(terbaik, diletak), jumlah: U, ms });
-                hentiBuntu = pending.length > 0 && performance.now() - tKemajuan > hadBuntuMs;
+                hentiBuntu = pending.length > 0 && jam() - tKemajuan > hadBuntuMs;
                 if (pending.length && ms < hadMs && iter < maxIter && !hentiBuntu) { seterusnya(langkah); return; }
                 // Pembaikan terarah: jika masih ada sesi tidak muat, cuba rantaian pengusiran sebelum menyerah
                 if (diletak < U && !opt.sambung && !opt.tanpaPembaikan) {
@@ -12017,26 +12064,26 @@ window.VJSolver = (function () {
                 const jw = w.reduce((x, y) => x + y, 0);
                 const kum = []; w.reduce((acc, x, i) => (kum[i] = acc + x / jw), 0);
                 const awal = kosSemua() - lantai;
-                fasa2 = { boleh, bolehAlih, kum, lantai, kini: awal, awal, terbaik: awal, posTerbaik: salinPos(), mula: performance.now(), msFasa1, langkah: 0, diterima: 0, T0: 4, T1: 0.05, kualitiAwal: ukurKualiti() };
+                fasa2 = { boleh, bolehAlih, kum, lantai, kini: awal, awal, terbaik: awal, posTerbaik: salinPos(), mula: jam(), msFasa1, langkah: 0, diterima: 0, T0: 4, T1: 0.05, kualitiAwal: ukurKualiti() };
                 seterusnya(langkahOptimum);
             }
 
             function langkahOptimum() {
                 if (dibatal()) return;
-                const t0 = performance.now(), O = fasa2;
+                const t0 = jam(), O = fasa2;
                 for (;;) {
-                    // Semak jam sekali bagi setiap 256 langkah (performance.now() agak mahal jika dipanggil setiap langkah)
-                    const kini = performance.now();
+                    // Semak jam sekali bagi setiap 256 langkah (jam() agak mahal jika dipanggil setiap langkah)
+                    const kini = jam();
                     if (kini - t0 >= 40) break;
                     const f = Math.min(1, (kini - O.mula) / hadOptimMs);
                     if (f >= 1) break;
                     const T = O.T0 * Math.pow(O.T1 / O.T0, suhuA + (suhuB - suhuA) * f);
                     for (let n = 0; n < 256; n++) {
-                        O.langkah++;
-                        const r = Math.random();
+                        O.langkah++; kerja += 16;
+                        const r = rawak();
                         const K = O.kum;
                         const d = r < K[0] ? cubaIsiLubang(T)
-                            : r < K[1] ? cubaAlih(O.bolehAlih[Math.floor(Math.random() * O.bolehAlih.length)], T)
+                            : r < K[1] ? cubaAlih(O.bolehAlih[Math.floor(rawak() * O.bolehAlih.length)], T)
                             : r < K[2] ? cubaTukar(T, O.boleh)
                             : r < K[3] ? cubaTukarSebelah(T, O.boleh)
                             : cubaRapatGuru(T);
@@ -12046,7 +12093,7 @@ window.VJSolver = (function () {
                         if (O.kini < O.terbaik - 1e-9) { O.terbaik = O.kini; O.posTerbaik = salinPos(); }
                     }
                 }
-                const msOpt = performance.now() - O.mula;
+                const msOpt = jam() - O.mula;
                 if (onProgress) onProgress({ fasa: 'optimum', iter, diletak, terbaik: diletak, jumlah: U, ms: O.msFasa1 + msOpt, kosAwal: O.awal, kos: O.terbaik });
                 if (msOpt < hadOptimMs) { seterusnya(langkahOptimum); return; }
                 const r = hasil(O.posTerbaik, O.msFasa1 + msOpt);
@@ -12086,11 +12133,11 @@ window.VJSolver = (function () {
                 if (langgar > 0) isu.push({ jenis: 'amaran', teks: `Hubungan ${TAHAP_HUB[R.tahap].nama.toLowerCase()} "${namaHub(R.h)}"${R.sub ? ` (${R.sub})` : ''} tidak dipenuhi sepenuhnya (${langgar} pelanggaran).` });
             });
             const kualiti = ukurKualiti();
-            return { sesi, tidakMuat, isu, stat: { unit: U, diletak: U - tidakMuat.length, iter, ms: Math.round(ms), hentiBuntu, bilAuto: B.bilAuto, kosongDepan: kualiti.kosongDepanKelas, kualiti } };
+            return { sesi, tidakMuat, isu, stat: { benih, unit: U, diletak: U - tidakMuat.length, iter, ms: Math.round(ms), hentiBuntu, bilAuto: B.bilAuto, kosongDepan: kualiti.kosongDepanKelas, kualiti } };
         }
     }
 
-    return { bina, susun, parsePecahan, pecahAuto, hurufLabel, JENIS_HUB, TAHAP_HUB, tahapHub, namaHub, padanHub, pilihKosong, ukurLembut, nilaiHari };
+    return { bina, susun, rawakBerbenih, benihRawak, campurBenih, parsePecahan, pecahAuto, hurufLabel, JENIS_HUB, TAHAP_HUB, tahapHub, namaHub, padanHub, pilihKosong, ukurLembut, nilaiHari };
 })();
     </script>
     <script>
@@ -12156,6 +12203,31 @@ window.VJSolver = (function () {
             });
             const n = document.getElementById('jdlTahapNota'); if (n) n.textContent = JDL_TAHAP[t].nota;
         }
+        // ---- Kod seed: ulang susunan yang sama dengan tepat ----
+        // Format: VJ1-<tahap R/O/S><teras 1-8><K = kumpulan sama serentak / X = tidak>-<benih 8 hex>-<cap data 6 hex>
+        // Benih + tetapan + data yang sama → jadual yang sama (penyusun guna rawak berbenih & jam maya, bukan masa sebenar).
+        const JDL_KOD_TAHAP = { relax: 'R', optimize: 'O', strict: 'S' };
+        function jdlCapData(inp) {
+            const teks = JSON.stringify(Object.assign({}, inp, { jadual: { sesi: (inp.jadual && inp.jadual.sesi) || [] } }));
+            let h = 0x811C9DC5;
+            for (let i = 0; i < teks.length; i++) { h ^= teks.charCodeAt(i); h = Math.imul(h, 0x01000193); }
+            return ((h >>> 0) & 0xFFFFFF).toString(16).toUpperCase().padStart(6, '0');
+        }
+        function jdlKodBina(o) {
+            return `VJ1-${JDL_KOD_TAHAP[o.tahap] || 'O'}${o.teras}${o.huruf ? 'K' : 'X'}-${(o.benih >>> 0).toString(16).toUpperCase().padStart(8, '0')}-${o.data}`;
+        }
+        function jdlKodBaca(teks) {
+            const m = /^\s*VJ1-([ROS])([1-8])([KX])-([0-9A-F]{8})-([0-9A-F]{6})\s*$/i.exec(String(teks || ''));
+            if (!m) return null;
+            const tahap = Object.keys(JDL_KOD_TAHAP).find(k => JDL_KOD_TAHAP[k] === m[1].toUpperCase());
+            return { tahap, teras: +m[2], huruf: m[3].toUpperCase() === 'K', benih: parseInt(m[4], 16) >>> 0, data: m[5].toUpperCase() };
+        }
+        function jdlKodSalin(kod) {
+            const ok = () => showToast('Kod seed disalin: ' + kod, 'success');
+            if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(kod).then(ok, () => prompt('Salin kod seed:', kod));
+            else prompt('Salin kod seed:', kod);
+        }
+
         const jdlOptBina = () => ({ pecahAuto: true, serentakHuruf: document.getElementById('jdlSerentakHuruf').checked });
 
         const JDL_WARNA = ['bg-sky-100 text-sky-900', 'bg-emerald-100 text-emerald-900', 'bg-amber-100 text-amber-900', 'bg-violet-100 text-violet-900',
@@ -12599,19 +12671,20 @@ window.VJSolver = (function () {
         //   Pusingan seterusnya: semua teras menyambung daripada jadual TERBAIK pusingan sebelumnya
         //   (suhu penyejukan diteruskan), jadi carian tertumpu di sekitar jadual terbaik.
         function jdlSusunSelari(inp, opt, onProgress) {
-            const n = Math.max(1, Math.min(JDL_TERAS_MAKS, parseInt(opt.teras) || 1));
+            const n = Math.max(1, Math.min(opt.terasTetap ? 8 : JDL_TERAS_MAKS, parseInt(opt.teras) || 1));
             const isyarat = opt.isyarat;
-            const optAsas = Object.assign({}, opt); delete optAsas.tanpaHad; delete optAsas.isyarat; delete optAsas.teras; delete optAsas.pusingan;
+            const optAsas = Object.assign({}, opt); delete optAsas.tanpaHad; delete optAsas.isyarat; delete optAsas.teras; delete optAsas.pusingan; delete optAsas.terasTetap;
+            const benihAsas = (opt.benih >>> 0) || VJSolver.benihRawak();
             let url;
             try { url = jdlBinaWorkerUrl(); if (typeof Worker === 'undefined') throw new Error('Worker tiada'); }
-            catch (e) { console.warn('Web Worker tidak tersedia, guna thread utama:', e); return VJSolver.susun(inp, opt, onProgress); }
+            catch (e) { console.warn('Web Worker tidak tersedia, guna thread utama:', e); return VJSolver.susun(inp, Object.assign({}, opt, { benih: VJSolver.campurBenih(benihAsas, 0, 0) }), onProgress); }
 
             const hadOpt = Math.max(0, parseFloat(opt.hadOptimumSaat) || 0);
             const tanpaHad = !!opt.tanpaHad;
             const R = tanpaHad ? 12 : (n > 1 && hadOpt > 0 ? (parseInt(opt.pusingan) || Math.max(2, Math.min(12, Math.round(hadOpt / 2.5)))) : 1);
             const workers = [];
             for (let i = 0; i < n; i++) { try { workers.push(new Worker(url)); } catch (e) { console.warn('Worker gagal dicipta:', e); } }
-            if (!workers.length) return VJSolver.susun(inp, opt, onProgress);
+            if (!workers.length) return VJSolver.susun(inp, Object.assign({}, opt, { benih: VJSolver.campurBenih(benihAsas, 0, 0) }), onProgress);
 
             let tamat = false, tolak = null;
             const henti = () => { tamat = true; clearInterval(pemantau); workers.forEach(w => { try { w.terminate(); } catch (e) {} }); };
@@ -12650,7 +12723,8 @@ window.VJSolver = (function () {
                         if (++selesai === workers.length) resolve(hasil.filter(Boolean));
                     };
                     w.onerror = err => { if (tamat) return; console.error('Worker penyusun:', err.message); status[i] = null; if (++selesai === workers.length) resolve(hasil.filter(Boolean)); };
-                    w.postMessage({ inp: inpR, opt: optR });
+                    // Benih setiap worker diterbitkan daripada benih asas + pusingan + nombor worker → seluruh susunan boleh diulang
+                    w.postMessage({ inp: inpR, opt: Object.assign({}, optR, { benih: VJSolver.campurBenih(benihAsas, optR.benihKe || 0, i) }) });
                 });
             });
 
@@ -12660,7 +12734,7 @@ window.VJSolver = (function () {
                 do {
                 for (let r = 0; r < R && !tamat; r++) {
                     const pertama = kitaran === 0 && r === 0;
-                    const optR = Object.assign({}, optAsas, { hadOptimumSaat: hadOpt / R, suhu: [r / R, (r + 1) / R] });
+                    const optR = Object.assign({}, optAsas, { hadOptimumSaat: hadOpt / R, suhu: [r / R, (r + 1) / R], benihKe: (kitaran * 64 + r) * 4096 + percubaan });
                     let inpR = inp;
                     if (!pertama) {
                         optR.sambung = true; optR.hadSaat = 0.05;
@@ -12701,6 +12775,7 @@ window.VJSolver = (function () {
                 henti();
                 best.stat.hentiAuto = hentiAuto;
                 best.stat.teras = workers.length;
+                best.stat.benihAsas = benihAsas;
                 best.stat.pusingan = R;
                 best.stat.ms = Math.round(performance.now() - t0);
                 best.stat.iter = iter;
@@ -12717,6 +12792,13 @@ window.VJSolver = (function () {
             if (!isEditMode) { ensureEditMode(() => jdlSusun()); return; }
             const inp = VJStore.getSolverInput();
             if (!inp.transaksi.length) { showToast('Tiada agihan untuk dijadualkan.', 'warning'); return; }
+            // Kod seed (pilihan): ulang susunan terdahulu dengan tahap, teras, tetapan kumpulan & benih yang sama
+            const kodEl = document.getElementById('jdlKodSeed');
+            const kodTeks = kodEl ? kodEl.value.trim() : '';
+            const ulang = kodTeks ? jdlKodBaca(kodTeks) : null;
+            if (kodTeks && !ulang) { showToast('Kod seed tidak sah. Contoh format: VJ1-O7K-3F9A21C7-1A2B3C', 'error', 6000); return; }
+            if (ulang) { const cb = document.getElementById('jdlSerentakHuruf'); if (cb) cb.checked = ulang.huruf; }
+            const tahapGuna = ulang ? ulang.tahap : jdlTahap;
             // Mod kelas dipilih: hanya agihan kelas dipilih disusun; sesi lain dikunci sementara & dipulihkan selepas itu
             const separa = jdlNPilih() > 0;
             const asal = inp.jadual.sesi.slice();
@@ -12730,16 +12812,24 @@ window.VJSolver = (function () {
                 const nama = jdlNamaPilih(inp);
                 const kongsi = jdlPilihanGuru.size ? 0 : inp.transaksi.filter(t => trxDipilih.has(String(t[8])) && String(t[3]).split(',').some(k => !jdlPilihan.has(k.trim()))).length;
                 if (asal.some(x => trxDipilih.has(x.uuid) && !x.kunci) && !confirm(`Susun semula ${nama.length > 3 ? jdlSkopTeks() : nama.join(', ')}? Sesi tidak berkunci bagi pilihan ini akan disusun semula. Sesi lain tidak diubah.${kongsi ? `\n\n${kongsi} agihan dikongsi dengan kelas lain (gabung) turut akan dialih.` : ''}`)) return;
-            } else if (inp.jadual.sesi.some(x => !x.kunci) && !confirm('Susun semula jadual? Semua sesi yang tidak dikunci akan disusun semula.')) return;
+            } else {
+                if (inp.jadual.sesi.some(x => !x.kunci) && !confirm('Susun semula jadual? Semua sesi yang tidak dikunci akan disusun semula.')) return;
+                // Sesi tidak berkunci akan disusun semula: buang daripada input supaya hasil hanya bergantung pada data + kunci (kod seed boleh diulang)
+                inp.jadual = Object.assign({}, inp.jadual, { sesi: inp.jadual.sesi.filter(x => x.kunci) });
+            }
             // Semakan awal: maklumkan kes mustahil / hubungan gabungan sebelum penyusun berjalan lama
             const isuAwal = VJSolver.bina(inp, jdlOptBina()).isu.filter(i => i.jenis === 'ralat' || /^Hubungan ketat .* menggabungkan /.test(i.teks));
             if (isuAwal.length && !confirm(`Semakan awal menemui ${isuAwal.length} masalah yang boleh menyebabkan sesi tidak muat atau penyusunan buntu lama:\n\n` +
                 isuAwal.slice(0, 6).map(i => '• ' + i.teks).join('\n\n') + (isuAwal.length > 6 ? `\n\n… dan ${isuAwal.length - 6} lagi` : '') +
                 '\n\nTeruskan menyusun juga?')) return;
+            const capData = jdlCapData(inp);
+            if (ulang && ulang.data !== capData && !confirm(`Data / kunci / pilihan kelas sekarang berbeza daripada semasa kod ${kodTeks.toUpperCase()} dijana (cap ${ulang.data} ≠ ${capData}). Hasil mungkin tidak sama.\n\nTeruskan juga?`)) return;
+            const benihAsas = ulang ? ulang.benih : VJSolver.benihRawak();
             jdlSedang = true;
+            if (kodEl) kodEl.value = '';   // larian seterusnya rawak baharu melainkan kod dimasukkan semula (kod dipapar dalam Rumusan)
             const btn = document.getElementById('jdlBtnSusun');
             btn.disabled = true; btn.classList.add('opacity-60');
-            const hadOptPilih = JDL_TAHAP[jdlTahap].opt;
+            const hadOptPilih = JDL_TAHAP[tahapGuna].opt;
             const tanpaHad = hadOptPilih < 0;
             const hadOpt = tanpaHad ? 30 : hadOptPilih;
             const isyarat = { batal: false, henti: false, tanpaHad };
@@ -12748,10 +12838,12 @@ window.VJSolver = (function () {
             try {
                 const res = await jdlSusunSelari(inp, {
                     ...jdlOptBina(),
-                    hadSaat: JDL_TAHAP[jdlTahap].saat,
+                    hadSaat: JDL_TAHAP[tahapGuna].saat,
                     hadOptimumSaat: hadOpt,
                     tanpaHad,
-                    teras: JDL_TERAS_MAKS,
+                    teras: ulang ? ulang.teras : JDL_TERAS_MAKS,
+                    terasTetap: !!ulang,
+                    benih: benihAsas,
                     isyarat
                 }, st => {
                     if (st.fasa === 'optimum') {
@@ -12763,6 +12855,9 @@ window.VJSolver = (function () {
                     }
                 });
                 if (res.batal) { showToast('Penyusunan dibatalkan. Jadual sedia ada tidak diubah.', 'info'); return; }
+                res.stat.kod = jdlKodBina({ tahap: tahapGuna, teras: res.stat.teras || 1, huruf: jdlOptBina().serentakHuruf, benih: benihAsas, data: capData });
+                res.stat.kodTepat = !isyarat.henti;
+                console.info('VisiJadual kod seed:', res.stat.kod, '· diletak', res.stat.diletak + '/' + res.stat.unit);
                 if (separa) {
                     // Kekalkan sesi kelas lain tepat seperti asal; ambil hasil baharu bagi agihan kelas dipilih sahaja
                     const baru = res.sesi.filter(x => trxDipilih.has(x.uuid));
@@ -13160,6 +13255,12 @@ window.VJSolver = (function () {
             const ikon = { gagal: '✖', amaran: '⚠', info: 'ℹ' }, warna = { gagal: 'border-rose-200 bg-rose-50', amaran: 'border-amber-200 bg-amber-50', info: 'border-slate-200 bg-white' };
             const tarikh = new Date(R.tarikh).toLocaleString(VJI18N.locale());
             el.innerHTML = `<div class="rounded-xl px-3 py-2 text-xs font-bold ${kepala[0]}">${kepala[1]}</div>
+                ${!R.semasa && R.res.stat && R.res.stat.kod ? `<div class="flex flex-wrap items-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs">
+                    <span class="font-bold text-indigo-800">Kod seed:</span>
+                    <code class="font-mono font-bold text-indigo-900 select-all">${escapeHtml(R.res.stat.kod)}</code>
+                    <button type="button" onclick="jdlKodSalin('${escapeHtml(R.res.stat.kod)}')" class="ml-auto px-2 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-bold">Salin</button>
+                    <span class="w-full text-[11px] text-indigo-700">${R.res.stat.kodTepat ? 'Masukkan kod ini dalam popup Susun untuk mengulang susunan yang sama (data & kunci mesti sama).' : 'Susunan dihentikan secara manual — kod ini mungkin tidak menghasilkan jadual yang sama.'}</span>
+                </div>` : ''}
                 <p class="text-[11px] text-slate-500">${R.semasa ? 'Analisis jadual semasa' : 'Hasil susunan'} · ${escapeHtml(tarikh)}${R.skop ? ' · dipilih: ' + escapeHtml(R.skop) : ''}${S.unit ? ` · ${S.diletak}/${S.unit} sesi diletak` : ''}</p>
                 ${S.butir.map(b => `<div class="border rounded-xl p-3 ${warna[b.jenis]}">
                     <p class="text-xs font-bold text-slate-800">${ikon[b.jenis]} ${escapeHtml(b.tajuk)}</p>

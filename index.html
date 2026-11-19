@@ -240,6 +240,7 @@ window.VJI18N = (function () {
         "Kod yang sama + data yang sama = jadual yang sama. Tahap & teras diambil daripada kod.": "Same code + same data = same timetable. Level & cores are taken from the code.",
         "Masukkan kod ini dalam popup Susun untuk mengulang susunan yang sama (data & kunci mesti sama).": "Enter this code in the Build popup to repeat exactly the same run (data & locks must be the same).",
         "Susunan dihentikan secara manual — kod ini mungkin tidak menghasilkan jadual yang sama.": "The run was stopped manually — this code may not reproduce the same timetable.",
+        "Susunan dihentikan automatik ikut masa sebenar — kod ini mungkin tidak menghasilkan jadual yang sama.": "The run stopped automatically on real time — this code may not reproduce the same timetable.",
         "Kod seed tidak sah. Contoh format: VJ1-O7K-3F9A21C7-1A2B3C": "Invalid seed code. Example format: VJ1-O7K-3F9A21C7-1A2B3C",
         "Salin kod seed:": "Copy seed code:",
         "Kunci API (Picker, pilihan)": "API Key (Picker, optional)",
@@ -12785,7 +12786,9 @@ window.VJSolver = (function () {
         //     bilangan, jadi kod seed kekal boleh diulang). Jadual mungkin memang mustahil dimuatkan sepenuhnya.
         //   - Jam penyusun ialah "jam maya" (unit kerja), jadi pada data besar / komputer perlahan satu saat maya boleh
         //     mengambil beberapa saat sebenar. Penghenti jam sebenar: tiada peningkatan kos selama JDL_HENTI_MASA_MS.
-        const JDL_CUBA_TANPA_BAIK = 3, JDL_CUBA_MAKS = 10, JDL_HENTI_MASA_MS = 120000;
+        //     Penghenti ini hanya aktif SELEPAS fasa 1 (meletak sesi) selesai — setiap percubaan semula bermula dari
+        //     kosong, jadi masa mendaki semula tidak boleh dikira sebagai "tiada kemajuan".
+        const JDL_CUBA_TANPA_BAIK = 6, JDL_CUBA_MAKS = 20, JDL_HENTI_MASA_MS = 120000;
 
         // Penyusun selari koperatif:
         //   Pusingan 1: setiap teras meletak sesi & mengoptimum secara bebas.
@@ -12818,13 +12821,13 @@ window.VJSolver = (function () {
                 if (kos != null && isFinite(kos) && letak >= kemajuan.letak && (kemajuan.kos === Infinity || kemajuan.kos - kos >= Math.max(1, kemajuan.kos * 0.005))) { kemajuan.kos = kos; baik = true; }
                 if (baik) kemajuan.ms = performance.now();
             };
-            let segeraDihantar = false, hentiMasa = false;
+            let segeraDihantar = false, hentiMasa = false, fasa1Tamat = false;
             const segeraSemua = () => { if (segeraDihantar) return; segeraDihantar = true; workers.forEach(w => { try { w.postMessage({ jenis: 'segera' }); } catch (e) {} }); };
             const pemantau = setInterval(() => {
                 if (tamat) return;
                 if (isyarat && isyarat.batal) { henti(); tolak({ batal: true }); return; }
                 if (isyarat && isyarat.henti) segeraSemua();   // Henti & Guna Terbaik: tidak perlu tunggu pusingan semasa tamat
-                if (tanpaHad && performance.now() - kemajuan.ms > JDL_HENTI_MASA_MS) { hentiMasa = true; segeraSemua(); }
+                if (tanpaHad && fasa1Tamat && performance.now() - kemajuan.ms > JDL_HENTI_MASA_MS) { hentiMasa = true; segeraSemua(); }
             }, 100);
             const t0 = performance.now();
             let kosAwal0 = null, percubaan = 1;
@@ -12895,6 +12898,13 @@ window.VJSolver = (function () {
                         hentiCuba = hentiMasa ? 'masa' : 'kiraan'; bestR = best;
                         awal0 = best.stat.optimum ? { awal: best.stat.optimum.awal, kosAwal: best.stat.optimum.kosAwal } : null;
                         iter = best.stat.iter; hentiBuntu = !!best.stat.hentiBuntu;
+                    }
+                    // Fasa 1 selesai: mula kira "tiada kemajuan" (jam sebenar) dari sini, berdasarkan jadual yang diterima
+                    if (pertama && !fasa1Tamat) {
+                        fasa1Tamat = true;
+                        kemajuan.letak = bestR.stat.diletak;
+                        kemajuan.kos = bestR.stat.optimum ? bestR.stat.optimum.kosAkhir : Infinity;
+                        kemajuan.ms = performance.now();
                     }
                     // Jangan sekali-kali mundur: kekalkan jadual terbaik setakat ini
                     if (jdlLebihBaik(bestR, best)) {
@@ -13418,7 +13428,7 @@ window.VJSolver = (function () {
                     <span class="font-bold text-indigo-800">Kod seed:</span>
                     <code class="font-mono font-bold text-indigo-900 select-all">${escapeHtml(R.res.stat.kod)}</code>
                     <button type="button" onclick="jdlKodSalin('${escapeHtml(R.res.stat.kod)}')" class="ml-auto px-2 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-bold">Salin</button>
-                    <span class="w-full text-[11px] text-indigo-700">${R.res.stat.kodTepat ? 'Masukkan kod ini dalam popup Susun untuk mengulang susunan yang sama (data & kunci mesti sama).' : 'Susunan dihentikan secara manual — kod ini mungkin tidak menghasilkan jadual yang sama.'}</span>
+                    <span class="w-full text-[11px] text-indigo-700">${R.res.stat.kodTepat ? 'Masukkan kod ini dalam popup Susun untuk mengulang susunan yang sama (data & kunci mesti sama).' : R.henti ? 'Susunan dihentikan secara manual — kod ini mungkin tidak menghasilkan jadual yang sama.' : 'Susunan dihentikan automatik ikut masa sebenar — kod ini mungkin tidak menghasilkan jadual yang sama.'}</span>
                 </div>` : ''}
                 ${!R.semasa && R.res.stat && R.res.stat.ms != null ? `<div class="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs">
                     <span class="text-base leading-none">⏱</span><span class="font-bold text-slate-700">Masa penjanaan:</span>

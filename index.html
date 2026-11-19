@@ -14785,6 +14785,11 @@ window.VJGame = (function () {
         'Main semula': 'Play again', 'Tamat!': 'Game over!', 'Siap!': 'Done!', 'Rekod baharu! 🎉': 'New record! 🎉',
         'Itu kopi cikgu! −2': "That's the teacher's coffee! −2", 'Kertas kerja baharu! 📄': 'More paperwork! 📄',
         'Game ditutup sendiri apabila jadual siap.': 'The game closes by itself when the timetable is ready.',
+        'Kapal Kertas': 'Paper Plane',
+        'Ketik untuk terbang. Lalu celah timbunan buku — makin lama makin laju!': 'Tap to fly through the gaps in the book stacks — it keeps getting faster!',
+        'Lastik Kertas': 'Paper Slingshot',
+        'Tarik ke belakang & lepas. Runtuhkan timbunan fail, jatuhkan semua 😫!': 'Pull back & release. Topple the file stacks and knock out every 😫!',
+        'Tahap': 'Level', '👆 Ketik untuk mula': '👆 Tap to start', '👆 Seret ke belakang, lepaskan': '👆 Drag back, then release',
         'Lompong': 'Gap', 'Bertembung': 'Clash', 'Relief': 'Relief', 'Mesyuarat': 'Meeting', 'Kertas Kerja': 'Paperwork',
         'Bertugas': 'On duty', 'Laporan': 'Report', 'PBD': 'PBD', 'Kursus': 'Course', 'Program': 'Event', 'Stres': 'Stress', 'CIKGU': 'TEACHER'
     };
@@ -15001,7 +15006,277 @@ window.VJGame = (function () {
         }
     };
 
-    const GAMES = [belon, kopi, ketuk, padan];
+    // =====================================================================
+    // GAME 5: KAPAL KERTAS — ketik untuk naik, lalu celah timbunan buku (makin lama makin laju & sempit)
+    // =====================================================================
+    const kapal = {
+        id: 'kapal', nama: 'Kapal Kertas', arahan: 'Ketik untuk terbang. Lalu celah timbunan buku — makin lama makin laju!',
+        mula(stage, api) {
+            const K = kanvas(stage, 240), { ctx, W, H } = K;
+            const LANTAI = H - 14, PX = Math.min(80, W * 0.22), R = 8, LEBAR = 44, JARAK = 165;
+            const GRAV = 980, LONJAK = -265;
+            const WARNA_BUKU = ['#F87171', '#60A5FA', '#34D399', '#FBBF24', '#A78BFA', '#F472B6', '#2DD4BF', '#FB923C'];
+            let y = H * 0.45, vy = 0, mula = false, mati = false, tiang = [], lulus = 0, masa = 0, serpih = [];
+            const celahKini = () => Math.max(74, 108 - lulus * 1.6);
+            const lajuKini = () => Math.min(235, 125 + lulus * 4.5);
+            function tambahTiang(x) {
+                const celah = celahKini();
+                const atas = rnd(20, LANTAI - 20 - celah);
+                const jalur = [];
+                for (let yy = 0; yy < H; yy += rnd(9, 15)) jalur.push({ y: yy, w: pilihRawak(WARNA_BUKU), k: rnd(-3, 3) });
+                tiang.push({ x, atas, celah, lulus: false, jalur });
+            }
+            function bulatRect(cx, cy, r, x, y, w, h) {
+                const nx = Math.max(x, Math.min(cx, x + w)), ny = Math.max(y, Math.min(cy, y + h));
+                return (cx - nx) ** 2 + (cy - ny) ** 2 < r * r;
+            }
+            function lukisBuku(t, y0, y1) {
+                ctx.save(); ctx.beginPath(); ctx.rect(t.x - 2, y0, LEBAR + 4, y1 - y0); ctx.clip();
+                for (let i = 0; i < t.jalur.length; i++) {
+                    const j = t.jalur[i], h = (t.jalur[i + 1] ? t.jalur[i + 1].y : H) - j.y;
+                    ctx.fillStyle = j.w; ctx.fillRect(t.x + j.k, j.y, LEBAR, h - 1);
+                    ctx.fillStyle = 'rgba(255,255,255,.35)'; ctx.fillRect(t.x + j.k + 5, j.y + h / 2 - 1, LEBAR - 10, 2);
+                }
+                ctx.restore();
+                ctx.strokeStyle = 'rgba(15,23,42,.25)'; ctx.lineWidth = 1; ctx.strokeRect(t.x - 2.5, y0 + 0.5, LEBAR + 5, y1 - y0 - 1);
+            }
+            function letup() {
+                mati = true;
+                for (let k = 0; k < 16; k++) { const a = rnd(0, Math.PI * 2), v = rnd(60, 200); serpih.push({ x: PX, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, hayat: 0.6 }); }
+                setTimeout(() => api.tamat(), 450);
+            }
+            K.c.addEventListener('pointerdown', e => {
+                e.preventDefault();
+                if (mati) return;
+                if (!mula) { mula = true; tambahTiang(W + 20); }
+                vy = LONJAK;
+            });
+            const stop = gelung(dt => {
+                masa += dt;
+                if (mula && !mati) {
+                    vy += GRAV * dt; y += vy * dt;
+                    if (y < R) { y = R; vy = 0; }
+                    const v = lajuKini();
+                    for (const t of tiang) {
+                        t.x -= v * dt;
+                        if (!t.lulus && t.x + LEBAR < PX - R) { t.lulus = true; lulus++; api.skor(1); }
+                        if (bulatRect(PX, y, R - 1.5, t.x, -10, LEBAR, t.atas + 10) || bulatRect(PX, y, R - 1.5, t.x, t.atas + t.celah, LEBAR, H)) { letup(); break; }
+                    }
+                    tiang = tiang.filter(t => t.x > -LEBAR - 10);
+                    if (!tiang.length || tiang[tiang.length - 1].x < W - JARAK) tambahTiang(W + 10);
+                    if (y > LANTAI - R) { y = LANTAI - R; letup(); }
+                } else if (!mula) y = H * 0.45 + Math.sin(masa * 3) * 6;
+
+                ctx.clearRect(0, 0, W, H);
+                // awan
+                ctx.fillStyle = 'rgba(255,255,255,.9)';
+                for (let i = 0; i < 3; i++) { const cx = ((i * 157 - masa * 18) % (W + 80) + W + 80) % (W + 80) - 40, cy = 30 + i * 28; ctx.beginPath(); ctx.arc(cx, cy, 12, 0, 7); ctx.arc(cx + 14, cy - 4, 15, 0, 7); ctx.arc(cx + 29, cy, 11, 0, 7); ctx.fill(); }
+                for (const t of tiang) { lukisBuku(t, 0, t.atas); lukisBuku(t, t.atas + t.celah, LANTAI); }
+                ctx.fillStyle = '#CBD5E1'; ctx.fillRect(0, LANTAI, W, H - LANTAI);
+                ctx.fillStyle = '#94A3B8'; for (let x = -((masa * (mula && !mati ? lajuKini() : 40)) % 16); x < W; x += 16) ctx.fillRect(x, LANTAI + 4, 8, 2);
+                if (!mati) {
+                    ctx.save(); ctx.translate(PX, y); ctx.rotate(Math.max(-0.5, Math.min(0.9, vy / 480)));
+                    ctx.beginPath(); ctx.moveTo(13, 0); ctx.lineTo(-11, -9); ctx.lineTo(-6, 0); ctx.lineTo(-11, 8); ctx.closePath();
+                    ctx.fillStyle = '#FFFFFF'; ctx.fill(); ctx.strokeStyle = '#4F46E5'; ctx.lineWidth = 1.5; ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(13, 0); ctx.lineTo(-6, 0); ctx.lineTo(-9, 4); ctx.strokeStyle = '#818CF8'; ctx.stroke();
+                    ctx.restore();
+                }
+                serpih = serpih.filter(s => (s.hayat -= dt) > 0);
+                for (const s of serpih) { s.x += s.vx * dt; s.y += s.vy * dt; s.vy += 300 * dt; ctx.globalAlpha = Math.min(1, s.hayat * 2); ctx.fillStyle = '#E2E8F0'; ctx.fillRect(s.x - 2, s.y - 2, 4, 4); ctx.globalAlpha = 1; }
+                if (!mula) {
+                    ctx.fillStyle = 'rgba(15,23,42,.75)'; segiBulat(ctx, W / 2 - 70, H / 2 + 22, 140, 26, 13); ctx.fill();
+                    ctx.fillStyle = '#FFFFFF'; ctx.font = 'bold 12px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                    ctx.fillText(T('👆 Ketik untuk mula'), W / 2, H / 2 + 35);
+                }
+            });
+            return { henti: stop };
+        }
+    };
+
+    // =====================================================================
+    // GAME 6: LASTIK KERTAS — tarik & lepas bola kertas, runtuhkan timbunan fail, jatuhkan semua 😫 stres
+    // =====================================================================
+    const lastik = {
+        id: 'lastik', nama: 'Lastik Kertas', arahan: 'Tarik ke belakang & lepas. Runtuhkan timbunan fail, jatuhkan semua 😫!',
+        mula(stage, api) {
+            const K = kanvas(stage, 240), { ctx, W, H } = K;
+            const LANTAI = H - 16, SX = Math.max(46, W * 0.13), SY = LANTAI - 58, GRAV = 540, R = 8, TARIK_MAKS = 70, KUASA = 6.6;
+            const WARNA_BLOK = ['#D97706', '#B45309', '#F59E0B', '#92400E'];
+            let tahap = 1, peluru = 3, bola = null, tarik = null, blok = [], musuh = [], serpih = [], tenang = 0, selesai = false;
+            const papar = () => api.info(`${T('Tahap')} ${tahap} · ${'●'.repeat(peluru)}${'○'.repeat(Math.max(0, 3 - peluru))}`);
+
+            function binaTahap() {
+                blok = []; musuh = []; bola = null; tarik = null;
+                const nKol = Math.min(4, 2 + Math.floor((tahap - 1) / 2));
+                const x0 = Math.max(W * 0.48, SX + 120), x1 = W - 22;
+                const bw = 20, bh = 17;
+                const tinggiMaks = Math.min(6, 2 + tahap);
+                const kol = [];
+                for (let c = 0; c < nKol; c++) {
+                    const cx = nKol === 1 ? (x0 + x1) / 2 : x0 + (x1 - x0) * c / (nKol - 1);
+                    const n = 1 + Math.floor(Math.random() * tinggiMaks);
+                    for (let i = 0; i < n; i++) blok.push({ x: cx, y: LANTAI - bh / 2 - i * bh, w: bw, h: bh, vx: 0, vy: 0, a: 0, va: 0, din: false, kol: c, idx: i, warna: pilihRawak(WARNA_BLOK) });
+                    kol.push({ cx, n });
+                }
+                const nMusuh = Math.min(nKol, 1 + Math.ceil(tahap / 2));
+                kocok(kol.map((_, i) => i)).slice(0, nMusuh).forEach(c => {
+                    musuh.push({ x: kol[c].cx, y: LANTAI - kol[c].n * bh - 10, r: 10, vx: 0, vy: 0, din: false, kol: c, hidup: true });
+                });
+                for (let g = 0; g < (tahap >= 4 ? 2 : tahap >= 2 ? 1 : 0) && nKol > 1; g++) {
+                    const c = (Math.floor(Math.random() * (nKol - 1)) + g) % (nKol - 1);
+                    musuh.push({ x: (kol[c].cx + kol[c + 1].cx) / 2, y: LANTAI - 10, r: 10, vx: 0, vy: 0, din: true, kol: -1, hidup: true });
+                }
+                papar();
+            }
+
+            function bulatRect(cx, cy, r, b) {
+                const nx = Math.max(b.x - b.w / 2, Math.min(cx, b.x + b.w / 2)), ny = Math.max(b.y - b.h / 2, Math.min(cy, b.y + b.h / 2));
+                const dx = cx - nx, dy = cy - ny;
+                return dx * dx + dy * dy < r * r ? { dx, dy } : null;
+            }
+            function pecah(m) {
+                if (!m.hidup) return;
+                m.hidup = false; api.skor(100);
+                for (let k = 0; k < 14; k++) { const a = rnd(0, Math.PI * 2), v = rnd(60, 200); serpih.push({ x: m.x, y: m.y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, hayat: 0.6, w: '#A78BFA' }); }
+                serpih.push({ teks: '+100', x: m.x, y: m.y - 8, vx: 0, vy: -45, hayat: 0.9, w: '#7C3AED' });
+            }
+            function ketuk(b, vx, vy, kuasa) {
+                if (b.din) return;
+                b.din = true;
+                b.vx = vx * 0.4 * kuasa + rnd(-15, 15); b.vy = vy * 0.25 * kuasa - rnd(20, 60); b.va = rnd(-5, 5) + vx * 0.01;
+                blok.filter(o => !o.din && o.kol === b.kol && o.idx > b.idx).forEach((o, k) => ketuk(o, vx * (1.05 + k * 0.1), vy * 0.4, kuasa * 0.7));
+                musuh.filter(m => m.hidup && !m.din && m.kol === b.kol).forEach(m => { m.din = true; m.vx = vx * 0.3 * kuasa; m.vy = -rnd(20, 60); });
+            }
+
+            K.c.addEventListener('pointerdown', e => {
+                e.preventDefault();
+                if (selesai || bola || peluru <= 0) return;
+                const p = K.titik(e);
+                tarik = { mx: p.x, my: p.y, dx: 0, dy: 0 };
+                try { K.c.setPointerCapture(e.pointerId); } catch (er) { }
+            });
+            K.c.addEventListener('pointermove', e => {
+                if (!tarik) return;
+                const p = K.titik(e);
+                let dx = p.x - tarik.mx, dy = p.y - tarik.my;
+                const d = Math.hypot(dx, dy);
+                if (d > TARIK_MAKS) { dx *= TARIK_MAKS / d; dy *= TARIK_MAKS / d; }
+                tarik.dx = dx; tarik.dy = dy;
+            });
+            const lepas = () => {
+                if (!tarik) return;
+                const { dx, dy } = tarik; tarik = null;
+                if (Math.hypot(dx, dy) < 10) return;
+                bola = { x: Math.max(R + 2, SX + dx), y: Math.min(LANTAI - R, SY + dy), vx: -dx * KUASA, vy: -dy * KUASA, t: 0 };
+                peluru--; papar();
+            };
+            K.c.addEventListener('pointerup', lepas);
+            K.c.addEventListener('pointercancel', () => { tarik = null; });
+
+            binaTahap();
+            const stop = gelung(dt => {
+                // ---- Fizik ----
+                if (bola) {
+                    bola.t += dt;
+                    bola.vy += GRAV * dt; bola.x += bola.vx * dt; bola.y += bola.vy * dt;
+                    if (bola.y > LANTAI - R) { bola.y = LANTAI - R; bola.vy *= -0.35; bola.vx *= 0.7; }
+                    for (const b of blok) {
+                        if (b.din) continue;
+                        const h = bulatRect(bola.x, bola.y, R, b);
+                        if (h) {
+                            ketuk(b, bola.vx, bola.vy, 1);
+                            if (Math.abs(h.dx) >= Math.abs(h.dy)) bola.vx *= -0.25; else bola.vy *= -0.3;
+                            bola.vx *= 0.8;
+                        }
+                    }
+                    for (const m of musuh) if (m.hidup && (bola.x - m.x) ** 2 + (bola.y - m.y) ** 2 < (R + m.r) ** 2) pecah(m);
+                    const laju = Math.hypot(bola.vx, bola.vy);
+                    if (bola.x > W + 30 || bola.x < -30 || bola.t > 6 || (bola.y >= LANTAI - R - 0.5 && laju < 25)) { bola = null; tenang = 1.3; }
+                }
+                for (const b of blok) {
+                    if (!b.din) continue;
+                    b.vy += GRAV * dt; b.x += b.vx * dt; b.y += b.vy * dt; b.a += b.va * dt;
+                    if (b.y > LANTAI - b.h / 2) { b.y = LANTAI - b.h / 2; b.vy *= -0.25; b.vx *= 0.6; b.va *= 0.6; if (Math.abs(b.vy) < 15) b.vy = 0; }
+                    const laju = Math.hypot(b.vx, b.vy);
+                    if (laju > 95) {
+                        for (const o of blok) if (!o.din && o.kol !== b.kol && Math.abs(o.x - b.x) < (o.w + b.w) / 2 && Math.abs(o.y - b.y) < (o.h + b.h) / 2) ketuk(o, b.vx, b.vy, 0.7);
+                        for (const m of musuh) if (m.hidup && Math.abs(m.x - b.x) < m.r + b.w / 2 && Math.abs(m.y - b.y) < m.r + b.h / 2) pecah(m);
+                    }
+                }
+                for (const m of musuh) {
+                    if (!m.hidup || !m.din) continue;
+                    m.vy += GRAV * dt; m.x += m.vx * dt; m.y += m.vy * dt;
+                    if (m.x < -20 || m.x > W + 20) { pecah(m); continue; }
+                    if (m.y > LANTAI - m.r) {
+                        if (m.vy > 215) { pecah(m); continue; }
+                        m.y = LANTAI - m.r; m.vy = 0; m.vx *= 0.5;
+                    }
+                }
+                // ---- Selepas setiap tembakan: tahap seterusnya / tamat ----
+                if (!bola && tenang > 0) {
+                    tenang -= dt;
+                    if (tenang <= 0 && !selesai) {
+                        if (!musuh.some(m => m.hidup)) {
+                            if (peluru > 0) api.skor(peluru * 50);
+                            tahap++; peluru = 3;
+                            api.kilas(`${T('Tahap')} ${tahap}! 🎯`);
+                            binaTahap();
+                        } else if (peluru <= 0) { selesai = true; api.tamat(); }
+                    }
+                }
+
+                // ---- Lukis ----
+                ctx.clearRect(0, 0, W, H);
+                ctx.fillStyle = '#CBD5E1'; ctx.fillRect(0, LANTAI, W, H - LANTAI);
+                // lastik (belakang)
+                ctx.strokeStyle = '#78350F'; ctx.lineWidth = 5; ctx.lineCap = 'round';
+                ctx.beginPath(); ctx.moveTo(SX, LANTAI); ctx.lineTo(SX, SY + 18); ctx.lineTo(SX - 9, SY); ctx.moveTo(SX, SY + 18); ctx.lineTo(SX + 9, SY); ctx.stroke();
+                const bx = tarik ? Math.max(R + 2, SX + tarik.dx) : SX, by = tarik ? Math.min(LANTAI - R, SY + tarik.dy) : SY;
+                if (!bola && peluru > 0 && !selesai) {
+                    ctx.strokeStyle = '#7C2D12'; ctx.lineWidth = 2.5;
+                    ctx.beginPath(); ctx.moveTo(SX - 9, SY); ctx.lineTo(bx, by); ctx.lineTo(SX + 9, SY); ctx.stroke();
+                    if (tarik && Math.hypot(tarik.dx, tarik.dy) >= 10) {
+                        // pratonton laluan ringkas (sebahagian sahaja — kekal mencabar)
+                        let px = bx, py = by, vx = -tarik.dx * KUASA, vy = -tarik.dy * KUASA;
+                        ctx.fillStyle = 'rgba(79,70,229,.45)';
+                        for (let i = 0; i < 7; i++) { for (let k = 0; k < 4; k++) { vy += GRAV * 0.012; px += vx * 0.012; py += vy * 0.012; } ctx.beginPath(); ctx.arc(px, py, 2.2, 0, 7); ctx.fill(); }
+                    }
+                }
+                for (const b of blok) {
+                    ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(b.a);
+                    ctx.fillStyle = b.warna; ctx.fillRect(-b.w / 2, -b.h / 2, b.w, b.h);
+                    ctx.strokeStyle = 'rgba(69,26,3,.5)'; ctx.lineWidth = 1; ctx.strokeRect(-b.w / 2 + 0.5, -b.h / 2 + 0.5, b.w - 1, b.h - 1);
+                    ctx.fillStyle = 'rgba(255,255,255,.55)'; ctx.fillRect(-b.w / 2 + 4, -2, b.w - 8, 3);
+                    ctx.restore();
+                }
+                ctx.font = `19px ${FON_EMOJI}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                for (const m of musuh) if (m.hidup) ctx.fillText('😫', m.x, m.y + 1);
+                const lukisBola = (x, y) => {
+                    ctx.fillStyle = '#F8FAFC'; ctx.strokeStyle = '#64748B'; ctx.lineWidth = 1.2;
+                    ctx.beginPath(); ctx.arc(x, y, R, 0, 7); ctx.fill(); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(x - 4, y - 3); ctx.lineTo(x + 1, y - 1); ctx.lineTo(x - 1, y + 3); ctx.moveTo(x + 2, y - 5); ctx.lineTo(x + 4, y + 2); ctx.strokeStyle = '#94A3B8'; ctx.stroke();
+                };
+                if (bola) lukisBola(bola.x, bola.y);
+                else if (peluru > 0 && !selesai) lukisBola(bx, by);
+                serpih = serpih.filter(s => (s.hayat -= dt) > 0);
+                for (const s of serpih) {
+                    s.x += s.vx * dt; s.y += s.vy * dt; if (!s.teks) s.vy += 300 * dt;
+                    ctx.globalAlpha = Math.min(1, s.hayat * 2); ctx.fillStyle = s.w;
+                    if (s.teks) { ctx.font = 'bold 13px system-ui, sans-serif'; ctx.fillText(s.teks, s.x, s.y); }
+                    else { ctx.beginPath(); ctx.arc(s.x, s.y, 2.5, 0, 7); ctx.fill(); }
+                    ctx.globalAlpha = 1;
+                }
+                if (!bola && !tarik && peluru === 3 && tahap === 1 && !selesai) {
+                    ctx.fillStyle = 'rgba(15,23,42,.7)'; segiBulat(ctx, SX - 20, 14, 170, 24, 12); ctx.fill();
+                    ctx.fillStyle = '#FFFFFF'; ctx.font = 'bold 11px system-ui, sans-serif'; ctx.textAlign = 'left';
+                    ctx.fillText(T('👆 Seret ke belakang, lepaskan'), SX - 10, 27);
+                }
+            });
+            return { henti: stop };
+        }
+    };
+
+    const GAMES = [belon, kopi, ketuk, padan, kapal, lastik];
 
     // =====================================================================
     // RANGKA: tajuk, kawasan main, skor, tamat, tukar / sembunyi game

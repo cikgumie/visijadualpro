@@ -12421,7 +12421,8 @@ window.VJSolver = (function () {
                             inner = `<div data-jdl="${d}-${p}" data-id="${escapeHtml(id)}" ${bisaAlih ? 'draggable="true"' : ''} class="jdl-cell relative h-[34px] flex flex-col gap-px ${bisaAlih ? 'cursor-grab active:cursor-grabbing' : isBilik ? 'cursor-default' : 'cursor-not-allowed opacity-80'} ${bentrok ? 'ring-2 ring-rose-500 rounded' : ''}" title="${escapeHtml(tip)}">${inner}${kunci ? '<span class="absolute -top-0.5 right-0 text-[8px]">🔒</span>' : ''}</div>`;
                         } else if (blok[`${d}-${p}`]) {
                             const lb = blok[`${d}-${p}`];
-                            inner = `<div class="h-[34px] rounded-sm border flex items-center justify-center text-center text-[8px] font-bold overflow-hidden ${slotLabelClass(lb, cfg)} ${jdlAlat === 'blok' ? 'cursor-pointer hover:ring-2 hover:ring-rose-400' : ''}" title="${escapeHtml(lb)}${jdlAlat === 'blok' ? ' — klik untuk buka' : ''}">${escapeHtml(lb.length > 5 ? lb.slice(0, 4) + '…' : lb)}</div>`;
+                            // Slot diblok dipapar sebagai "X" (nama label penuh dalam tooltip; warna ikut label)
+                            inner = `<div class="h-[34px] rounded-sm border flex items-center justify-center text-center text-[11px] font-extrabold overflow-hidden ${slotLabelClass(lb, cfg)} ${jdlAlat === 'blok' ? 'cursor-pointer hover:ring-2 hover:ring-rose-400' : ''}" title="${escapeHtml(lb)}${jdlAlat === 'blok' ? ' — klik untuk buka' : ''}">X</div>`;
                         } else if (isKelas && p < akhirHari[d]) {
                             inner = `<div class="h-[34px] rounded-sm border border-dashed border-rose-400 bg-rose-50 ${jdlAlat === 'blok' ? 'cursor-cell hover:bg-rose-100' : ''}" title="Slot kosong di depan — sepatutnya diisi"></div>`;
                         } else {
@@ -12583,7 +12584,7 @@ window.VJSolver = (function () {
                             }).join('');
                             inner = `<div data-jdl="${d}-${p}" data-id="${escapeHtml(jdlSel)}" ${jdlMode !== 'bilik' ? 'draggable="true"' : ''} class="jdl-cell relative h-[44px] flex flex-col gap-px ${jdlMode !== 'bilik' ? 'cursor-grab active:cursor-grabbing' : ''} ${bentrok ? 'ring-2 ring-rose-500 rounded' : ''}" title="${jdlMode !== 'bilik' ? 'Klik untuk kunci / buka kunci' : ''}">${inner}${kunci ? '<span class="absolute -top-1 -right-1 text-[10px]">🔒</span>' : ''}</div>`;
                         } else if (lb) {
-                            inner = `<div class="h-[44px] rounded-md border flex items-center justify-center text-center text-[10px] font-bold ${slotLabelClass(lb, cfg)}">${escapeHtml(lb)}</div>`;
+                            inner = `<div class="h-[44px] rounded-md border flex items-center justify-center text-center text-[13px] font-extrabold ${slotLabelClass(lb, cfg)}" title="${escapeHtml(lb)}">X</div>`;
                         } else {
                             inner = `<div class="h-[44px]"></div>`;
                         }

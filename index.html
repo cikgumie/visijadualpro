@@ -534,6 +534,8 @@ window.VJI18N = (function () {
         "No. Susunan (Kelas) menentukan urutan kelas di semua paparan. Kosongkan jika tidak perlu (kelas tanpa nombor diletak di hujung).": "Order No. (Class) sets the order of classes in every view. Leave blank if not needed (classes without a number go last).",
         "Optimum dihentikan automatik: kos sifar (sempurna).": "Optimum stopped automatically: zero cost (perfect).",
         "Optimum dihentikan automatik: tiada peningkatan selepas 2 kitaran (30 s setiap satu).": "Optimum stopped automatically: no improvement after 2 cycles (30 s each).",
+        "Optimum dihentikan automatik: tiada peningkatan selama 2 minit.": "Optimum stopped automatically: no improvement for 2 minutes.",
+        "dihentikan automatik (tiada peningkatan selama 2 minit)": "stopped automatically (no improvement for 2 minutes)",
         "(lembut)": "(soft)",
         "— klik petak / nama hari / nombor waktu": "— click a cell / day name / period number",
         "+ Slot Elektif": "+ Elective Slot",
@@ -696,6 +698,7 @@ window.VJI18N = (function () {
         "Mencuba menyusun…": "Trying to build…",
         "Mengesahkan kata laluan...": "Verifying password...",
         "Menghentikan… (siapkan pusingan semasa)": "Stopping… (finishing the current round)",
+        "Menghentikan…": "Stopping…",
         "Menyelaraskan data terkini...": "Syncing the latest data...",
         "Menyimpan kata laluan baharu...": "Saving the new password...",
         "Menyimpan ke Google Drive...": "Saving to Google Drive...",
@@ -12053,10 +12056,12 @@ window.VJSolver = (function () {
         return new Promise(resolve => {
             // Pengguna batal: hentikan tanpa hasil (jadual sedia ada tidak diubah)
             const dibatal = () => { if (opt.isyarat && opt.isyarat.batal) { resolve({ batal: true }); return true; } return false; };
+            // "Segera": siapkan sekarang & pulangkan jadual terbaik setakat ini (Henti & Guna Terbaik / henti automatik)
+            const segera = () => !!(opt.isyarat && opt.isyarat.segera);
             function langkah() {
                 if (dibatal()) return;
                 const t0 = jam();
-                while (pending.length && jam() - t0 < 40) {
+                while (pending.length && jam() - t0 < 40 && !segera()) {
                     iter++; kerja++;
                     const u = pending.pop();
                     if (pos[u] >= 0 || sebabMati[u]) continue;
@@ -12094,9 +12099,9 @@ window.VJSolver = (function () {
                 const ms = jam() - mula;
                 if (onProgress) onProgress({ iter, diletak, terbaik: Math.max(terbaik, diletak), jumlah: U, ms });
                 hentiBuntu = pending.length > 0 && jam() - tKemajuan > hadBuntuMs;
-                if (pending.length && ms < hadMs && iter < maxIter && !hentiBuntu) { seterusnya(langkah); return; }
+                if (pending.length && ms < hadMs && iter < maxIter && !hentiBuntu && !segera()) { seterusnya(langkah); return; }
                 // Pembaikan terarah: jika masih ada sesi tidak muat, cuba rantaian pengusiran sebelum menyerah
-                if (diletak < U && !opt.sambung && !opt.tanpaPembaikan) {
+                if (diletak < U && !opt.sambung && !opt.tanpaPembaikan && !segera()) {
                     if (posTerbaik && diletak < terbaik) { tetapkanKedudukan(posTerbaik); diletak = units.filter((_, u) => pos[u] >= 0).length; }
                     baikiTakMuat(Math.min(15000, Math.max(3000, hadMs * 0.25)));
                     if (diletak > terbaik) { terbaik = diletak; posTerbaik = salinPos(); }
@@ -12159,7 +12164,7 @@ window.VJSolver = (function () {
                 for (;;) {
                     // Semak jam sekali bagi setiap 256 langkah (jam() agak mahal jika dipanggil setiap langkah)
                     const kini = jam();
-                    if (kini - t0 >= 40) break;
+                    if (kini - t0 >= 40 || segera()) break;
                     const f = Math.min(1, (kini - O.mula) / hadOptimMs);
                     if (f >= 1) break;
                     const T = O.T0 * Math.pow(O.T1 / O.T0, suhuA + (suhuB - suhuA) * f);
@@ -12180,7 +12185,7 @@ window.VJSolver = (function () {
                 }
                 const msOpt = jam() - O.mula;
                 if (onProgress) onProgress({ fasa: 'optimum', iter, diletak, terbaik: diletak, jumlah: U, ms: O.msFasa1 + msOpt, kosAwal: O.awal, kos: O.terbaik });
-                if (msOpt < hadOptimMs) { seterusnya(langkahOptimum); return; }
+                if (msOpt < hadOptimMs && !segera()) { seterusnya(langkahOptimum); return; }
                 const r = hasil(O.posTerbaik, O.msFasa1 + msOpt);
                 // Ukur kualiti akhir pada kedudukan terbaik
                 tetapkanKedudukan(O.posTerbaik);
@@ -12745,7 +12750,9 @@ window.VJSolver = (function () {
             const src = document.getElementById('vjSolverSrc').textContent;
             const kod = 'self.window = self;\n' + src + `
                 self.onmessage = async e => {
+                    if (e.data && e.data.jenis === 'segera') { if (self.__isyarat) self.__isyarat.segera = true; return; }
                     const { inp, opt } = e.data;
+                    opt.isyarat = self.__isyarat = { segera: false };
                     try {
                         let t = 0;
                         const res = await self.VJSolver.susun(inp, opt, st => {
@@ -12772,6 +12779,14 @@ window.VJSolver = (function () {
             return (a.stat.kosongDepan || 0) < (b.stat.kosongDepan || 0);
         }
 
+        // Mod tanpa had: bila berhenti sendiri
+        //   - Fasa 1 dicuba semula (susunan rawak baharu) hanya selagi ada kemajuan: henti selepas JDL_CUBA_TANPA_BAIK
+        //     percubaan berturut-turut tanpa tambahan sesi diletak, atau JDL_CUBA_MAKS percubaan kesemuanya (berasaskan
+        //     bilangan, jadi kod seed kekal boleh diulang). Jadual mungkin memang mustahil dimuatkan sepenuhnya.
+        //   - Jam penyusun ialah "jam maya" (unit kerja), jadi pada data besar / komputer perlahan satu saat maya boleh
+        //     mengambil beberapa saat sebenar. Penghenti jam sebenar: tiada peningkatan kos selama JDL_HENTI_MASA_MS.
+        const JDL_CUBA_TANPA_BAIK = 3, JDL_CUBA_MAKS = 10, JDL_HENTI_MASA_MS = 120000;
+
         // Penyusun selari koperatif:
         //   Pusingan 1: setiap teras meletak sesi & mengoptimum secara bebas.
         //   Pusingan seterusnya: semua teras menyambung daripada jadual TERBAIK pusingan sebelumnya
@@ -12795,7 +12810,22 @@ window.VJSolver = (function () {
             let tamat = false, tolak = null;
             const henti = () => { tamat = true; clearInterval(pemantau); workers.forEach(w => { try { w.terminate(); } catch (e) {} }); };
             const batalJanji = new Promise(res => { tolak = res; });
-            const pemantau = setInterval(() => { if (isyarat && isyarat.batal && !tamat) { henti(); tolak({ batal: true }); } }, 100);
+            // Kemajuan sebenar (jam dinding): sesi diletak bertambah, atau kos turun sekurang-kurangnya 0.5%
+            const kemajuan = { letak: -1, kos: Infinity, ms: performance.now() };
+            const catatKemajuan = (letak, kos) => {
+                let baik = false;
+                if (letak > kemajuan.letak) { kemajuan.letak = letak; kemajuan.kos = Infinity; baik = true; }
+                if (kos != null && isFinite(kos) && letak >= kemajuan.letak && (kemajuan.kos === Infinity || kemajuan.kos - kos >= Math.max(1, kemajuan.kos * 0.005))) { kemajuan.kos = kos; baik = true; }
+                if (baik) kemajuan.ms = performance.now();
+            };
+            let segeraDihantar = false, hentiMasa = false;
+            const segeraSemua = () => { if (segeraDihantar) return; segeraDihantar = true; workers.forEach(w => { try { w.postMessage({ jenis: 'segera' }); } catch (e) {} }); };
+            const pemantau = setInterval(() => {
+                if (tamat) return;
+                if (isyarat && isyarat.batal) { henti(); tolak({ batal: true }); return; }
+                if (isyarat && isyarat.henti) segeraSemua();   // Henti & Guna Terbaik: tidak perlu tunggu pusingan semasa tamat
+                if (tanpaHad && performance.now() - kemajuan.ms > JDL_HENTI_MASA_MS) { hentiMasa = true; segeraSemua(); }
+            }, 100);
             const t0 = performance.now();
             let kosAwal0 = null, percubaan = 1;
 
@@ -12823,7 +12853,7 @@ window.VJSolver = (function () {
                     w.onmessage = e => {
                         if (tamat) return;
                         const m = e.data;
-                        if (m.jenis === 'kemajuan') { status[i] = m.st; lapor(); return; }
+                        if (m.jenis === 'kemajuan') { status[i] = m.st; catatKemajuan(m.st.terbaik, m.st.fasa === 'optimum' ? m.st.kos : null); lapor(); return; }
                         if (m.jenis === 'hasil') hasil[i] = m.res; else console.error('Worker penyusun:', m.mesej);
                         status[i] = null;
                         if (++selesai === workers.length) resolve(hasil.filter(Boolean));
@@ -12837,6 +12867,7 @@ window.VJSolver = (function () {
             const utama = (async () => {
                 let best = null, awal0 = null, iter = 0, langkah = 0, diterima = 0, hentiBuntu = false;
                 let kitaran = 0, hentiAuto = '', kosTerbaikKitaran = null, kitaranTiadaBaik = 0;
+                let cubaTanpaBaik = 0, hentiCuba = '';
                 do {
                 for (let r = 0; r < R && !tamat; r++) {
                     const pertama = kitaran === 0 && r === 0;
@@ -12855,8 +12886,15 @@ window.VJSolver = (function () {
                     hasil.forEach(x => { if (x.stat.optimum) { langkah += x.stat.optimum.langkah; diterima += x.stat.optimum.diterima; } });
                     // Tanpa had (Strict): jika masih ada sesi tidak muat, mulakan semula dengan susunan rawak baharu sehingga semua diletak
                     if (pertama && tanpaHad && !(isyarat && isyarat.henti) && bestR.stat.diletak < bestR.stat.unit) {
+                        const naik = !best || bestR.stat.diletak > best.stat.diletak;
                         if (jdlLebihBaik(bestR, best)) best = bestR;
-                        percubaan++; r--; continue;
+                        cubaTanpaBaik = naik ? 0 : cubaTanpaBaik + 1;
+                        const habisKiraan = cubaTanpaBaik >= JDL_CUBA_TANPA_BAIK || percubaan >= JDL_CUBA_MAKS;
+                        if (!habisKiraan && !hentiMasa) { percubaan++; r--; continue; }
+                        // Berhenti mencuba semula: guna jadual terbaik setakat ini
+                        hentiCuba = hentiMasa ? 'masa' : 'kiraan'; bestR = best;
+                        awal0 = best.stat.optimum ? { awal: best.stat.optimum.awal, kosAwal: best.stat.optimum.kosAwal } : null;
+                        iter = best.stat.iter; hentiBuntu = !!best.stat.hentiBuntu;
                     }
                     // Jangan sekali-kali mundur: kekalkan jadual terbaik setakat ini
                     if (jdlLebihBaik(bestR, best)) {
@@ -12865,8 +12903,10 @@ window.VJSolver = (function () {
                         best = bestR;
                     }
                     if (tanpaHad && isyarat && isyarat.henti) break;
+                    if (hentiMasa) break;
                 }
                 kitaran++;
+                if (hentiMasa) { hentiAuto = 'masa'; break; }   // tiada kemajuan selama JDL_HENTI_MASA_MS (jam sebenar)
                 // Henti automatik: kos sudah sifar (sempurna) atau tiada peningkatan selepas 2 kitaran berturut-turut
                 if (tanpaHad && best && best.stat.optimum) {
                     const kosKini = best.stat.optimum.kosAkhir;
@@ -12880,6 +12920,8 @@ window.VJSolver = (function () {
                 } while (tanpaHad && !tamat && !(isyarat && isyarat.henti));
                 henti();
                 best.stat.hentiAuto = hentiAuto;
+                best.stat.hentiCuba = hentiCuba;
+                best.stat.percubaan = percubaan;
                 best.stat.teras = workers.length;
                 best.stat.benihAsas = benihAsas;
                 best.stat.pusingan = R;
@@ -12962,7 +13004,7 @@ window.VJSolver = (function () {
                 });
                 if (res.batal) { showToast('Penyusunan dibatalkan. Jadual sedia ada tidak diubah.', 'info'); return; }
                 res.stat.kod = jdlKodBina({ tahap: tahapGuna, teras: res.stat.teras || 1, huruf: jdlOptBina().serentakHuruf, benih: benihAsas, data: capData });
-                res.stat.kodTepat = !isyarat.henti;
+                res.stat.kodTepat = !isyarat.henti && res.stat.hentiAuto !== 'masa' && res.stat.hentiCuba !== 'masa';
                 console.info('VisiJadual kod seed:', res.stat.kod, '· diletak', res.stat.diletak + '/' + res.stat.unit);
                 if (separa) {
                     // Kekalkan sesi kelas lain tepat seperti asal; ambil hasil baharu bagi agihan kelas dipilih sahaja
@@ -12985,7 +13027,8 @@ window.VJSolver = (function () {
                 const s = res.stat, o = s.optimum;
                 const teksDepan = s.kosongDepan ? ` ⚠ ${s.kosongDepan} slot kelas kosong sebelum waktu terakhir (tidak dapat dielak — cuba tambah masa optimum).` : '';
                 const teksAuto = s.hentiAuto === 'sempurna' ? ' Optimum dihentikan automatik: kos sifar (sempurna).'
-                    : s.hentiAuto === 'stabil' ? ' Optimum dihentikan automatik: tiada peningkatan selepas 2 kitaran (30 s setiap satu).' : '';
+                    : s.hentiAuto === 'stabil' ? ' Optimum dihentikan automatik: tiada peningkatan selepas 2 kitaran (30 s setiap satu).'
+                    : s.hentiAuto === 'masa' ? ' Optimum dihentikan automatik: tiada peningkatan selama 2 minit.' : '';
                 const teksTeras = s.teras > 1 ? ` ${s.teras} teras bekerjasama.` : '';
                 const teksOpt = o ? `${teksTeras} Optimum: slot kosong di depan kelas ${o.awal.kosongDepanKelas}→${o.kosongDepanKelas}, subjek berulang ${o.awal.subjekBerulang}→${o.subjekBerulang}.` : '';
                 showToast((s.diletak === s.unit ? `Jadual lengkap: semua ${s.unit} sesi diletak (${(s.ms / 1000).toFixed(1)} s).${teksOpt}`
@@ -13029,7 +13072,7 @@ window.VJSolver = (function () {
             if (!jdlIsyaratAktif) return;
             jdlIsyaratAktif.henti = true;
             const bh = document.getElementById('jdlOverlayHenti');
-            bh.disabled = true; bh.innerText = 'Menghentikan… (siapkan pusingan semasa)';
+            bh.disabled = true; bh.innerText = 'Menghentikan…';
         }
         function jdlBatalSusun() {
             if (!jdlIsyaratAktif) return;
@@ -13343,6 +13386,7 @@ window.VJSolver = (function () {
             if (o && !R.semasa) {
                 const sebab = stat.hentiAuto === 'sempurna' ? 'dihentikan automatik (kos sifar)'
                     : stat.hentiAuto === 'stabil' ? 'dihentikan automatik (tiada peningkatan)'
+                    : stat.hentiAuto === 'masa' ? 'dihentikan automatik (tiada peningkatan selama 2 minit)'
                     : R.henti ? 'dihentikan oleh anda' : 'tamat had masa';
                 tambah('info', `Optimum: kos ${o.kosAwal} → ${o.kosAkhir}`, `${sebab}. ${o.kosAkhir <= 0 ? 'Kos sifar bermakna semua lompong dan pengulangan sudah dihapuskan.' : 'Kos tinggal bermakna masih ada lompong/pengulangan yang tidak dapat dielak atau belum dijumpai penyelesaian lebih baik.'}`,
                     o.kosAkhir > 0 && R.henti ? 'Jika belum puas hati, jalankan semula Optimum tanpa had dan biar ia berhenti sendiri.' : '');

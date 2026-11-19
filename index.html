@@ -228,6 +228,10 @@ window.VJI18N = (function () {
         "Kosongkan": "Clear",
         "Kumpulan sama serentak": "Same group simultaneous",
         "Kod seed": "Seed code",
+        "Kunci / buka kunci sesi": "Lock / unlock session",
+        "Blok slot": "Block slot",
+        "Mod Edit aktif — klik untuk kunci semula": "Edit mode on — click to lock again",
+        "Paparan sahaja — klik untuk aktifkan Mod Edit": "View only — click to turn on Edit mode",
         "Jadual ikut kelas": "Timetable by class",
         "Jadual ikut guru": "Timetable by teacher",
         "Penggunaan bilik khas": "Special room usage",
@@ -988,6 +992,7 @@ window.VJI18N = (function () {
 
     // ---------- patterns (dynamic strings) ----------
     var P = [
+        [/^Buka blok \((.*)\)$/, function (m) { return 'Unblock (' + tr(m[1]) + ')'; }],
         [/^Kod seed disalin: (.*)$/, function (m) { return 'Seed code copied: ' + m[1]; }],
         [/^Data \/ kunci \/ pilihan kelas sekarang berbeza daripada semasa kod (\S+) dijana \(cap (\w+) ≠ (\w+)\)\. Hasil mungkin tidak sama\.\n\nTeruskan juga\?$/, function (m) { return 'Current data / locks / class selection differ from when code ' + m[1] + ' was generated (fingerprint ' + m[2] + ' ≠ ' + m[3] + '). The result may differ.\n\nContinue anyway?'; }],
         [/^(\d+) Kelas Dipilih$/i, function (m) { return pl(m[1], 'class', 'classes') + ' selected'; }],
@@ -4191,6 +4196,16 @@ window.VJSampleData = function () {
         }
 
         .tb-btn:hover:not(:disabled) { background-color: #F1F5F9; }
+        .jb-btn { height: 2rem; min-width: 2rem; padding: 0 0.6rem; display: inline-flex; align-items: center; justify-content: center; gap: 0.35rem;
+            border-radius: 0.5rem; border: 1px solid #E2E8F0; background: #fff; color: #334155; font-size: 0.75rem; font-weight: 700; white-space: nowrap; flex-shrink: 0; transition: background-color .15s ease; }
+        .jb-btn:hover { background: #F1F5F9; }
+        .jb-btn.jb-utama { background: #4F46E5; border-color: #4F46E5; color: #fff; }
+        .jb-btn.jb-utama:hover { background: #4338CA; }
+        .jb-btn.jb-bahaya { background: #FFF1F2; border-color: #FECDD3; color: #BE123C; }
+        .jb-btn.jb-bahaya:hover { background: #FFE4E6; }
+        .jb-btn.jb-bantu { border-color: transparent; background: transparent; color: #94A3B8; padding: 0; }
+        body.jdl-fokus #barAlat { position: fixed; top: 0; left: 0; right: 0; z-index: 55; }
+        body.jdl-fokus #view-jadual:not(.hidden) { top: var(--bar-alat-h, 46px) !important; }
         .tb-sep { width: 1px; height: 1.4rem; background: #E2E8F0; margin: 0 0.2rem; flex-shrink: 0; }
 
         @media (max-width: 767px) {
@@ -4961,9 +4976,9 @@ window.VJSampleData = function () {
         </div>
 
         <div class="flex items-center gap-2 sm:gap-3">
-            <span id="fileStatusChip" class="hidden md:flex items-center gap-1.5 text-[11px] font-medium text-white/80 bg-white/10 px-2.5 py-1 rounded-full border border-white/15"></span>
+            <span id="fileStatusChip" class="hidden items-center gap-1.5 text-[11px] font-medium text-white/80 bg-white/10 px-2.5 py-1 rounded-full border border-white/15"></span>
             <!-- Mode Status & Edit Mode Button -->
-            <div id="authModeContainer" class="flex items-center gap-2 pl-2 border-l border-white/20 text-white">
+            <div id="authModeContainer" class="flex items-center text-white">
                 <!-- Dynamically populated by renderAuthModeUI() -->
             </div>
         </div>
@@ -4972,7 +4987,7 @@ window.VJSampleData = function () {
     <!-- ============================================================== -->
     <!-- BAR ALAT: UNDO / REDO · FAIL · DRIVE · CARIAN                   -->
     <!-- ============================================================== -->
-    <div class="bg-white border-b border-slate-200 px-3 sm:px-5 py-1.5 shrink-0 flex items-center gap-1.5 no-print overflow-x-auto">
+    <div id="barAlat" class="bg-white border-b border-slate-200 px-3 sm:px-5 py-1.5 shrink-0 flex items-center gap-1.5 no-print overflow-x-auto">
         <button id="btnGlobalUndo" onclick="popAndExecuteUndo()" disabled class="tb-btn opacity-40 disabled:cursor-not-allowed" title="Batal Tindakan Terakhir (Ctrl+Z)">
             <i data-lucide="undo-2" class="w-4 h-4"></i><span class="hidden md:inline">Undo</span>
             <span id="undoCountBadge" class="hidden text-[10px] bg-amber-400 text-slate-900 px-1.5 py-0.5 rounded-full font-bold">0</span>
@@ -4998,13 +5013,19 @@ window.VJSampleData = function () {
             <i data-lucide="cloud" class="w-4 h-4"></i><span class="hidden md:inline">Drive</span>
         </button>
         <span class="tb-sep"></span>
-        <!-- Carian -->
-        <div class="relative flex-1 min-w-[150px] max-w-md">
-            <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-2 pointer-events-none"></i>
-            <input type="text" id="globalSearchInput" oninput="handleGlobalSearch(event)" placeholder="Cari guru / subjek / kelas..." class="w-full pl-9 pr-7 py-1.5 rounded-lg bg-slate-50 text-slate-800 placeholder-slate-400 text-xs outline-none border border-slate-200 focus:bg-white focus:border-brand-500 transition">
-            <button id="clearSearchBtn" onclick="clearGlobalSearch()" class="absolute right-2 top-1.5 text-slate-400 hover:text-slate-700 hidden">
-                <i data-lucide="x" class="w-3.5 h-3.5"></i>
-            </button>
+        <!-- Carian (disembunyikan) -->
+        <div class="hidden">
+            <input type="text" id="globalSearchInput" oninput="handleGlobalSearch(event)">
+            <button id="clearSearchBtn" onclick="clearGlobalSearch()" class="hidden"></button>
+        </div>
+        <!-- Butang Susun Jadual: dipapar di bar atas apabila halaman jadual dibuka -->
+        <div id="tbJadual" class="hidden ml-auto items-center gap-1.5">
+            <button onclick="switchTab('hubungan')" class="jb-btn relative" title="Hubungan antara sesi" aria-label="Hubungan"><i data-lucide="link-2" class="w-4 h-4"></i><span id="hubCount" class="absolute -top-1 -right-1 text-[9px] min-w-[14px] text-center px-1 rounded-full bg-brand-600 text-white empty:hidden"></span></button>
+            <button onclick="jdlRumusanBuka(false)" class="jb-btn" title="Rumusan kualiti jadual: sesi tidak muat, hubungan, lompong, beban guru" aria-label="Rumusan"><i data-lucide="binoculars" class="w-4 h-4"></i></button>
+            <button onclick="jdlKosongkan()" class="jb-btn jb-bahaya" title="Kosongkan jadual (kelas / guru dipilih sahaja jika ada)" aria-label="Kosongkan"><i data-lucide="eraser" class="w-4 h-4"></i></button>
+            <button id="jdlBtnSusun" onclick="jdlUjianBuka()" class="jb-btn jb-utama" title="Susun jadual / Mod Ujian"><i data-lucide="wand-sparkles" class="w-4 h-4"></i><span id="jdlBtnSusunTeks">Susun</span></button>
+            <button id="jdlBtnFokus" onclick="jdlFokus()" class="jb-btn jb-utama" title="Paparkan jadual memenuhi skrin (tekan F atau Esc untuk keluar)"><i data-lucide="maximize" class="w-4 h-4"></i><span id="jdlBtnFokusTeks">Fokus</span></button>
+            <span class="jb-btn jb-bantu cursor-help" title="Klik nama untuk lihat jadual penuh.&#10;Seret sesi ke petak lain untuk alih (lepas atas sesi sama panjang untuk tukar tempat).&#10;Seret sesi ke kotak di bawah untuk keluarkan; seret dari kotak bawah ke jadual untuk letak.&#10;Klik kanan petak: kunci / buka kunci sesi, blok slot atau buka blok.&#10;Tandakan kotak kelas atau guru untuk susun kelas / guru itu sahaja (Shift + klik untuk pilih julat)."><i data-lucide="circle-help" class="w-4 h-4"></i></span>
         </div>
     </div>
 
@@ -5080,6 +5101,12 @@ window.VJSampleData = function () {
                     <button onclick="switchTab('arkib')" id="nav-arkib" class="nav-tab nav-sub" title="Arkib Data">
                         <i data-lucide="archive" class="w-4 h-4 shrink-0"></i><span class="nav-label">Arkib Data</span>
                     </button>
+                    <button onclick="openTetapanModal()" class="nav-tab nav-sub" title="Tukar Kata Laluan">
+                        <i data-lucide="key-round" class="w-4 h-4 shrink-0"></i><span class="nav-label">Tukar Kata Laluan</span>
+                    </button>
+                    <div class="nav-tab nav-sub cursor-default" title="Language" data-no-i18n>
+                        <i data-lucide="languages" class="w-4 h-4 shrink-0"></i><span class="nav-label flex-1 flex items-center gap-2">Language<select data-vj-lang aria-label="Language" class="ml-auto text-xs border border-slate-200 rounded-lg px-1.5 py-0.5 bg-white"><option value="en">English</option><option value="ms">Bahasa Melayu</option></select></span>
+                    </div>
                 </div>
             </nav>
             <div class="p-2 border-t border-slate-200 space-y-0.5">
@@ -5688,7 +5715,7 @@ window.VJSampleData = function () {
             <div id="jdlRumusanPanel" class="hidden fixed inset-0 z-[60] bg-slate-900/50 items-center justify-center p-4 no-print" role="dialog" aria-modal="true" onclick="if (event.target === this) jdlRumusanTutup()">
               <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[92vh] overflow-auto">
                 <div class="flex items-center justify-between gap-2 px-5 py-3.5 border-b border-slate-200 sticky top-0 bg-white z-10">
-                    <h4 class="font-heading font-bold text-sm text-slate-800 flex items-center gap-2"><i data-lucide="clipboard-check" class="w-4 h-4 text-brand-600"></i> Rumusan Jadual</h4>
+                    <h4 class="font-heading font-bold text-sm text-slate-800 flex items-center gap-2"><i data-lucide="binoculars" class="w-4 h-4 text-brand-600"></i> Rumusan Jadual</h4>
                     <button onclick="jdlRumusanTutup()" class="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500" title="Tutup"><i data-lucide="x" class="w-4 h-4"></i></button>
                 </div>
                 <div id="jdlRumusanIsi" class="p-5 space-y-3 bg-slate-50/50"></div>
@@ -5748,7 +5775,7 @@ window.VJSampleData = function () {
                                 <button onclick="jdlSetMode('bilik')" id="jdlSemuaBilik" class="px-2.5 py-1 rounded-md transition" title="Lihat penggunaan bilik khas">Bilik</button>
                             </div>
                             <h4 id="jdlSemuaTitle" class="hidden"></h4>
-                            <div class="flex p-0.5 bg-slate-200/70 rounded-lg text-[11px] font-bold">
+                            <div class="hidden flex p-0.5 bg-slate-200/70 rounded-lg text-[11px] font-bold">
                                 <button onclick="jdlSetAlat('alih')" id="jdlAlatAlih" class="px-2.5 py-1 rounded-md transition flex items-center gap-1" title="Seret sesi untuk alih; klik sesi untuk kunci / buka kunci"><i data-lucide="move" class="w-3 h-3"></i> Alih / Kunci</button>
                                 <button onclick="jdlSetAlat('blok')" id="jdlAlatBlok" class="px-2.5 py-1 rounded-md transition flex items-center gap-1" title="Klik / seret pada petak kosong untuk blok slot"><i data-lucide="ban" class="w-3 h-3"></i> Blok Slot</button>
                             </div>
@@ -5759,14 +5786,6 @@ window.VJSampleData = function () {
                                 <button id="jdlPilihBatal" onclick="jdlPilihKosong()" class="px-1.5 py-0.5 rounded-md bg-white border border-brand-200 font-bold hover:bg-brand-100" title="Batal pilihan">✕</button>
                             </div>
                             <p id="jdlSemuaStats" class="ml-auto text-[11px] text-slate-500"></p>
-                            <div class="flex items-center gap-1">
-                                <button onclick="switchTab('hubungan')" class="relative p-1.5 border border-slate-200 bg-white hover:bg-slate-100 rounded-lg text-slate-700" title="Hubungan antara sesi" aria-label="Hubungan"><i data-lucide="link-2" class="w-4 h-4"></i><span id="hubCount" class="absolute -top-1 -right-1 text-[9px] min-w-[14px] text-center px-1 rounded-full bg-brand-600 text-white empty:hidden"></span></button>
-                                <button onclick="jdlRumusanBuka(false)" class="p-1.5 border border-slate-200 bg-white hover:bg-slate-100 rounded-lg text-slate-700" title="Rumusan kualiti jadual: sesi tidak muat, hubungan, lompong, beban guru" aria-label="Rumusan"><i data-lucide="clipboard-check" class="w-4 h-4"></i></button>
-                                <button onclick="jdlKosongkan()" class="p-1.5 border border-rose-200 bg-rose-50 hover:bg-rose-100 rounded-lg text-rose-700" title="Kosongkan jadual (kelas / guru dipilih sahaja jika ada)" aria-label="Kosongkan"><i data-lucide="eraser" class="w-4 h-4"></i></button>
-                                <button id="jdlBtnSusun" onclick="jdlUjianBuka()" class="px-2.5 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-[11px] font-bold shadow flex items-center gap-1.5" title="Susun jadual / Mod Ujian"><i data-lucide="wand-sparkles" class="w-4 h-4"></i> <span id="jdlBtnSusunTeks">Susun</span></button>
-                            </div>
-                            <button id="jdlBtnFokus" onclick="jdlFokus()" class="px-2.5 py-1 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-[11px] font-bold flex items-center gap-1" title="Paparkan jadual memenuhi skrin (tekan F atau Esc untuk keluar)"><i data-lucide="maximize" class="w-3 h-3"></i> <span id="jdlBtnFokusTeks">Fokus</span></button>
-                            <span class="text-slate-400 cursor-help" title="Klik nama untuk lihat jadual penuh.&#10;Seret sesi ke petak lain untuk alih (lepas atas sesi sama panjang untuk tukar tempat).&#10;Seret sesi ke kotak di bawah untuk keluarkan; seret dari kotak bawah ke jadual untuk letak.&#10;Klik petak sesi untuk kunci / buka kunci.&#10;Mod Blok Slot: klik / seret petak kosong untuk blok, klik petak berblok untuk buka.&#10;Tandakan kotak kelas atau guru untuk susun kelas / guru itu sahaja (Shift + klik untuk pilih julat)."><i data-lucide="circle-help" class="w-4 h-4"></i></span>
                         </div>
                         <div id="jdlGridWrap" class="overflow-auto max-h-[calc(100vh-330px)] min-h-[220px] border border-slate-200">
                             <table id="jdlSemuaGrid" class="text-[10px] border-separate border-spacing-0"></table>
@@ -6249,43 +6268,13 @@ window.VJSampleData = function () {
         // =========================================================================
         // PENGURUSAN MOD EDIT & AUTENTIKASI PENTADBIR
         // =========================================================================
+        // Header: satu ikon kunci sahaja. Terbuka = Mod Edit aktif (klik untuk kunci semula); berkunci = paparan sahaja (klik untuk buka)
         function renderAuthModeUI() {
             const container = document.getElementById('authModeContainer');
             if (!container) return;
-
-            if (isEditMode) {
-                container.innerHTML = `
-                    <div class="flex items-center gap-1.5 sm:gap-2">
-                        <div class="flex items-center gap-1.5 px-2.5 py-1 bg-emerald-500/25 border border-emerald-400/40 rounded-xl text-emerald-200 text-xs font-bold shadow-sm">
-                            <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                            <span class="hidden sm:inline">Mod Edit Aktif</span>
-                            <span class="sm:hidden">Edit</span>
-                        </div>
-                        <button id="btnTetapanMenu" onclick="toggleTetapanMenu(event)" class="p-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg transition" title="Tetapan">
-                            <i data-lucide="settings" class="w-4 h-4"></i>
-                        </button>
-                        <button onclick="lockEditMode()" class="px-2.5 py-1 bg-rose-500/20 hover:bg-rose-500/30 text-rose-200 border border-rose-400/30 rounded-xl text-xs font-bold transition flex items-center gap-1" title="Kunci semula mod paparan sahaja">
-                            <i data-lucide="lock" class="w-3.5 h-3.5"></i>
-                            <span class="hidden md:inline">Kunci Semula</span>
-                        </button>
-                    </div>
-                `;
-            } else {
-                container.innerHTML = `
-                    <div class="flex items-center gap-2">
-                        <span class="hidden md:inline-block text-[11px] font-medium text-white/70 bg-white/10 px-2.5 py-0.5 rounded-full border border-white/15">
-                            Paparan Sahaja
-                        </span>
-                        <button id="btnTetapanMenu" onclick="toggleTetapanMenu(event)" class="p-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg transition" title="Tetapan">
-                            <i data-lucide="settings" class="w-4 h-4"></i>
-                        </button>
-                        <button onclick="promptUnlockEditMode()" class="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border border-amber-400/40 rounded-xl text-xs font-bold transition shadow-sm" title="Buka Mod Edit untuk mengubah data jadual">
-                            <i data-lucide="lock" class="w-3.5 h-3.5 text-amber-300"></i>
-                            <span>Aktifkan Mod Edit</span>
-                        </button>
-                    </div>
-                `;
-            }
+            container.innerHTML = isEditMode
+                ? `<button onclick="lockEditMode()" class="w-9 h-9 flex items-center justify-center bg-white/10 hover:bg-white/20 text-white rounded-xl transition" title="Mod Edit aktif — klik untuk kunci semula" aria-label="Kunci semula"><i data-lucide="lock-open" class="w-5 h-5"></i></button>`
+                : `<button onclick="promptUnlockEditMode()" class="w-9 h-9 flex items-center justify-center bg-amber-500/25 hover:bg-amber-500/40 text-amber-200 rounded-xl transition" title="Paparan sahaja — klik untuk aktifkan Mod Edit" aria-label="Aktifkan Mod Edit"><i data-lucide="lock" class="w-5 h-5"></i></button>`;
             lucide.createIcons();
         }
 
@@ -8402,6 +8391,8 @@ window.VJSampleData = function () {
             if (target) target.classList.remove('hidden');
             document.querySelector('main')?.classList.toggle('matrix-flush', tabName === 'matrix');
             document.querySelector('main')?.classList.toggle('jdl-flush', tabName === 'jadual');
+            const tbJ = document.getElementById('tbJadual');
+            if (tbJ) { tbJ.classList.toggle('hidden', tabName !== 'jadual'); tbJ.classList.toggle('flex', tabName === 'jadual'); }
 
             document.querySelectorAll('.nav-tab').forEach(btn => btn.classList.remove('active'));
             const activeNav = document.getElementById(tabName === 'jadual' && typeof jdlMode !== 'undefined' ? `nav-jdl-${jdlMode}` : `nav-${tabName}`);
@@ -12307,11 +12298,13 @@ window.VJSolver = (function () {
         function jdlFokus(paksa) {
             const b = document.body;
             const on = typeof paksa === 'boolean' ? paksa : !b.classList.contains('jdl-fokus');
+            const bar = document.getElementById('barAlat');
+            if (bar) document.documentElement.style.setProperty('--bar-alat-h', bar.offsetHeight + 'px');
             b.classList.toggle('jdl-fokus', on);
             const t = document.getElementById('jdlBtnFokusTeks');
             if (t) t.textContent = on ? 'Keluar Fokus' : 'Fokus';
             const ic = document.querySelector('#jdlBtnFokus i, #jdlBtnFokus svg');
-            if (ic) { const n = document.createElement('i'); n.setAttribute('data-lucide', on ? 'minimize' : 'maximize'); n.className = 'w-3 h-3'; ic.replaceWith(n); if (window.lucide) lucide.createIcons(); }
+            if (ic) { const n = document.createElement('i'); n.setAttribute('data-lucide', on ? 'minimize' : 'maximize'); n.className = 'w-4 h-4'; ic.replaceWith(n); if (window.lucide) lucide.createIcons(); }
             setTimeout(jdlLaras, 50);
         }
         window.addEventListener('resize', jdlLaras);
@@ -12543,7 +12536,7 @@ window.VJSolver = (function () {
                     (jdlAlat === a ? (a === 'blok' ? 'bg-rose-600 text-white shadow-sm' : 'bg-white text-slate-800 shadow-sm') : 'text-slate-500 hover:text-slate-800');
             });
             const selLabel = document.getElementById('jdlBlokLabel');
-            selLabel.classList.toggle('hidden', jdlAlat !== 'blok');
+            selLabel.classList.add('hidden');
             if (!cfg.label.some(l => l.nama === jdlBlokLabel)) jdlBlokLabel = cfg.label.length ? cfg.label[0].nama : 'Blok';
             selLabel.innerHTML = (cfg.label.length ? cfg.label : [{ nama: 'Blok' }]).map(l => `<option ${l.nama === jdlBlokLabel ? 'selected' : ''}>${escapeHtml(l.nama)}</option>`).join('');
             const tw = jdlMode === 'guru' ? waktuG : jdlMode === 'bilik' ? waktuB : waktuK, pl = jdlMode === 'guru' ? perluG : jdlMode === 'bilik' ? waktuB : perluK;
@@ -13626,6 +13619,62 @@ window.VJSolver = (function () {
             if (c.adaSesi) showToast('Petak yang ada sesi tidak diblok. Alih atau kosongkan sesi itu dahulu.', 'info');
             renderJadualView();
         });
+
+        // =====================================================================
+        // MENU KLIK KANAN pada grid jadual: kunci / buka kunci sesi, blok slot (ikut label) atau buka blok
+        // =====================================================================
+        function jdlMenuTutup() { const m = document.getElementById('jdlKonteksMenu'); if (m) m.remove(); }
+        function jdlBlokPetak(id, key, label) {
+            if (!isEditMode) { ensureEditMode(() => renderJadualView()); return; }
+            const peta = Object.assign({}, (VJStore.getSlot()[jdlMode] || {})[id] || {});
+            if (label) peta[key] = label; else delete peta[key];
+            try { (jdlMode === 'guru' ? VJStore.setGuruBlok : VJStore.setKelasBlok)(id, peta); } catch (err) { showToast(err.message, 'error'); }
+            renderJadualView();
+        }
+        document.addEventListener('contextmenu', e => {
+            const td = e.target.closest('#view-jadual .jdl-td, #jdlModal .jdl-td');
+            if (!td || jdlMode === 'bilik') return;
+            e.preventDefault();
+            jdlMenuTutup();
+            const id = td.dataset.id, key = td.dataset.sl, [d, p] = key.split('-').map(Number);
+            const cfg = VJStore.getSlot();
+            const blok = ((cfg[jdlMode] || {})[id] || {})[key];
+            const K = jdlKonteks();
+            const adaSesi = K.j.sesi.some(x => {
+                const t = K.trx[x.uuid]; if (!t || x.hari !== d || p < x.waktu || p >= x.waktu + x.panjang) return false;
+                return jdlMode === 'kelas' ? String(t[3]).split(',').map(v => v.trim()).includes(id) : String(t[1]) === id;
+            });
+            const item = (ikon, teks, fn, kelas) => `<button type="button" data-fn="${fn}" class="w-full flex items-center gap-2 px-3 py-1.5 text-xs font-semibold text-left hover:bg-slate-100 ${kelas || 'text-slate-700'}"><i data-lucide="${ikon}" class="w-3.5 h-3.5"></i>${escapeHtml(teks)}</button>`;
+            const fns = {};
+            let html = '';
+            if (adaSesi) {
+                fns.kunci = () => jdlTogolKunci(id, d, p);
+                html += item('lock', 'Kunci / buka kunci sesi', 'kunci');
+            } else if (blok) {
+                fns.buka = () => jdlBlokPetak(id, key, '');
+                html += item('lock-open', `Buka blok (${blok})`, 'buka', 'text-rose-700');
+            } else {
+                html += `<p class="px-3 pt-1 pb-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">Blok slot</p>`;
+                (cfg.label && cfg.label.length ? cfg.label : [{ nama: 'Blok' }]).forEach((l, i) => {
+                    fns['blok' + i] = () => jdlBlokPetak(id, key, l.nama);
+                    html += item('ban', l.nama, 'blok' + i);
+                });
+            }
+            const m = document.createElement('div');
+            m.id = 'jdlKonteksMenu';
+            m.className = 'fixed z-[95] min-w-[190px] bg-white border border-slate-200 rounded-xl shadow-2xl py-1 no-print';
+            m.innerHTML = html;
+            document.body.appendChild(m);
+            const r = m.getBoundingClientRect();
+            m.style.left = Math.min(e.clientX, innerWidth - r.width - 8) + 'px';
+            m.style.top = Math.min(e.clientY, innerHeight - r.height - 8) + 'px';
+            m.addEventListener('click', ev => { const b = ev.target.closest('[data-fn]'); if (!b) return; jdlMenuTutup(); fns[b.dataset.fn](); });
+            if (window.lucide) lucide.createIcons();
+            if (window.VJI18N && VJI18N.apply) VJI18N.apply(m);
+        });
+        document.addEventListener('pointerdown', e => { if (!e.target.closest('#jdlKonteksMenu')) jdlMenuTutup(); });
+        document.addEventListener('keydown', e => { if (e.key === 'Escape') jdlMenuTutup(); });
+        window.addEventListener('scroll', jdlMenuTutup, true);
 
         // ---- Bilik khas ----
         function renderBilikView() {

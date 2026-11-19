@@ -5013,6 +5013,8 @@ window.VJSampleData = function () {
     <div id="tetapanMenu" class="hidden fixed z-[90] w-56 bg-white border border-slate-200 rounded-xl shadow-2xl py-1.5 no-print" onclick="event.stopPropagation()">
         <p class="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">Paparan & Data</p>
         <button onclick="closeTetapanMenu(); VJFile.openDataInduk()" class="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 text-left"><i data-lucide="database" class="w-4 h-4 text-slate-500"></i> Data Induk (Setup)</button>
+        <button onclick="tetapanGo('slot')" class="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 text-left"><i data-lucide="calendar-clock" class="w-4 h-4 text-slate-500"></i> Slot Masa</button>
+        <button onclick="tetapanGo('bilik')" class="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 text-left"><i data-lucide="door-open" class="w-4 h-4 text-slate-500"></i> Bilik Khas</button>
         <button onclick="tetapanGo('guru')" class="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 text-left"><i data-lucide="users" class="w-4 h-4 text-slate-500"></i> Jadual Guru</button>
         <button onclick="tetapanGo('kelas')" class="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 text-left"><i data-lucide="school" class="w-4 h-4 text-slate-500"></i> Rumusan Kelas</button>
         <button onclick="tetapanGo('subjek')" class="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 text-left"><i data-lucide="book-open" class="w-4 h-4 text-slate-500"></i> Analisis Subjek</button>
@@ -5029,12 +5031,6 @@ window.VJSampleData = function () {
                 <button onclick="switchTab('matrix')" id="nav-matrix" class="nav-tab active" title="Matriks Kelas">
                     <i data-lucide="grid" class="w-4 h-4 shrink-0"></i><span class="nav-label">Matriks Kelas</span>
                 </button>
-                <button onclick="switchTab('slot')" id="nav-slot" class="nav-tab" title="Slot Masa">
-                    <i data-lucide="calendar-clock" class="w-4 h-4 shrink-0"></i><span class="nav-label">Slot Masa</span>
-                </button>
-                <button onclick="switchTab('bilik')" id="nav-bilik" class="nav-tab" title="Bilik Khas">
-                    <i data-lucide="door-open" class="w-4 h-4 shrink-0"></i><span class="nav-label">Bilik Khas</span>
-                </button>
                 <button onclick="switchTab('jadual')" id="nav-jadual" class="nav-tab" title="Susun Jadual">
                     <i data-lucide="wand-sparkles" class="w-4 h-4 shrink-0"></i><span class="nav-label">Susun Jadual</span>
                 </button>
@@ -5047,6 +5043,12 @@ window.VJSampleData = function () {
                 <div id="navTetapanSub" class="space-y-0.5">
                     <button onclick="VJFile.openDataInduk()" class="nav-tab nav-sub" title="Setup nama guru, kelas, bilik & subjek">
                         <i data-lucide="database" class="w-4 h-4 shrink-0"></i><span class="nav-label">Data Induk (Setup)</span>
+                    </button>
+                    <button onclick="switchTab('slot')" id="nav-slot" class="nav-tab nav-sub" title="Slot Masa">
+                        <i data-lucide="calendar-clock" class="w-4 h-4 shrink-0"></i><span class="nav-label">Slot Masa</span>
+                    </button>
+                    <button onclick="switchTab('bilik')" id="nav-bilik" class="nav-tab nav-sub" title="Bilik Khas">
+                        <i data-lucide="door-open" class="w-4 h-4 shrink-0"></i><span class="nav-label">Bilik Khas</span>
                     </button>
                     <button onclick="switchTab('hubungan')" id="nav-hubungan" class="nav-tab nav-sub" title="Hubungan Antara Sesi">
                         <i data-lucide="link-2" class="w-4 h-4 shrink-0"></i><span class="nav-label">Hubungan Sesi</span>

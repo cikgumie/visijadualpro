@@ -228,6 +228,9 @@ window.VJI18N = (function () {
         "Kosongkan": "Clear",
         "Kumpulan sama serentak": "Same group simultaneous",
         "Kod seed": "Seed code",
+        "Jadual ikut kelas": "Timetable by class",
+        "Jadual ikut guru": "Timetable by teacher",
+        "Penggunaan bilik khas": "Special room usage",
         "Kod seed:": "Seed code:",
         "(pilihan — kosongkan untuk susunan rawak baharu)": "(optional — leave empty for a new random run)",
         "Kod yang sama + data yang sama = jadual yang sama. Tahap & teras diambil daripada kod.": "Same code + same data = same timetable. Level & cores are taken from the code.",
@@ -5031,7 +5034,16 @@ window.VJSampleData = function () {
                 <button onclick="switchTab('matrix')" id="nav-matrix" class="nav-tab active" title="Matriks Kelas">
                     <i data-lucide="grid" class="w-4 h-4 shrink-0"></i><span class="nav-label">Matriks Kelas</span>
                 </button>
-                <button onclick="switchTab('jadual')" id="nav-jadual" class="nav-tab" title="Susun Jadual">
+                <button onclick="jdlBukaMod('kelas')" id="nav-jdl-kelas" class="nav-tab" title="Jadual ikut kelas">
+                    <i data-lucide="school" class="w-4 h-4 shrink-0"></i><span class="nav-label">Kelas</span>
+                </button>
+                <button onclick="jdlBukaMod('guru')" id="nav-jdl-guru" class="nav-tab" title="Jadual ikut guru">
+                    <i data-lucide="user-round" class="w-4 h-4 shrink-0"></i><span class="nav-label">Guru</span>
+                </button>
+                <button onclick="jdlBukaMod('bilik')" id="nav-jdl-bilik" class="nav-tab" title="Penggunaan bilik khas">
+                    <i data-lucide="door-closed" class="w-4 h-4 shrink-0"></i><span class="nav-label">Bilik</span>
+                </button>
+                <button onclick="jdlSusunDariMenu()" id="nav-susun" class="nav-tab" title="Susun Jadual">
                     <i data-lucide="wand-sparkles" class="w-4 h-4 shrink-0"></i><span class="nav-label">Susun Jadual</span>
                 </button>
                 <button onclick="switchTab('ganti')" id="nav-ganti" class="nav-tab" title="Guru Ganti">
@@ -5730,7 +5742,7 @@ window.VJSampleData = function () {
                     <div id="jdlEmpty" class="hidden text-center text-xs text-slate-400 py-16"></div>
                     <div id="jdlSemuaBox" class="hidden">
                         <div class="flex flex-wrap items-center gap-1.5 mb-1.5">
-                            <div class="flex p-0.5 bg-slate-200/70 rounded-lg text-[11px] font-bold">
+                            <div class="hidden flex p-0.5 bg-slate-200/70 rounded-lg text-[11px] font-bold">
                                 <button onclick="jdlSetMode('kelas')" id="jdlSemuaKelas" class="px-2.5 py-1 rounded-md transition">Kelas</button>
                                 <button onclick="jdlSetMode('guru')" id="jdlSemuaGuru" class="px-2.5 py-1 rounded-md transition">Guru</button>
                                 <button onclick="jdlSetMode('bilik')" id="jdlSemuaBilik" class="px-2.5 py-1 rounded-md transition" title="Lihat penggunaan bilik khas">Bilik</button>
@@ -8392,7 +8404,7 @@ window.VJSampleData = function () {
             document.querySelector('main')?.classList.toggle('jdl-flush', tabName === 'jadual');
 
             document.querySelectorAll('.nav-tab').forEach(btn => btn.classList.remove('active'));
-            const activeNav = document.getElementById(`nav-${tabName}`);
+            const activeNav = document.getElementById(tabName === 'jadual' && typeof jdlMode !== 'undefined' ? `nav-jdl-${jdlMode}` : `nav-${tabName}`);
             if (activeNav) activeNav.classList.add('active');
             syncNavTetapan(!!(activeNav && activeNav.classList.contains('nav-sub')));
 
@@ -12318,7 +12330,18 @@ window.VJSolver = (function () {
         function jdlSetMode(mode) {
             jdlMode = mode;
             jdlSel = null;
+            ['kelas', 'guru', 'bilik'].forEach(m => document.getElementById('nav-jdl-' + m)?.classList.toggle('active', m === mode && !document.getElementById('view-jadual').classList.contains('hidden')));
             renderJadualView();
+        }
+        // Menu sisi: Kelas / Guru / Bilik membuka jadual dalam mod itu; Susun Jadual terus membuka popup Susun
+        function jdlBukaMod(mode) {
+            jdlMode = mode;
+            switchTab('jadual');
+            jdlSetMode(mode);
+        }
+        function jdlSusunDariMenu() {
+            if (document.getElementById('view-jadual').classList.contains('hidden')) switchTab('jadual');
+            jdlUjianBuka();
         }
 
         // Buka pop-up jadual penuh bagi kelas / guru `id`

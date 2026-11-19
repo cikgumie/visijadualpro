@@ -12765,15 +12765,20 @@ window.VJSolver = (function () {
             return (a.stat.kosongDepan || 0) < (b.stat.kosongDepan || 0);
         }
 
-        // Mod tanpa had: bila berhenti sendiri
-        //   - Fasa 1 dicuba semula (susunan rawak baharu) hanya selagi ada kemajuan: henti selepas JDL_CUBA_TANPA_BAIK
-        //     percubaan berturut-turut tanpa tambahan sesi diletak, atau JDL_CUBA_MAKS percubaan kesemuanya (berasaskan
-        //     bilangan, jadi kod seed kekal boleh diulang). Jadual mungkin memang mustahil dimuatkan sepenuhnya.
+        // Mod tanpa had: percubaan semula & bila berhenti sendiri
+        //   - Jika fasa 1 belum meletak semua sesi, percubaan seterusnya MENYAMBUNG daripada jadual terbaik (sesi yang sudah
+        //     diletak dikekalkan; carian tertumpu pada sesi yang tinggal). Ujian pada data sebenar (624 sesi): mula semula
+        //     dari kosong 0/16 lengkap (4–10 minit setiap satu); sambung dari 623/624 → lengkap dalam ~24 s bagi 1 daripada
+        //     6 benih. Setiap percubaan ke-JDL_CUBA_KOSONG_SETIAP bermula dari kosong semula untuk kepelbagaian.
+        //     ("Rosak & bina semula" — buang sebahagian sesi sebelum menyambung — turut diuji: lebih buruk daripada sambung biasa.)
+        //   - Henti mencuba selepas JDL_CUBA_TANPA_BAIK percubaan berturut-turut tanpa tambahan sesi diletak, atau
+        //     JDL_CUBA_MAKS percubaan kesemuanya (berasaskan bilangan, jadi kod seed kekal boleh diulang).
+        //     Jadual mungkin memang mustahil dimuatkan sepenuhnya.
         //   - Jam penyusun ialah "jam maya" (unit kerja), jadi pada data besar / komputer perlahan satu saat maya boleh
         //     mengambil beberapa saat sebenar. Penghenti jam sebenar: tiada peningkatan kos selama JDL_HENTI_MASA_MS.
         //     Penghenti ini hanya aktif SELEPAS fasa 1 (meletak sesi) selesai — setiap percubaan semula bermula dari
         //     kosong, jadi masa mendaki semula tidak boleh dikira sebagai "tiada kemajuan".
-        const JDL_CUBA_TANPA_BAIK = 6, JDL_CUBA_MAKS = 20, JDL_HENTI_MASA_MS = 120000;
+        const JDL_CUBA_TANPA_BAIK = 8, JDL_CUBA_MAKS = 30, JDL_CUBA_KOSONG_SETIAP = 4, JDL_SAMBUNG_SAAT = 30, JDL_HENTI_MASA_MS = 120000;
 
         // Penyusun selari koperatif:
         //   Pusingan 1: setiap teras meletak sesi & mengoptimum secara bebas.
@@ -12859,10 +12864,13 @@ window.VJSolver = (function () {
                 do {
                 for (let r = 0; r < R && !tamat; r++) {
                     const pertama = kitaran === 0 && r === 0;
+                    // Percubaan semula fasa 1: sambung daripada jadual terbaik, kecuali setiap percubaan ke-N (mula dari kosong)
+                    const cubaSambung = pertama && percubaan > 1 && best && (percubaan - 1) % JDL_CUBA_KOSONG_SETIAP !== 0;
                     const optR = Object.assign({}, optAsas, { hadOptimumSaat: hadOpt / R, suhu: [r / R, (r + 1) / R], benihKe: (kitaran * 64 + r) * 4096 + percubaan });
                     let inpR = inp;
-                    if (!pertama) {
-                        optR.sambung = true; optR.hadSaat = 0.05;
+                    if (!pertama || cubaSambung) {
+                        optR.sambung = true;
+                        optR.hadSaat = cubaSambung ? Math.min(parseFloat(optAsas.hadSaat) || JDL_SAMBUNG_SAAT, JDL_SAMBUNG_SAAT) : 0.05;
                         inpR = Object.assign({}, inp, { jadual: Object.assign({}, inp.jadual, { sesi: best.sesi }) });
                     }
                     const hasil = await pusingan(inpR, optR, pertama ? 0 : 1);

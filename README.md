@@ -26,6 +26,20 @@ Semua data berada dalam memori pelayar, dan disimpan/dibuka sebagai **fail ZIP**
 - Kata laluan Mod Edit lalai: `admin123` (tukar di Tetapan). Kata laluan disimpan dalam fail ZIP.
   Ini hanya penghalang daripada tersalah edit, bukan keselamatan sebenar.
 
+## Pasang sebagai aplikasi (PWA)
+
+VisiJadual boleh dipasang seperti aplikasi biasa dan dibuka tanpa internet selepas lawatan pertama.
+
+- **Windows / MacBook (Chrome atau Edge):** klik ikon **Pasang** (skrin dengan anak panah) di hujung bar alamat → **Install**.
+- **MacBook (Safari 17+):** menu **File → Add to Dock**.
+- **iPad / iPhone (Safari):** butang **Kongsi** → **Tambah ke Skrin Utama**.
+
+Kemas kini baharu dimuat secara automatik apabila aplikasi dibuka ketika ada internet.
+Google Drive dan log masuk Google masih memerlukan internet.
+
+> Di iPad/iPhone, aplikasi di Skrin Utama mempunyai storan autosimpan berasingan daripada Safari —
+> sentiasa **Simpan fail ZIP** sebelum bertukar antara keduanya.
+
 ## Bahasa / Language
 
 Antaramuka kini **English secara lalai**. Tukar ke Bahasa Melayu (atau sebaliknya) melalui ikon Tetapan (gear) > **Language**, atau pada skrin permulaan. Pilihan disimpan dalam pelayar (`vj_lang`).

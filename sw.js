@@ -7,7 +7,7 @@
  * - Google Drive / log masuk Google: tidak disentuh (sentiasa terus ke rangkaian).
  * VERSION ditukar oleh skrip build setiap kali index.html berubah.
  */
-const VERSION = 'ba2c9c44ed1a';
+const VERSION = '9e697a0de8b2';
 const CACHE_PAGE = 'vj-page-' + VERSION;
 const CACHE_LIB = 'vj-lib-v1';
 

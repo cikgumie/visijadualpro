@@ -126,6 +126,50 @@ window.VJI18N = (function () {
         "Alih / Kunci": "Move / Lock",
         "Analisis Beban Mengikut Mata Pelajaran": "Workload Analysis by Subject",
         "Analisis Subjek": "Subject Analysis",
+        "Profil Sekolah": "School Profile",
+        "Nama sekolah, kod, logo & PGB untuk cetakan": "School name, code, logo & principal for printing",
+        "Persediaan: Profil Sekolah, Data Induk, Slot Masa, Bilik Khas, Hubungan Sesi": "Setup: School Profile, Master Data, Time Slots, Special Rooms, Session Relations",
+        "Maklumat ini dipaparkan pada kepala surat dan ruang tandatangan cetakan jadual kelas & guru.": "This information appears in the letterhead and signature area of printed class & teacher timetables.",
+        "Logo sekolah": "School logo",
+        "Muat naik": "Upload",
+        "Buang logo": "Remove logo",
+        "PNG / JPG. Latar lutsinar (PNG) paling cantik.": "PNG / JPG. A transparent background (PNG) looks best.",
+        "Nama sekolah": "School name",
+        "Kod sekolah": "School code",
+        "Nama Pengetua / Guru Besar (PGB)": "Principal / Headmaster name",
+        "Jawatan": "Position",
+        "Simpan Profil": "Save Profile",
+        "Cetak Jadual": "Print Timetable",
+        "cth: SMK Taman Bahagia": "e.g. SMK Taman Bahagia",
+        "cth: ABA1234": "e.g. ABA1234",
+        "cth: Hj. Ahmad bin Ali": "e.g. Ahmad bin Ali",
+        "Profil sekolah disimpan.": "School profile saved.",
+        "Logo terlalu besar (maks 5 MB).": "Logo is too large (max 5 MB).",
+        "Fail ini bukan gambar yang boleh dibaca.": "This file is not a readable image.",
+        "Cetak jadual: 1 kelas / 1 guru setiap halaman A4": "Print timetables: 1 class / 1 teacher per A4 page",
+        "Cetak jadual ini (A4)": "Print this timetable (A4)",
+        "Skop": "Scope",
+        "Yang ditanda sahaja": "Ticked only",
+        "Cetak berwarna": "Print in colour",
+        "Sertakan senarai subjek & waktu": "Include subject & period list",
+        "Tiada jadual untuk dicetak.": "Nothing to print.",
+        "Nama sekolah belum diisi. Isi di Profil Sekolah supaya kepala surat lengkap.": "School name is empty. Fill in the School Profile for a complete letterhead.",
+        "JADUAL WAKTU KELAS": "CLASS TIMETABLE",
+        "JADUAL WAKTU GURU": "TEACHER TIMETABLE",
+        "Kod Sekolah": "School Code",
+        "Hari / Waktu": "Day / Period",
+        "Waktu seminggu": "Periods per week",
+        "Jumlah": "Total",
+        "Disahkan oleh": "Approved by",
+        "Dicetak": "Printed",
+        "Setiap kelas / guru dicetak pada": "Each class / teacher is printed on",
+        "satu halaman A4 melintang": "one landscape A4 page",
+        ", dengan logo, nama & kod sekolah serta ruang tandatangan PGB daripada": ", with the school logo, name & code and a principal signature area from",
+        "Singkatan": "Short name",
+        "Pengetua": "Principal",
+        "Pengetua Cemerlang": "Excellent Principal",
+        "Guru Besar": "Headmaster",
+        "Guru Besar Cemerlang": "Excellent Headmaster",
         "Jadual": "Timetable",
         "Laporan & Analisis": "Reports & Analysis",
         "Persediaan": "Setup",
@@ -1397,6 +1441,7 @@ window.VJI18N = (function () {
  *               (tempohMs = masa penjanaan automatik terakhir, milisaat)
  *   bilik     : { senarai: [{ id, nama, kod }], subjek: { ID_Subjek: [ID_Bilik] } } — bilik khas & subjek yang mesti di bilik itu
  *   hubungan  : [{ id, jenis, nama, pilih, pilihB, nilai, slot, slotB, aktif }] — kekangan antara sesi
+ *   sekolah   : { nama, kod, pgb, jawatan, logo } — profil sekolah untuk cetakan (logo = data URL PNG)
  *               pilih / pilihB = { subjek, guru, kelas } (Kumpulan A / B); slot / slotB = ["hari-waktu"]
  */
 (function () {
@@ -1408,7 +1453,18 @@ window.VJI18N = (function () {
     // PANGKALAN DATA DALAM MEMORI
     // =========================================================================
     function emptyDb() {
-        return { guru: [], kelas: [], subjek: [], transaksi: [], arkib: [], tetapan: { Kata_Laluan: DEFAULT_PASSWORD }, slot: defaultSlot(), peraturan: normalizePeraturan(null), jadual: emptyJadual(), hubungan: [], gantian: emptyGantian(), bilik: emptyBilik() };
+        return { guru: [], kelas: [], subjek: [], transaksi: [], arkib: [], tetapan: { Kata_Laluan: DEFAULT_PASSWORD }, slot: defaultSlot(), peraturan: normalizePeraturan(null), jadual: emptyJadual(), hubungan: [], gantian: emptyGantian(), bilik: emptyBilik(), sekolah: emptySekolah() };
+    }
+
+    // Profil sekolah (kepala surat cetakan jadual)
+    function emptySekolah() { return { nama: '', kod: '', pgb: '', jawatan: 'Pengetua', logo: '' }; }
+    function normalizeSekolah(raw) {
+        const out = emptySekolah();
+        if (!raw || typeof raw !== 'object') return out;
+        ['nama', 'kod', 'pgb', 'jawatan'].forEach(k => { if (raw[k] != null) out[k] = String(raw[k]).trim(); });
+        if (!out.jawatan) out.jawatan = 'Pengetua';
+        out.logo = /^data:image\/(png|jpeg|webp|gif);base64,/.test(String(raw.logo || '')) ? String(raw.logo) : '';
+        return out;
     }
 
     // Bilik khas (makmal, bengkel, bilik komputer...). Subjek yang ditetapkan mesti diajar di salah satu biliknya.
@@ -1667,6 +1723,7 @@ window.VJI18N = (function () {
         out.hubungan = normalizeHubungan(raw.hubungan);
         out.gantian = normalizeGantian(raw.gantian);
         out.bilik = normalizeBilik(raw.bilik);
+        out.sekolah = normalizeSekolah(raw.sekolah);
         if (!String(out.tetapan.Kata_Laluan || '').trim()) out.tetapan.Kata_Laluan = DEFAULT_PASSWORD;
         return out;
     }
@@ -1913,7 +1970,7 @@ window.VJI18N = (function () {
     // =========================================================================
     // FAIL ZIP: BUKA & SIMPAN
     // =========================================================================
-    const ZIP_FILES = { guru: 'guru.json', kelas: 'kelas.json', subjek: 'subjek.json', transaksi: 'transaksi.json', arkib: 'arkib.json', tetapan: 'tetapan.json', slot: 'slot.json', peraturan: 'peraturan.json', jadual: 'jadual.json', hubungan: 'hubungan.json', gantian: 'gantian.json', bilik: 'bilik.json' };
+    const ZIP_FILES = { guru: 'guru.json', kelas: 'kelas.json', subjek: 'subjek.json', transaksi: 'transaksi.json', arkib: 'arkib.json', tetapan: 'tetapan.json', slot: 'slot.json', peraturan: 'peraturan.json', jadual: 'jadual.json', hubungan: 'hubungan.json', gantian: 'gantian.json', bilik: 'bilik.json', sekolah: 'sekolah.json' };
 
     async function buildZipBlob() {
         const zip = new JSZip();
@@ -2297,6 +2354,13 @@ window.VJI18N = (function () {
         markDirty();
     }
 
+    function getSekolah() { return clone(db.sekolah); }
+
+    function setSekolah(x) {
+        db.sekolah = normalizeSekolah(x);
+        markDirty();
+    }
+
     function getGantian() { return clone(db.gantian); }
 
     function setGantian(g) {
@@ -2305,7 +2369,7 @@ window.VJI18N = (function () {
     }
 
     window.VJStore = {
-        getHubungan, setHubungan, getGantian, setGantian, getBilik, setBilik,
+        getHubungan, setHubungan, getGantian, setGantian, getBilik, setBilik, getSekolah, setSekolah,
         getSlot, setSlotConfig, waktuDi, addSlotLabel, setKelasBlok, setGuruBlok, copyKelasBlok, slotSummary, guruSlotSummary, genWaktu,
         getPeraturan, setPeraturan, PERATURAN_DEFAULT, getJadual, setJadual,
         getSolverInput() { return clone({ guru: db.guru, kelas: db.kelas, subjek: db.subjek, transaksi: db.transaksi, slot: db.slot, peraturan: db.peraturan, jadual: db.jadual, hubungan: db.hubungan, bilik: db.bilik }); },
@@ -5072,6 +5136,7 @@ window.VJSampleData = function () {
         <div id="tbJadual" class="hidden ml-auto items-center gap-1.5">
             <button onclick="switchTab('hubungan')" class="jb-btn relative" title="Hubungan antara sesi" aria-label="Hubungan"><i data-lucide="link-2" class="w-4 h-4"></i><span id="hubCount" class="absolute -top-1 -right-1 text-[9px] min-w-[14px] text-center px-1 rounded-full bg-brand-600 text-white empty:hidden"></span></button>
             <button onclick="jdlRumusanBuka(false)" class="jb-btn" title="Rumusan kualiti jadual: sesi tidak muat, hubungan, lompong, beban guru" aria-label="Rumusan"><i data-lucide="binoculars" class="w-4 h-4"></i></button>
+            <button onclick="jdlCetakBuka()" class="jb-btn" title="Cetak jadual: 1 kelas / 1 guru setiap halaman A4"><i data-lucide="printer" class="w-4 h-4"></i><span>Cetak</span></button>
             <button onclick="jdlKosongkan()" class="jb-btn jb-bahaya" title="Kosongkan jadual (kelas / guru dipilih sahaja jika ada)" aria-label="Kosongkan"><i data-lucide="eraser" class="w-4 h-4"></i></button>
             <button id="jdlBtnSusun" onclick="jdlUjianBuka()" class="jb-btn jb-utama" title="Susun jadual / Mod Ujian"><i data-lucide="wand-sparkles" class="w-4 h-4"></i><span id="jdlBtnSusunTeks">Susun</span></button>
             <button id="jdlBtnFokus" onclick="jdlFokus()" class="jb-btn jb-utama" title="Paparkan jadual memenuhi skrin (tekan F atau Esc untuk keluar)"><i data-lucide="maximize" class="w-4 h-4"></i><span id="jdlBtnFokusTeks">Fokus</span></button>
@@ -5149,10 +5214,13 @@ window.VJSampleData = function () {
 
                 <!-- ===== PERSEDIAAN (boleh dilipat) ===== -->
                 <p class="nav-head">Persediaan</p>
-                <button onclick="toggleNavTetapan()" id="navTetapanBtn" class="nav-tab" title="Persediaan: Data Induk, Slot Masa, Bilik Khas, Hubungan Sesi" aria-expanded="false" aria-controls="navTetapanSub">
+                <button onclick="toggleNavTetapan()" id="navTetapanBtn" class="nav-tab" title="Persediaan: Profil Sekolah, Data Induk, Slot Masa, Bilik Khas, Hubungan Sesi" aria-expanded="false" aria-controls="navTetapanSub">
                     <i data-lucide="settings" class="w-4 h-4 shrink-0"></i><span class="nav-label">Tetapan Asas</span><i data-lucide="chevron-right" id="navTetapanChev" class="w-3.5 h-3.5 shrink-0 nav-label"></i>
                 </button>
                 <div id="navTetapanSub" class="space-y-0.5">
+                    <button onclick="switchTab('sekolah')" id="nav-sekolah" class="nav-tab nav-sub" title="Nama sekolah, kod, logo & PGB untuk cetakan">
+                        <i data-lucide="landmark" class="w-4 h-4 shrink-0"></i><span class="nav-label">Profil Sekolah</span>
+                    </button>
                     <button onclick="VJFile.openDataInduk()" class="nav-tab nav-sub" title="Setup nama guru, kelas, bilik & subjek">
                         <i data-lucide="database" class="w-4 h-4 shrink-0"></i><span class="nav-label">Data Induk</span>
                     </button>
@@ -5197,6 +5265,51 @@ window.VJSampleData = function () {
     <main class="flex-1 min-w-0 overflow-y-auto p-4 sm:p-6 bg-slate-50/50 matrix-flush">
 
 
+
+        <!-- ============================================================== -->
+        <!-- VIEW: PROFIL SEKOLAH (kepala surat cetakan)                    -->
+        <!-- ============================================================== -->
+        <div id="view-sekolah" class="view-section hidden bg-white border border-slate-200 rounded-2xl shadow-card overflow-hidden max-w-3xl">
+            <div class="p-3.5 bg-slate-50/80 border-b border-slate-200">
+                <div class="flex items-center gap-2">
+                    <i data-lucide="landmark" class="w-4 h-4 text-brand-600"></i>
+                    <h3 class="text-sm font-heading font-bold text-slate-800">Profil Sekolah</h3>
+                </div>
+                <p class="text-[11px] text-slate-500 mt-0.5">Maklumat ini dipaparkan pada kepala surat dan ruang tandatangan cetakan jadual kelas &amp; guru.</p>
+            </div>
+            <div class="p-4 sm:p-5 flex flex-col sm:flex-row gap-5">
+                <div class="shrink-0 flex flex-col items-center gap-2">
+                    <span class="self-start text-[11px] font-bold text-slate-600">Logo sekolah</span>
+                    <div id="skLogoKotak" class="w-32 h-32 rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 flex items-center justify-center overflow-hidden">
+                        <img id="skLogoImg" alt="Logo sekolah" class="hidden max-w-full max-h-full object-contain">
+                        <i id="skLogoKosong" data-lucide="image" class="w-8 h-8 text-slate-300"></i>
+                    </div>
+                    <input type="file" id="skLogoFail" accept="image/png,image/jpeg,image/webp,image/gif" class="hidden" onchange="skPilihLogo(this)">
+                    <div class="flex gap-1.5">
+                        <button onclick="document.getElementById('skLogoFail').click()" class="px-2.5 py-1.5 border border-slate-200 bg-white hover:bg-slate-100 rounded-lg text-xs font-bold text-slate-700 flex items-center gap-1"><i data-lucide="upload" class="w-3.5 h-3.5"></i> Muat naik</button>
+                        <button id="skLogoBuang" onclick="skBuangLogo()" class="px-2 py-1.5 border border-rose-200 bg-rose-50 hover:bg-rose-100 rounded-lg text-xs font-bold text-rose-600" title="Buang logo"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
+                    </div>
+                    <span class="text-[10px] text-slate-400 text-center max-w-[9rem]">PNG / JPG. Latar lutsinar (PNG) paling cantik.</span>
+                </div>
+                <div class="flex-1 min-w-0 space-y-3">
+                    <label class="block"><span class="block text-[11px] font-bold text-slate-600 mb-1">Nama sekolah</span>
+                        <input id="skNama" type="text" maxlength="120" placeholder="cth: SMK Taman Bahagia" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none"></label>
+                    <label class="block"><span class="block text-[11px] font-bold text-slate-600 mb-1">Kod sekolah</span>
+                        <input id="skKod" type="text" maxlength="20" placeholder="cth: ABA1234" class="w-48 max-w-full border border-slate-300 rounded-lg px-3 py-2 text-sm uppercase focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none"></label>
+                    <div class="grid grid-cols-1 sm:grid-cols-[1fr_11rem] gap-3">
+                        <label class="block"><span class="block text-[11px] font-bold text-slate-600 mb-1">Nama Pengetua / Guru Besar (PGB)</span>
+                            <input id="skPgb" type="text" maxlength="120" placeholder="cth: Hj. Ahmad bin Ali" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none"></label>
+                        <label class="block"><span class="block text-[11px] font-bold text-slate-600 mb-1">Jawatan</span>
+                            <input id="skJawatan" type="text" maxlength="60" list="skJawatanList" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none">
+                            <datalist id="skJawatanList"><option value="Pengetua"><option value="Pengetua Cemerlang"><option value="Guru Besar"><option value="Guru Besar Cemerlang"></datalist></label>
+                    </div>
+                    <div class="pt-1 flex items-center gap-2">
+                        <button onclick="skSimpan()" class="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow"><i data-lucide="save" class="w-3.5 h-3.5"></i> Simpan Profil</button>
+                        <button onclick="jdlCetakBuka()" class="sys-jadual px-3 py-2 border border-slate-200 bg-white hover:bg-slate-100 rounded-lg text-xs font-bold text-slate-700 flex items-center gap-1.5"><i data-lucide="printer" class="w-3.5 h-3.5"></i> Cetak Jadual</button>
+                    </div>
+                </div>
+            </div>
+        </div>
 
         <!-- ============================================================== -->
         <!-- VIEW 10: HUBUNGAN ANTARA SESI (TETAPAN)                        -->
@@ -5897,12 +6010,47 @@ window.VJSampleData = function () {
                 @keyframes jdlIsi { 0%, 100% { background: #e2e8f0; transform: scale(.85); } 35%, 65% { background: var(--c, #7dd3fc); transform: scale(1); } }
                 @media (prefers-reduced-motion: reduce) { .jdl-anim span { animation-duration: 6s; } }
             </style>
+            <!-- Cetak jadual: 1 kelas / 1 guru setiap A4 -->
+            <div id="jdlCetakPanel" class="hidden fixed inset-0 z-[70] bg-slate-900/50 items-center justify-center p-4 no-print" role="dialog" aria-modal="true" aria-labelledby="jdlCetakTajuk" onclick="if (event.target === this) jdlCetakTutup()">
+              <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+                <div class="flex items-center justify-between gap-2 px-5 py-3.5 border-b border-slate-200">
+                    <h4 id="jdlCetakTajuk" class="font-heading font-bold text-sm text-slate-800 flex items-center gap-2"><i data-lucide="printer" class="w-4 h-4 text-brand-600"></i> Cetak Jadual</h4>
+                    <button onclick="jdlCetakTutup()" class="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500" title="Tutup (Esc)"><i data-lucide="x" class="w-4 h-4"></i></button>
+                </div>
+                <div class="p-5 space-y-4 text-xs">
+                    <div>
+                        <p class="text-[11px] font-bold text-slate-600 mb-1.5">Jadual</p>
+                        <div class="flex p-0.5 bg-slate-200/70 rounded-lg font-bold w-fit">
+                            <button id="jdlCetakJKelas" onclick="jdlCetakSetJenis('kelas')" class="px-4 py-1.5 rounded-md transition flex items-center gap-1.5"><i data-lucide="school" class="w-3.5 h-3.5"></i>Kelas</button>
+                            <button id="jdlCetakJGuru" onclick="jdlCetakSetJenis('guru')" class="px-4 py-1.5 rounded-md transition flex items-center gap-1.5"><i data-lucide="user-round" class="w-3.5 h-3.5"></i>Guru</button>
+                        </div>
+                    </div>
+                    <div>
+                        <p class="text-[11px] font-bold text-slate-600 mb-1.5">Skop</p>
+                        <label class="flex items-center gap-2 py-1 cursor-pointer"><input type="radio" name="jdlCetakSkop" value="semua" class="accent-brand-600"> <span>Semua <b id="jdlCetakNSemua"></b></span></label>
+                        <label id="jdlCetakSkopPilihL" class="flex items-center gap-2 py-1 cursor-pointer"><input type="radio" name="jdlCetakSkop" value="pilih" class="accent-brand-600"> <span>Yang ditanda sahaja <b id="jdlCetakNPilih"></b></span></label>
+                    </div>
+                    <div class="space-y-1">
+                        <label class="flex items-center gap-2 py-0.5 cursor-pointer"><input type="checkbox" id="jdlCetakWarna" class="w-3.5 h-3.5 accent-brand-600"> Cetak berwarna</label>
+                        <label class="flex items-center gap-2 py-0.5 cursor-pointer"><input type="checkbox" id="jdlCetakRingkas" class="w-3.5 h-3.5 accent-brand-600"> Sertakan senarai subjek &amp; waktu</label>
+                    </div>
+                    <p class="text-[11px] text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">Setiap kelas / guru dicetak pada <b>satu halaman A4 melintang</b>, dengan logo, nama &amp; kod sekolah serta ruang tandatangan PGB daripada <button onclick="jdlCetakTutup(); switchTab('sekolah')" class="font-bold text-brand-700 hover:underline">Profil Sekolah</button>.</p>
+                    <p id="jdlCetakAmaran" class="hidden text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2"></p>
+                </div>
+                <div class="flex justify-end gap-2 px-5 py-3 border-t border-slate-200 bg-slate-50/60 rounded-b-2xl">
+                    <button onclick="jdlCetakTutup()" class="px-3 py-1.5 border border-slate-200 bg-white hover:bg-slate-100 rounded-lg text-xs font-bold text-slate-700">Batal</button>
+                    <button onclick="jdlCetakMula()" class="px-4 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow"><i data-lucide="printer" class="w-3.5 h-3.5"></i> Cetak</button>
+                </div>
+              </div>
+            </div>
+
             <div id="jdlModal" class="hidden fixed inset-0 z-[60] bg-slate-900/50 items-center justify-center p-4" onclick="if (event.target === this) jdlTutup()">
                 <div class="bg-white rounded-2xl shadow-2xl w-full max-w-[1400px] max-h-[92vh] overflow-auto p-4">
                     <div id="jdlEditor">
                         <div class="flex flex-wrap items-baseline justify-between gap-2 mb-3">
                             <h4 id="jdlTitle" class="font-heading font-bold text-lg text-slate-800"></h4>
                             <div class="flex items-center gap-3"><p id="jdlStats" class="text-xs text-slate-500"></p>
+                            <button id="jdlBtnCetakSatu" onclick="jdlCetakSatu()" class="px-2.5 py-1.5 border border-slate-200 bg-white hover:bg-slate-100 rounded-lg text-xs font-bold text-slate-700 flex items-center gap-1.5" title="Cetak jadual ini (A4)"><i data-lucide="printer" class="w-3.5 h-3.5"></i> Cetak</button>
                             <button onclick="jdlTutup()" class="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500" title="Tutup (Esc)"><i data-lucide="x" class="w-4 h-4"></i></button></div>
                         </div>
                         <div class="overflow-x-auto border border-slate-200 rounded-xl">
@@ -8500,6 +8648,7 @@ window.VJSampleData = function () {
             if (tabName === 'banding') populateSystemDropdowns();
             if (tabName === 'bilik') renderBilikView();
             if (tabName === 'hubungan') hubRenderList();
+            if (tabName === 'sekolah') skRender();
             if (tabName === 'matrix') {
                 populateMatrixBarTeachers();
                 highlightMatrixCells();
@@ -12447,6 +12596,307 @@ window.VJSolver = (function () {
             renderJadualView();
         }
 
+        // =====================================================================
+        // PROFIL SEKOLAH — nama, kod, logo & PGB (kepala surat cetakan)
+        // =====================================================================
+        let skLogoData = '';
+        function skRender() {
+            const x = VJStore.getSekolah();
+            document.getElementById('skNama').value = x.nama;
+            document.getElementById('skKod').value = x.kod;
+            document.getElementById('skPgb').value = x.pgb;
+            document.getElementById('skJawatan').value = x.jawatan;
+            skLogoData = x.logo;
+            skLogoPapar();
+        }
+        function skLogoPapar() {
+            const img = document.getElementById('skLogoImg');
+            img.classList.toggle('hidden', !skLogoData);
+            if (skLogoData) img.src = skLogoData; else img.removeAttribute('src');
+            document.getElementById('skLogoKosong').classList.toggle('hidden', !!skLogoData);
+            document.getElementById('skLogoBuang').classList.toggle('hidden', !skLogoData);
+        }
+        // Logo dikecilkan (maks 400 px) & disimpan sebagai PNG supaya fail ZIP kekal kecil
+        function skPilihLogo(input) {
+            const f = input.files && input.files[0];
+            input.value = '';
+            if (!f) return;
+            if (f.size > 5 * 1024 * 1024) { showToast('Logo terlalu besar (maks 5 MB).', 'warning'); return; }
+            const url = URL.createObjectURL(f);
+            const img = new Image();
+            img.onload = () => {
+                const k = Math.min(1, 400 / Math.max(img.naturalWidth, img.naturalHeight));
+                const c = document.createElement('canvas');
+                c.width = Math.max(1, Math.round(img.naturalWidth * k));
+                c.height = Math.max(1, Math.round(img.naturalHeight * k));
+                const ctx = c.getContext('2d');
+                ctx.imageSmoothingQuality = 'high';
+                ctx.drawImage(img, 0, 0, c.width, c.height);
+                URL.revokeObjectURL(url);
+                skLogoData = c.toDataURL('image/png');
+                skLogoPapar();
+            };
+            img.onerror = () => { URL.revokeObjectURL(url); showToast('Fail ini bukan gambar yang boleh dibaca.', 'error'); };
+            img.src = url;
+        }
+        function skBuangLogo() { skLogoData = ''; skLogoPapar(); }
+        function skSimpan() {
+            if (!ensureEditMode(() => skSimpan())) return;
+            VJStore.setSekolah({
+                nama: document.getElementById('skNama').value,
+                kod: document.getElementById('skKod').value.toUpperCase(),
+                pgb: document.getElementById('skPgb').value,
+                jawatan: document.getElementById('skJawatan').value,
+                logo: skLogoData
+            });
+            skRender();
+            showToast('Profil sekolah disimpan.', 'success');
+        }
+
+        // =====================================================================
+        // CETAK JADUAL — 1 kelas / 1 guru setiap halaman A4 melintang
+        // =====================================================================
+        let jdlCetakJenis = 'kelas';
+        function jdlCetakPilihan() {
+            try { return Object.assign({ warna: true, ringkasan: true }, JSON.parse(localStorage.getItem('visijadual_cetak') || '{}')); }
+            catch (e) { return { warna: true, ringkasan: true }; }
+        }
+        function jdlCetakBuka() {
+            const o = jdlCetakPilihan();
+            document.getElementById('jdlCetakWarna').checked = !!o.warna;
+            document.getElementById('jdlCetakRingkas').checked = !!o.ringkasan;
+            jdlCetakSetJenis(jdlMode === 'guru' ? 'guru' : 'kelas', true);
+            const am = document.getElementById('jdlCetakAmaran');
+            const sk = VJStore.getSekolah();
+            am.innerText = sk.nama ? '' : 'Nama sekolah belum diisi. Isi di Profil Sekolah supaya kepala surat lengkap.';
+            am.classList.toggle('hidden', !!sk.nama);
+            const p = document.getElementById('jdlCetakPanel');
+            p.classList.remove('hidden'); p.classList.add('flex');
+            lucide.createIcons();
+        }
+        function jdlCetakTutup() {
+            const p = document.getElementById('jdlCetakPanel');
+            p.classList.add('hidden'); p.classList.remove('flex');
+        }
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Escape' && !document.getElementById('jdlCetakPanel').classList.contains('hidden')) { e.stopImmediatePropagation(); jdlCetakTutup(); }
+        }, true);
+        function jdlCetakSetJenis(j, awal) {
+            jdlCetakJenis = j;
+            ['kelas', 'guru'].forEach(m => {
+                document.getElementById(m === 'kelas' ? 'jdlCetakJKelas' : 'jdlCetakJGuru').className =
+                    'px-4 py-1.5 rounded-md transition flex items-center gap-1.5 ' + (j === m ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-800');
+            });
+            const st = VJStore.getStatus().counts;
+            const nSemua = j === 'kelas' ? st.kelas : st.guru;
+            const nPilih = j === 'kelas' ? jdlPilihan.size : jdlPilihanGuru.size;
+            document.getElementById('jdlCetakNSemua').innerText = `(${nSemua})`;
+            document.getElementById('jdlCetakNPilih').innerText = `(${nPilih})`;
+            const r = document.querySelectorAll('input[name="jdlCetakSkop"]');
+            r[1].disabled = !nPilih;
+            document.getElementById('jdlCetakSkopPilihL').classList.toggle('opacity-40', !nPilih);
+            if (awal || !nPilih) (nPilih ? r[1] : r[0]).checked = true;
+        }
+        function jdlCetakMula() {
+            const o = { warna: document.getElementById('jdlCetakWarna').checked, ringkasan: document.getElementById('jdlCetakRingkas').checked };
+            try { localStorage.setItem('visijadual_cetak', JSON.stringify(o)); } catch (e) {}
+            const skop = (document.querySelector('input[name="jdlCetakSkop"]:checked') || {}).value;
+            const inp = VJStore.getSolverInput();
+            const semua = (jdlCetakJenis === 'kelas' ? inp.kelas : inp.guru).map(x => String(x[0]));
+            const pilih = jdlCetakJenis === 'kelas' ? jdlPilihan : jdlPilihanGuru;
+            const ids = skop === 'pilih' ? semua.filter(id => pilih.has(id)) : semua;
+            if (!ids.length) { showToast('Tiada jadual untuk dicetak.', 'warning'); return; }
+            jdlCetakTutup();
+            jdlCetakDokumen(jdlCetakJenis, ids, o);
+        }
+        function jdlCetakSatu() {
+            if (!jdlSel || jdlMode === 'bilik') return;
+            jdlCetakDokumen(jdlMode, [String(jdlSel)], jdlCetakPilihan());
+        }
+
+        function jdlCetakDokumen(jenis, ids, opt) {
+            const T = s => VJI18N.t(s), e = escapeHtml;
+            const inp = VJStore.getSolverInput();
+            jdlBinaWarna(inp.guru);
+            const cfg = inp.slot, H = cfg.hari.length, W = cfg.waktu.length;
+            const jadual = VJStore.getJadual();
+            const sk = VJStore.getSekolah();
+            const trx = {}; inp.transaksi.forEach(t => { trx[String(t[8])] = t; });
+            const kodSubjek = {}; inp.subjek.forEach(r => { kodSubjek[r[0]] = r[2] || r[1]; });
+            const singGuru = {}; inp.guru.forEach(g => { singGuru[g[0]] = g[2] || g[1]; });
+            const namaBilik = {}; ((inp.bilik || {}).senarai || []).forEach(b => { namaBilik[b.id] = b.kod || b.nama; });
+            const pilih = new Set(ids.map(String));
+            const senarai = jenis === 'kelas'
+                ? inp.kelas.filter(k => pilih.has(String(k[0]))).sort(VJStore.cmpKelas)
+                : inp.guru.filter(g => pilih.has(String(g[0]))).sort((a, b) => String(a[1]).localeCompare(String(b[1]), 'ms'));
+            if (!senarai.length) { showToast('Tiada jadual untuk dicetak.', 'warning'); return; }
+            const kelasDari = t => String(t[3]).split(',').map(s => s.trim());
+            const warnaDari = t => !opt.warna ? '' : jenis === 'kelas' ? jdlWarna(t[1]) : jdlWarna('S' + t[5]);
+            const kunci = list => list.map(z => z.x.uuid + '#' + z.x.ke).sort().join('|');
+            const tarikh = new Date().toLocaleDateString(VJI18N.locale(), { day: 'numeric', month: 'long', year: 'numeric' });
+
+            const kepala = (jenisTajuk, nama) => `<div class="kepala">
+                ${sk.logo ? `<img class="logo" src="${sk.logo}" alt="">` : ''}
+                <div class="sek"><h1>${e(sk.nama || T('SEKOLAH'))}</h1>${sk.kod ? `<p>${T('Kod Sekolah')}: <b>${e(sk.kod)}</b></p>` : ''}</div>
+                <div class="tajuk"><div class="jenis">${T(jenisTajuk)}</div><div class="nama">${e(nama)}</div></div></div>`;
+            const kaki = kiri => `<div class="kaki"><div class="kiri">${kiri}<div class="tarikh">${T('Dicetak')}: ${e(tarikh)}</div></div>
+                <div class="ttd"><div>${T('Disahkan oleh')}:</div><div class="garis">${sk.pgb ? e(sk.pgb) : '&nbsp;'}</div>
+                <div>${e(T(sk.jawatan || 'Pengetua'))}${sk.nama ? ', ' + e(sk.nama) : ''}</div></div></div>`;
+
+            const halaman = item => {
+                const id = String(item[0]);
+                const sel = Array.from({ length: H * W }, () => []);
+                let jumWaktu = 0;
+                jadual.sesi.forEach(x => {
+                    const t = trx[x.uuid]; if (!t) return;
+                    if (jenis === 'kelas' ? !kelasDari(t).includes(id) : String(t[1]) !== id) return;
+                    for (let i = 0; i < x.panjang && x.waktu + i < W; i++) sel[x.hari * W + x.waktu + i].push({ x, t, mula: i === 0 });
+                });
+                const blok = (cfg[jenis] || {})[id] || {};
+
+                // Senarai subjek & waktu (daripada agihan)
+                const kump = {};
+                inp.transaksi.forEach(t => {
+                    if (jenis === 'kelas' ? !kelasDari(t).includes(id) : String(t[1]) !== id) return;
+                    const k = jenis === 'kelas' ? t[5] + '|' + t[9] + '|' + t[1] : t[5] + '|' + t[9] + '|' + t[3];
+                    const r = kump[k] || (kump[k] = { kod: kodSubjek[t[5]] || t[6], subjek: t[6] + (t[9] ? ` (${t[9]})` : ''), lain: jenis === 'kelas' ? t[2] : t[4], masa: 0, t });
+                    r.masa += parseInt(t[7]) || 0;
+                });
+                const baris = Object.values(kump).sort((a, b) => String(a.kod).localeCompare(String(b.kod), 'ms'));
+                const jumAgih = baris.reduce((a, r) => a + r.masa, 0);
+                const lajur = !opt.ringkasan || !baris.length ? 0 : baris.length > 14 ? 3 : baris.length > 5 ? 2 : 1;
+                const perLajur = lajur ? Math.ceil(baris.length / lajur) : 0;
+
+                // Ketinggian baris hari supaya muat satu halaman A4 (190 mm boleh guna)
+                const tinggiRingkas = lajur ? (perLajur + 1) * 4.3 + 4 : 0;
+                const tinggiBaris = Math.max(9, Math.min(26, (188 - 27 - 7 - 27 - 10 - tinggiRingkas) / H));
+
+                let html = `<table class="grid"><thead><tr><th class="hari">${T('Hari / Waktu')}</th>` +
+                    cfg.waktu.map((w, p) => `<th><b>${p + 1}</b><small>${e(w.mula)}${w.tamat ? '–' + e(w.tamat) : ''}</small></th>`).join('') + `</tr></thead><tbody>`;
+                cfg.hari.forEach((h, d) => {
+                    html += `<tr style="height:${tinggiBaris.toFixed(1)}mm"><th class="hari">${e(T(h))}</th>`;
+                    let p = 0;
+                    while (p < W) {
+                        const list = sel[d * W + p], lb = blok[`${d}-${p}`];
+                        let span = 1;
+                        if (list.length) {
+                            const k = kunci(list);
+                            while (p + span < W && sel[d * W + p + span].length && kunci(sel[d * W + p + span]) === k && sel[d * W + p + span].every(z => !z.mula)) span++;
+                            jumWaktu += span;
+                            const n = Math.min(4, list.length);
+                            html += `<td colspan="${span}" class="sesi n${n}"><div class="isi">` + list.map(z => {
+                                const t = z.t, lbl = t[9] ? ` <i>${e(t[9])}</i>` : '';
+                                const bilik = z.x.bilik && namaBilik[z.x.bilik] ? ' · ' + e(namaBilik[z.x.bilik]) : '';
+                                const bawah = jenis === 'kelas' ? e(singGuru[t[1]] || t[2] || '-') : e(t[4]);
+                                return `<div class="s ${warnaDari(t)}"><b>${e(kodSubjek[t[5]] || t[6])}${lbl}</b><span>${bawah}${bilik}</span></div>`;
+                            }).join('') + `</div></td>`;
+                        } else if (!list.length && lb) {
+                            while (p + span < W && !sel[d * W + p + span].length && blok[`${d}-${p + span}`] === lb) span++;
+                            html += `<td colspan="${span}" class="blok">${e(lb)}</td>`;
+                        } else {
+                            html += `<td></td>`;
+                        }
+                        p += span;
+                    }
+                    html += `</tr>`;
+                });
+                html += `</tbody></table>`;
+
+                let ringkas = '';
+                if (lajur) {
+                    const kepalaR = `<tr><th>${T('Kod')}</th><th>${T('Subjek')}</th><th>${T(jenis === 'kelas' ? 'Guru' : 'Kelas')}</th><th class="n">${T('Waktu')}</th></tr>`;
+                    ringkas = '<div class="ringkas">';
+                    for (let c = 0; c < lajur; c++) {
+                        const bah = baris.slice(c * perLajur, (c + 1) * perLajur);
+                        ringkas += `<table>${kepalaR}` + bah.map(r => `<tr><td><span class="sw ${warnaDari(r.t)}"></span>${e(r.kod)}</td><td>${e(r.subjek)}</td><td>${e(r.lain || '-')}</td><td class="n">${r.masa}</td></tr>`).join('') + `</table>`;
+                    }
+                    ringkas += '</div>';
+                }
+
+                const info = jenis === 'kelas'
+                    ? [item[3] ? `${T('Guru Kelas')}: <b>${e(item[3])}</b>` : '', `${T('Waktu seminggu')}: <b>${jumWaktu}</b>${jumAgih && jumAgih !== jumWaktu ? ` / ${jumAgih}` : ''}`]
+                    : [item[2] && item[2] !== item[1] ? `${T('Singkatan')}: <b>${e(item[2])}</b>` : '', `${T('Waktu seminggu')}: <b>${jumWaktu}</b>${jumAgih && jumAgih !== jumWaktu ? ` / ${jumAgih}` : ''}`];
+                return `<section class="hal">${kepala(jenis === 'kelas' ? 'JADUAL WAKTU KELAS' : 'JADUAL WAKTU GURU', item[1])}
+                    ${html}${ringkas}${kaki(info.filter(Boolean).map(x => `<div>${x}</div>`).join(''))}</section>`;
+            };
+
+            const tajukDok = (jenis === 'kelas' ? T('JADUAL WAKTU KELAS') : T('JADUAL WAKTU GURU')) + (senarai.length === 1 ? ' - ' + senarai[0][1] : '');
+            const palet = JDL_PALET.map((c, i) => `.jc-${i}{background-color:${c.bg};color:${c.fg}}`).join('');
+            const dok = `<!doctype html><html lang="${VJI18N.lang()}"><head><meta charset="utf-8"><title>${e(tajukDok)}</title><style>
+                @page { size: A4 landscape; margin: 9mm 10mm; }
+                * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                html, body { margin: 0; padding: 0; background: #fff; }
+                body { font-family: Arial, Helvetica, sans-serif; color: #111; }
+                .hal { width: 277mm; height: 188mm; display: flex; flex-direction: column; overflow: hidden; break-after: page; page-break-after: always; }
+                .hal:last-child { break-after: auto; page-break-after: auto; }
+                .kepala { display: flex; align-items: center; gap: 4mm; border-bottom: 0.6mm solid #111; padding-bottom: 2.5mm; margin-bottom: 2.5mm; min-height: 22mm; }
+                .logo { height: 20mm; width: auto; max-width: 32mm; object-fit: contain; }
+                .sek h1 { font-size: 15pt; margin: 0; text-transform: uppercase; line-height: 1.15; }
+                .sek p { margin: 1mm 0 0; font-size: 9.5pt; color: #333; }
+                .tajuk { margin-left: auto; text-align: right; }
+                .tajuk .jenis { font-size: 9pt; letter-spacing: 0.08em; color: #444; font-weight: bold; }
+                .tajuk .nama { font-size: 20pt; font-weight: 800; line-height: 1.1; }
+                table.grid { width: 100%; border-collapse: collapse; table-layout: fixed; }
+                .grid th, .grid td { border: 0.25mm solid #444; }
+                .grid thead th { font-size: 8pt; padding: 0.8mm 0.3mm; background: #eceff3; }
+                .grid thead small { display: block; font-weight: normal; font-size: 6.3pt; color: #444; white-space: nowrap; }
+                .grid th.hari { width: 23mm; font-size: 9pt; text-align: left; padding-left: 2mm; background: #eceff3; }
+                .grid td { padding: 0.5mm; vertical-align: middle; text-align: center; overflow: hidden; }
+                .grid td.sesi { position: relative; }
+                .isi { position: absolute; inset: 0.6mm; display: flex; flex-direction: column; gap: 0.4mm; }
+                .isi .s { flex: 1; min-height: 0; display: flex; flex-direction: column; justify-content: center; border-radius: 0.8mm; padding: 0.3mm 0.6mm; line-height: 1.12; overflow: hidden; }
+                .n1 .s b { font-size: 10pt; } .n1 .s span { font-size: 7.5pt; }
+                .s b { display: block; font-size: 9pt; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+                .s b i { font-style: normal; font-weight: 600; opacity: 0.75; }
+                .s span { display: block; font-size: 7pt; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+                .n2 .s b { font-size: 8pt; } .n3 .s b, .n4 .s b { font-size: 6.8pt; } .n3 .s span, .n4 .s span { font-size: 5.8pt; }
+                .grid td.blok { background: #f1f1f1; color: #555; font-size: 7pt; font-weight: bold; letter-spacing: 0.05em; }
+                .ringkas { margin-top: 2.5mm; display: flex; gap: 3mm; align-items: flex-start; }
+                .ringkas table { flex: 1; border-collapse: collapse; font-size: 7.3pt; }
+                .ringkas th, .ringkas td { border: 0.2mm solid #999; padding: 0.4mm 1.2mm; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 60mm; }
+                .ringkas th { background: #eceff3; } .ringkas .n { text-align: center; width: 11mm; }
+                .sw { display: inline-block; width: 2.4mm; height: 2.4mm; border-radius: 0.5mm; margin-right: 1mm; vertical-align: -0.3mm; }
+                .sw:not([class*="jc-"]) { display: none; }
+                .kaki { margin-top: auto; display: flex; justify-content: space-between; align-items: flex-end; font-size: 8.5pt; padding-top: 2mm; }
+                .kiri div { margin-top: 0.8mm; } .tarikh { font-size: 7pt; color: #666; }
+                .ttd { text-align: center; min-width: 70mm; }
+                .ttd .garis { border-top: 0.25mm dotted #111; margin-top: 12mm; padding-top: 1mm; font-weight: bold; text-transform: uppercase; }
+                @media screen { body { background: #e5e7eb; } .hal { background: #fff; margin: 8mm auto; padding: 11mm 10mm; width: 297mm; height: 210mm; box-shadow: 0 2px 8px rgba(0,0,0,.2); } }
+                ${palet}
+            </style></head><body>${senarai.map(halaman).join('')}</body></html>`;
+            jdlCetakCetak(dok);
+        }
+
+        // Besarkan baris hari sehingga halaman penuh, dan kecilkan jika melimpah (kekal 1 halaman A4)
+        function jdlCetakMuat(d) {
+            d.querySelectorAll('.hal').forEach(hal => {
+                const rows = [...hal.querySelectorAll('table.grid tbody tr')];
+                if (!rows.length) return;
+                const set = v => rows.forEach(r => { r.style.height = v.toFixed(1) + 'mm'; });
+                let h = Math.min(30, (parseFloat(rows[0].style.height) || 15) + 10);
+                set(h);
+                for (let i = 0; i < 80 && hal.scrollHeight > hal.clientHeight + 1 && h > 7; i++) { h -= 0.5; set(h); }
+            });
+        }
+
+        // Cetak melalui iframe tersembunyi (tidak disekat oleh penyekat pop-up)
+        function jdlCetakCetak(dok) {
+            document.getElementById('vjCetakFrame')?.remove();
+            const f = document.createElement('iframe');
+            f.id = 'vjCetakFrame';
+            f.setAttribute('aria-hidden', 'true');
+            f.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
+            document.body.appendChild(f);
+            const d = f.contentDocument;
+            d.open(); d.write(dok); d.close();
+            const imgs = [...d.images];
+            Promise.all(imgs.map(i => i.complete ? 1 : new Promise(r => { i.onload = i.onerror = r; }))).then(() => setTimeout(() => {
+                jdlCetakMuat(d);
+                try { f.contentWindow.focus(); f.contentWindow.print(); }
+                catch (err) { showToast('Gagal mencetak: ' + err.message, 'error'); }
+            }, 150));
+        }
+
         document.addEventListener('keydown', e => {
             if (e.key === 'Escape' && jdlSel && !document.getElementById('jdlModal').classList.contains('hidden')) jdlTutup();
         });
@@ -12666,6 +13116,7 @@ window.VJSolver = (function () {
             if (jdlSel) {
                 const item = items.find(x => x[0] === jdlSel);
                 document.getElementById('jdlTitle').innerText = item[1];
+                document.getElementById('jdlBtnCetakSatu').classList.toggle('hidden', jdlMode === 'bilik');
                 document.getElementById('jdlStats').innerText = `${tw[jdlSel] || 0} daripada ${pl[jdlSel] || 0} waktu telah dijadualkan`;
 
                 // Isi petak
@@ -14724,7 +15175,7 @@ window.VJGanti = (function () {
                 @page{size:A4 landscape;margin:12mm} body{font-family:Arial,sans-serif;font-size:11px;color:#000}
                 h1,h2,p{text-align:center;margin:2px 0} table{width:100%;border-collapse:collapse;margin-top:10px}
                 th,td{border:1px solid #000;padding:5px;text-align:left} th{background:#eee}</style></head><body>
-                <h1>${e(g.tetapan.namaSekolah || VJI18N.t('SEKOLAH'))}</h1><h2>${VJI18N.t('JADUAL GURU GANTI')}</h2>
+                <h1>${e(VJStore.getSekolah().nama || g.tetapan.namaSekolah || VJI18N.t('SEKOLAH'))}</h1><h2>${VJI18N.t('JADUAL GURU GANTI')}</h2>
                 <p>${e(document.getElementById('gtTajuk').innerText)}</p>
                 <table><thead><tr>${['Bil','Guru Tidak Hadir','Sebab','Waktu','Masa','Subjek','Kelas','Guru Ganti','T/tangan'].map(h => '<th>' + VJI18N.t(h) + '</th>').join('')}</tr></thead><tbody>${rows}</tbody></table>
                 <p style="text-align:left;margin-top:14px">${VJI18N.t('Disediakan oleh')}: ${e(r.oleh)}</p><script>setTimeout(()=>print(),300)<\/script></body></html>`);
@@ -14734,7 +15185,7 @@ window.VJGanti = (function () {
         function gtEksportExcel() {
             const r = gtBarisSah(); if (!r) return;
             const g = VJStore.getGantian();
-            const aoa = [[g.tetapan.namaSekolah || 'SEKOLAH'], ['JADUAL GURU GANTI'], [document.getElementById('gtTajuk').innerText], [],
+            const aoa = [[VJStore.getSekolah().nama || g.tetapan.namaSekolah || 'SEKOLAH'], ['JADUAL GURU GANTI'], [document.getElementById('gtTajuk').innerText], [],
                 ['Bil', 'Guru Tidak Hadir', 'Sebab', 'Waktu', 'Masa', 'Subjek', 'Kelas', 'Guru Ganti'],
                 ...r.baris.map((x, i) => [i + 1, x.guruNama, x.sebab, 'W' + (x.waktu + 1), `${x.mula}–${x.tamat}`, x.subjekNama, x.kelasNama, x.gantiNama || 'Belum dipilih'])];
             const ws = XLSX.utils.aoa_to_sheet(aoa);

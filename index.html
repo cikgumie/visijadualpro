@@ -162,6 +162,36 @@ window.VJI18N = (function () {
         "Jumlah": "Total",
         "Disahkan oleh": "Approved by",
         "Dicetak": "Printed",
+        "Pratonton Cetakan": "Print Preview",
+        "kelas": "classes",
+        "guru": "teachers",
+        "Penuh warna": "Full colour",
+        "Ikut warna logo": "Logo colours",
+        "Hitam putih": "Black & white",
+        "Gaya kepala surat": "Letterhead style",
+        "Klasik": "Classic",
+        "Jalur": "Banner",
+        "Tengah": "Centred",
+        "Saiz tulisan": "Text size",
+        "Kecil": "Small",
+        "Sederhana": "Medium",
+        "Besar": "Large",
+        "Teks tambahan di bawah tajuk": "Extra text under the title",
+        "cth: Sesi Akademik 2026 · Berkuat kuasa 5 Januari 2026": "e.g. Academic Session 2026 · Effective 5 January 2026",
+        "Paparkan": "Show",
+        "Masa setiap waktu": "Time of each period",
+        "Nama guru / kelas dalam petak": "Teacher / class name in cells",
+        "Ruang tandatangan PGB": "Principal signature area",
+        "Tarikh cetak": "Print date",
+        "Nama sekolah, logo & PGB belum diisi.": "School name, logo & principal are not filled in yet.",
+        "Isi Profil Sekolah": "Fill in School Profile",
+        "Ini sahaja": "This one only",
+        "Senarai subjek & waktu": "Subject & period list",
+        "halaman": "page",
+        "halaman A4": "A4 pages",
+        "Pratonton cetakan": "Print preview",
+        "Tiada logo — guna warna biru asas.": "No logo — using the default blue.",
+        "Logo tiada warna jelas — guna warna biru asas.": "The logo has no clear colour — using the default blue.",
         "Setiap kelas / guru dicetak pada": "Each class / teacher is printed on",
         "satu halaman A4 melintang": "one landscape A4 page",
         ", dengan logo, nama & kod sekolah serta ruang tandatangan PGB daripada": ", with the school logo, name & code and a principal signature area from",
@@ -4269,6 +4299,17 @@ window.VJSampleData = function () {
         }
 
         .nav-sub { padding-left: 1.9rem; font-size: 0.8rem; }
+        .cp-h { font-size: 11px; font-weight: 700; color: #475569; margin-bottom: 0.4rem; }
+        .cp-seg { display: flex; padding: 2px; background: rgba(226, 232, 240, 0.8); border-radius: 0.6rem; }
+        .cp-seg label { flex: 1; position: relative; text-align: center; padding: 0.3rem 0.5rem; border-radius: 0.45rem; cursor: pointer; font-weight: 700; color: #64748B; }
+        .cp-seg label:has(input:checked) { background: #fff; color: #1E293B; box-shadow: 0 1px 2px rgba(15, 23, 42, 0.12); }
+        .cp-seg input, .cp-opt input { position: absolute; opacity: 0; pointer-events: none; }
+        .cp-opt { position: relative; display: flex; align-items: center; gap: 0.5rem; padding: 0.45rem 0.6rem; border: 1px solid #E2E8F0; border-radius: 0.6rem; cursor: pointer; font-weight: 600; color: #334155; }
+        .cp-opt:hover { background: #F8FAFC; }
+        .cp-opt:has(input:checked) { border-color: #6366F1; background: #EEF2FF; color: #3730A3; box-shadow: 0 0 0 1px #6366F1; }
+        .cp-opt:has(input:focus-visible), .cp-seg label:has(input:focus-visible) { outline: 2px solid #6366F1; outline-offset: 1px; }
+        .cp-kad { flex-direction: column; gap: 0.35rem; padding: 0.45rem 0.35rem; font-size: 11px; }
+        .cp-mini { display: block; width: 100%; padding: 0.3rem; border-radius: 0.35rem; background: #fff; border: 1px solid #E2E8F0; }
         .nav-head { padding: 0.85rem 0.75rem 0.3rem; font-size: 0.66rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: #94A3B8; white-space: nowrap; }
         .side-nav.collapsed .nav-head { font-size: 0; height: 1px; padding: 0; margin: 0.55rem 0.6rem; background: #E2E8F0; }
         .nav-cta { color: #4F46E5; }
@@ -5148,6 +5189,84 @@ window.VJSampleData = function () {
     <!-- MENU SISI (KIRI) + KANDUNGAN                                    -->
     <!-- ============================================================== -->
     <div class="flex-1 flex min-h-0">
+    <!-- ============================================================== -->
+    <!-- PRATONTON CETAKAN (1 kelas / 1 guru setiap A4)                  -->
+    <!-- ============================================================== -->
+    <div id="cpPanel" class="hidden fixed inset-0 z-[80] bg-slate-900/60 no-print" role="dialog" aria-modal="true" aria-labelledby="cpTajuk">
+      <div class="absolute inset-0 md:inset-4 bg-slate-100 md:rounded-2xl shadow-2xl overflow-hidden flex flex-col md:flex-row">
+        <aside class="md:w-80 shrink-0 bg-white border-b md:border-b-0 md:border-r border-slate-200 flex flex-col max-h-[48vh] md:max-h-none min-h-0">
+            <div class="flex items-center justify-between gap-2 px-4 py-3 border-b border-slate-200">
+                <h4 id="cpTajuk" class="font-heading font-bold text-sm text-slate-800 flex items-center gap-2"><i data-lucide="printer" class="w-4 h-4 text-brand-600"></i> Pratonton Cetakan</h4>
+                <button onclick="cpTutup()" class="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500" title="Tutup (Esc)"><i data-lucide="x" class="w-4 h-4"></i></button>
+            </div>
+            <div class="flex-1 min-h-0 overflow-y-auto p-4 space-y-4 text-xs" oninput="cpUbah(event)" onchange="cpUbah(event)">
+                <div>
+                    <p class="cp-h">Jadual</p>
+                    <div class="cp-seg">
+                        <label><input type="radio" name="cpJenis" value="kelas">Kelas</label>
+                        <label><input type="radio" name="cpJenis" value="guru">Guru</label>
+                    </div>
+                    <select id="cpSkop" class="mt-2 w-full text-xs border border-slate-300 rounded-lg px-2 py-1.5 bg-white"></select>
+                </div>
+                <div>
+                    <p class="cp-h">Warna</p>
+                    <div class="space-y-1.5">
+                        <label class="cp-opt"><input type="radio" name="cpWarna" value="penuh"><span class="flex-1">Penuh warna</span>
+                            <span class="flex gap-0.5"><span class="w-3 h-3 rounded-full" style="background:hsl(0 72% 86%)"></span><span class="w-3 h-3 rounded-full" style="background:hsl(137 58% 79%)"></span><span class="w-3 h-3 rounded-full" style="background:hsl(275 85% 91%)"></span><span class="w-3 h-3 rounded-full" style="background:hsl(52 50% 74%)"></span><span class="w-3 h-3 rounded-full" style="background:hsl(190 72% 86%)"></span></span></label>
+                        <label class="cp-opt"><input type="radio" name="cpWarna" value="logo"><span class="flex-1">Ikut warna logo</span><span id="cpSwLogo" class="flex gap-0.5"></span></label>
+                        <p id="cpNotaLogo" class="hidden text-[10px] text-slate-500 pl-1"></p>
+                        <label class="cp-opt"><input type="radio" name="cpWarna" value="hitam"><span class="flex-1">Hitam putih</span>
+                            <span class="flex gap-0.5"><span class="w-3 h-3 rounded-full bg-slate-900"></span><span class="w-3 h-3 rounded-full bg-slate-400"></span><span class="w-3 h-3 rounded-full border border-slate-300 bg-white"></span></span></label>
+                    </div>
+                </div>
+                <div>
+                    <p class="cp-h">Gaya kepala surat</p>
+                    <div class="grid grid-cols-3 gap-1.5">
+                        <label class="cp-opt cp-kad"><input type="radio" name="cpKepala" value="klasik">
+                            <span class="cp-mini"><span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-slate-400"></span><span class="h-1 w-6 rounded bg-slate-500"></span><span class="ml-auto h-1.5 w-3 rounded bg-slate-700"></span></span><span class="block h-px bg-slate-700 mt-1"></span></span>Klasik</label>
+                        <label class="cp-opt cp-kad"><input type="radio" name="cpKepala" value="jalur">
+                            <span class="cp-mini"><span class="flex items-center gap-1 rounded bg-slate-700 px-1 py-0.5"><span class="w-2.5 h-2.5 rounded-sm bg-white"></span><span class="h-1 w-6 rounded bg-white/80"></span><span class="ml-auto h-1.5 w-3 rounded bg-white"></span></span></span>Jalur</label>
+                        <label class="cp-opt cp-kad"><input type="radio" name="cpKepala" value="tengah">
+                            <span class="cp-mini flex flex-col items-center gap-0.5"><span class="w-2.5 h-2.5 rounded-full bg-slate-400"></span><span class="h-1 w-8 rounded bg-slate-500"></span><span class="block h-px w-full bg-slate-700"></span></span>Tengah</label>
+                    </div>
+                </div>
+                <div>
+                    <p class="cp-h">Saiz tulisan</p>
+                    <div class="cp-seg">
+                        <label><input type="radio" name="cpFon" value="kecil">Kecil</label>
+                        <label><input type="radio" name="cpFon" value="sederhana">Sederhana</label>
+                        <label><input type="radio" name="cpFon" value="besar">Besar</label>
+                    </div>
+                </div>
+                <div>
+                    <p class="cp-h">Teks tambahan di bawah tajuk</p>
+                    <input id="cpSubtajuk" type="text" maxlength="100" placeholder="cth: Sesi Akademik 2026 · Berkuat kuasa 5 Januari 2026" class="w-full text-xs border border-slate-300 rounded-lg px-2.5 py-1.5 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none">
+                </div>
+                <div>
+                    <p class="cp-h">Paparkan</p>
+                    <div class="space-y-1">
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" id="cpT_masa" class="w-3.5 h-3.5 accent-brand-600"> Masa setiap waktu</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" id="cpT_bawah" class="w-3.5 h-3.5 accent-brand-600"> Nama guru / kelas dalam petak</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" id="cpT_bilik" class="w-3.5 h-3.5 accent-brand-600"> Bilik khas</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" id="cpT_ringkasan" class="w-3.5 h-3.5 accent-brand-600"> Senarai subjek &amp; waktu</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" id="cpT_ttd" class="w-3.5 h-3.5 accent-brand-600"> Ruang tandatangan PGB</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" id="cpT_tarikh" class="w-3.5 h-3.5 accent-brand-600"> Tarikh cetak</label>
+                    </div>
+                </div>
+                <p id="cpAmaran" class="hidden text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">Nama sekolah, logo &amp; PGB belum diisi. <button onclick="cpTutup(); switchTab('sekolah')" class="font-bold underline">Isi Profil Sekolah</button></p>
+            </div>
+            <div class="px-4 py-3 border-t border-slate-200 flex items-center gap-2 bg-slate-50/70">
+                <span id="cpBilHal" class="text-[11px] font-semibold text-slate-500 mr-auto"></span>
+                <button onclick="cpTutup()" class="px-3 py-1.5 border border-slate-200 bg-white hover:bg-slate-100 rounded-lg text-xs font-bold text-slate-700">Tutup</button>
+                <button id="cpBtnCetak" onclick="cpCetak()" class="px-4 py-1.5 bg-brand-600 hover:bg-brand-700 disabled:opacity-40 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow"><i data-lucide="printer" class="w-3.5 h-3.5"></i> Cetak</button>
+            </div>
+        </aside>
+        <div class="flex-1 min-h-0 relative">
+            <iframe id="cpFrame" title="Pratonton cetakan" class="absolute inset-0 w-full h-full border-0 bg-slate-300"></iframe>
+        </div>
+      </div>
+    </div>
+
     <!-- Menu Tetapan (dropdown) -->
     <div id="tetapanMenu" class="hidden fixed z-[90] w-56 bg-white border border-slate-200 rounded-xl shadow-2xl py-1.5 no-print" onclick="event.stopPropagation()">
         <p class="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">Paparan & Data</p>
@@ -6010,40 +6129,6 @@ window.VJSampleData = function () {
                 @keyframes jdlIsi { 0%, 100% { background: #e2e8f0; transform: scale(.85); } 35%, 65% { background: var(--c, #7dd3fc); transform: scale(1); } }
                 @media (prefers-reduced-motion: reduce) { .jdl-anim span { animation-duration: 6s; } }
             </style>
-            <!-- Cetak jadual: 1 kelas / 1 guru setiap A4 -->
-            <div id="jdlCetakPanel" class="hidden fixed inset-0 z-[70] bg-slate-900/50 items-center justify-center p-4 no-print" role="dialog" aria-modal="true" aria-labelledby="jdlCetakTajuk" onclick="if (event.target === this) jdlCetakTutup()">
-              <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md">
-                <div class="flex items-center justify-between gap-2 px-5 py-3.5 border-b border-slate-200">
-                    <h4 id="jdlCetakTajuk" class="font-heading font-bold text-sm text-slate-800 flex items-center gap-2"><i data-lucide="printer" class="w-4 h-4 text-brand-600"></i> Cetak Jadual</h4>
-                    <button onclick="jdlCetakTutup()" class="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500" title="Tutup (Esc)"><i data-lucide="x" class="w-4 h-4"></i></button>
-                </div>
-                <div class="p-5 space-y-4 text-xs">
-                    <div>
-                        <p class="text-[11px] font-bold text-slate-600 mb-1.5">Jadual</p>
-                        <div class="flex p-0.5 bg-slate-200/70 rounded-lg font-bold w-fit">
-                            <button id="jdlCetakJKelas" onclick="jdlCetakSetJenis('kelas')" class="px-4 py-1.5 rounded-md transition flex items-center gap-1.5"><i data-lucide="school" class="w-3.5 h-3.5"></i>Kelas</button>
-                            <button id="jdlCetakJGuru" onclick="jdlCetakSetJenis('guru')" class="px-4 py-1.5 rounded-md transition flex items-center gap-1.5"><i data-lucide="user-round" class="w-3.5 h-3.5"></i>Guru</button>
-                        </div>
-                    </div>
-                    <div>
-                        <p class="text-[11px] font-bold text-slate-600 mb-1.5">Skop</p>
-                        <label class="flex items-center gap-2 py-1 cursor-pointer"><input type="radio" name="jdlCetakSkop" value="semua" class="accent-brand-600"> <span>Semua <b id="jdlCetakNSemua"></b></span></label>
-                        <label id="jdlCetakSkopPilihL" class="flex items-center gap-2 py-1 cursor-pointer"><input type="radio" name="jdlCetakSkop" value="pilih" class="accent-brand-600"> <span>Yang ditanda sahaja <b id="jdlCetakNPilih"></b></span></label>
-                    </div>
-                    <div class="space-y-1">
-                        <label class="flex items-center gap-2 py-0.5 cursor-pointer"><input type="checkbox" id="jdlCetakWarna" class="w-3.5 h-3.5 accent-brand-600"> Cetak berwarna</label>
-                        <label class="flex items-center gap-2 py-0.5 cursor-pointer"><input type="checkbox" id="jdlCetakRingkas" class="w-3.5 h-3.5 accent-brand-600"> Sertakan senarai subjek &amp; waktu</label>
-                    </div>
-                    <p class="text-[11px] text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">Setiap kelas / guru dicetak pada <b>satu halaman A4 melintang</b>, dengan logo, nama &amp; kod sekolah serta ruang tandatangan PGB daripada <button onclick="jdlCetakTutup(); switchTab('sekolah')" class="font-bold text-brand-700 hover:underline">Profil Sekolah</button>.</p>
-                    <p id="jdlCetakAmaran" class="hidden text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2"></p>
-                </div>
-                <div class="flex justify-end gap-2 px-5 py-3 border-t border-slate-200 bg-slate-50/60 rounded-b-2xl">
-                    <button onclick="jdlCetakTutup()" class="px-3 py-1.5 border border-slate-200 bg-white hover:bg-slate-100 rounded-lg text-xs font-bold text-slate-700">Batal</button>
-                    <button onclick="jdlCetakMula()" class="px-4 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow"><i data-lucide="printer" class="w-3.5 h-3.5"></i> Cetak</button>
-                </div>
-              </div>
-            </div>
-
             <div id="jdlModal" class="hidden fixed inset-0 z-[60] bg-slate-900/50 items-center justify-center p-4" onclick="if (event.target === this) jdlTutup()">
                 <div class="bg-white rounded-2xl shadow-2xl w-full max-w-[1400px] max-h-[92vh] overflow-auto p-4">
                     <div id="jdlEditor">
@@ -12654,67 +12739,174 @@ window.VJSolver = (function () {
         }
 
         // =====================================================================
-        // CETAK JADUAL — 1 kelas / 1 guru setiap halaman A4 melintang
+        // CETAK JADUAL — pratonton & reka bentuk (1 kelas / 1 guru setiap A4 melintang)
         // =====================================================================
-        let jdlCetakJenis = 'kelas';
-        function jdlCetakPilihan() {
-            try { return Object.assign({ warna: true, ringkasan: true }, JSON.parse(localStorage.getItem('visijadual_cetak') || '{}')); }
-            catch (e) { return { warna: true, ringkasan: true }; }
+        const CP_ASAL = { jenis: 'kelas', warna: 'penuh', kepala: 'klasik', fon: 'sederhana', subtajuk: '', masa: true, bawah: true, bilik: true, ringkasan: true, ttd: true, tarikh: true };
+        const CP_FON = { kecil: 0.88, sederhana: 1, besar: 1.14 };
+        let cpSatu = null;   // { jenis, id, nama } bila dibuka daripada jadual satu kelas / guru
+        let cpGiliran = 0;   // abaikan hasil render lama
+        let cpTimer = null;
+
+        function cpPilihan() {
+            let raw = {};
+            try { raw = JSON.parse(localStorage.getItem('visijadual_cetak') || '{}') || {}; } catch (e) {}
+            if (typeof raw.warna === 'boolean') raw.warna = raw.warna ? 'penuh' : 'hitam';
+            const o = Object.assign({}, CP_ASAL, raw);
+            if (!['penuh', 'logo', 'hitam'].includes(o.warna)) o.warna = 'penuh';
+            if (!['klasik', 'jalur', 'tengah'].includes(o.kepala)) o.kepala = 'klasik';
+            if (!CP_FON[o.fon]) o.fon = 'sederhana';
+            return o;
         }
-        function jdlCetakBuka() {
-            const o = jdlCetakPilihan();
-            document.getElementById('jdlCetakWarna').checked = !!o.warna;
-            document.getElementById('jdlCetakRingkas').checked = !!o.ringkasan;
-            jdlCetakSetJenis(jdlMode === 'guru' ? 'guru' : 'kelas', true);
-            const am = document.getElementById('jdlCetakAmaran');
-            const sk = VJStore.getSekolah();
-            am.innerText = sk.nama ? '' : 'Nama sekolah belum diisi. Isi di Profil Sekolah supaya kepala surat lengkap.';
-            am.classList.toggle('hidden', !!sk.nama);
-            const p = document.getElementById('jdlCetakPanel');
-            p.classList.remove('hidden'); p.classList.add('flex');
-            lucide.createIcons();
-        }
-        function jdlCetakTutup() {
-            const p = document.getElementById('jdlCetakPanel');
-            p.classList.add('hidden'); p.classList.remove('flex');
-        }
-        document.addEventListener('keydown', e => {
-            if (e.key === 'Escape' && !document.getElementById('jdlCetakPanel').classList.contains('hidden')) { e.stopImmediatePropagation(); jdlCetakTutup(); }
-        }, true);
-        function jdlCetakSetJenis(j, awal) {
-            jdlCetakJenis = j;
-            ['kelas', 'guru'].forEach(m => {
-                document.getElementById(m === 'kelas' ? 'jdlCetakJKelas' : 'jdlCetakJGuru').className =
-                    'px-4 py-1.5 rounded-md transition flex items-center gap-1.5 ' + (j === m ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-800');
-            });
-            const st = VJStore.getStatus().counts;
-            const nSemua = j === 'kelas' ? st.kelas : st.guru;
-            const nPilih = j === 'kelas' ? jdlPilihan.size : jdlPilihanGuru.size;
-            document.getElementById('jdlCetakNSemua').innerText = `(${nSemua})`;
-            document.getElementById('jdlCetakNPilih').innerText = `(${nPilih})`;
-            const r = document.querySelectorAll('input[name="jdlCetakSkop"]');
-            r[1].disabled = !nPilih;
-            document.getElementById('jdlCetakSkopPilihL').classList.toggle('opacity-40', !nPilih);
-            if (awal || !nPilih) (nPilih ? r[1] : r[0]).checked = true;
-        }
-        function jdlCetakMula() {
-            const o = { warna: document.getElementById('jdlCetakWarna').checked, ringkasan: document.getElementById('jdlCetakRingkas').checked };
-            try { localStorage.setItem('visijadual_cetak', JSON.stringify(o)); } catch (e) {}
-            const skop = (document.querySelector('input[name="jdlCetakSkop"]:checked') || {}).value;
-            const inp = VJStore.getSolverInput();
-            const semua = (jdlCetakJenis === 'kelas' ? inp.kelas : inp.guru).map(x => String(x[0]));
-            const pilih = jdlCetakJenis === 'kelas' ? jdlPilihan : jdlPilihanGuru;
-            const ids = skop === 'pilih' ? semua.filter(id => pilih.has(id)) : semua;
-            if (!ids.length) { showToast('Tiada jadual untuk dicetak.', 'warning'); return; }
-            jdlCetakTutup();
-            jdlCetakDokumen(jdlCetakJenis, ids, o);
-        }
-        function jdlCetakSatu() {
-            if (!jdlSel || jdlMode === 'bilik') return;
-            jdlCetakDokumen(jdlMode, [String(jdlSel)], jdlCetakPilihan());
+        function cpSimpanPilihan(o) {
+            const { jenis, skop, ...simpan } = o;
+            try { localStorage.setItem('visijadual_cetak', JSON.stringify(simpan)); } catch (e) {}
         }
 
-        function jdlCetakDokumen(jenis, ids, opt) {
+        function jdlCetakBuka() { cpBuka(jdlMode === 'guru' ? 'guru' : 'kelas', null); }
+        function jdlCetakSatu() {
+            if (!jdlSel || jdlMode === 'bilik') return;
+            const inp = VJStore.getSolverInput();
+            const item = (jdlMode === 'guru' ? inp.guru : inp.kelas).find(x => String(x[0]) === String(jdlSel));
+            cpBuka(jdlMode, { jenis: jdlMode, id: String(jdlSel), nama: item ? item[1] : '' });
+        }
+
+        function cpBuka(jenis, satu) {
+            cpSatu = satu;
+            const o = cpPilihan();
+            const panel = document.getElementById('cpPanel');
+            panel.querySelectorAll('input[type="radio"]').forEach(r => {
+                r.checked = (r.name === 'cpJenis' && r.value === jenis) || (r.name === 'cpWarna' && r.value === o.warna)
+                    || (r.name === 'cpKepala' && r.value === o.kepala) || (r.name === 'cpFon' && r.value === o.fon);
+            });
+            ['masa', 'bawah', 'bilik', 'ringkasan', 'ttd', 'tarikh'].forEach(k => { document.getElementById('cpT_' + k).checked = !!o[k]; });
+            document.getElementById('cpSubtajuk').value = o.subtajuk || '';
+            cpIsiSkop(jenis, true);
+            const sk = VJStore.getSekolah();
+            document.getElementById('cpAmaran').classList.toggle('hidden', !!sk.nama);
+            cpSwatchLogo();
+            panel.classList.remove('hidden');
+            lucide.createIcons();
+            cpRender();
+        }
+        function cpTutup() { document.getElementById('cpPanel').classList.add('hidden'); }
+        document.addEventListener('keydown', e => {
+            const p = document.getElementById('cpPanel');
+            if (e.key === 'Escape' && p && !p.classList.contains('hidden')) { e.stopImmediatePropagation(); cpTutup(); }
+        }, true);
+        window.addEventListener('resize', () => { const p = document.getElementById('cpPanel'); if (p && !p.classList.contains('hidden')) cpZum(); });
+
+        function cpIsiSkop(jenis, awal) {
+            const sel = document.getElementById('cpSkop');
+            const lama = sel.value;
+            const n = VJStore.getStatus().counts[jenis] || 0;
+            const nP = (jenis === 'kelas' ? jdlPilihan : jdlPilihanGuru).size;
+            const T = VJI18N.t;
+            let html = `<option value="semua">${T('Semua')} ${T(jenis === 'kelas' ? 'kelas' : 'guru')} (${n})</option>`;
+            if (nP) html += `<option value="pilih">${T('Yang ditanda sahaja')} (${nP})</option>`;
+            if (cpSatu && cpSatu.jenis === jenis) html += `<option value="satu">${T('Ini sahaja')}: ${escapeHtml(cpSatu.nama)}</option>`;
+            sel.innerHTML = html;
+            const ada = v => [...sel.options].some(x => x.value === v);
+            sel.value = awal ? (ada('satu') ? 'satu' : ada('pilih') ? 'pilih' : 'semua') : (ada(lama) ? lama : 'semua');
+        }
+
+        function cpBaca() {
+            const panel = document.getElementById('cpPanel');
+            const r = name => (panel.querySelector(`input[name="${name}"]:checked`) || {}).value;
+            const o = { jenis: r('cpJenis') || 'kelas', warna: r('cpWarna') || 'penuh', kepala: r('cpKepala') || 'klasik', fon: r('cpFon') || 'sederhana',
+                skop: document.getElementById('cpSkop').value, subtajuk: document.getElementById('cpSubtajuk').value.trim() };
+            ['masa', 'bawah', 'bilik', 'ringkasan', 'ttd', 'tarikh'].forEach(k => { o[k] = document.getElementById('cpT_' + k).checked; });
+            return o;
+        }
+        function cpUbah(e) {
+            const t = e && e.target;
+            if (t && t.name === 'cpJenis') cpIsiSkop(t.value, false);
+            clearTimeout(cpTimer);
+            cpTimer = setTimeout(cpRender, t && t.id === 'cpSubtajuk' ? 400 : 60);
+        }
+
+        function cpIds(o) {
+            const inp = VJStore.getSolverInput();
+            const semua = (o.jenis === 'kelas' ? inp.kelas : inp.guru).map(x => String(x[0]));
+            if (o.skop === 'satu' && cpSatu && cpSatu.jenis === o.jenis) return [cpSatu.id];
+            if (o.skop === 'pilih') { const p = o.jenis === 'kelas' ? jdlPilihan : jdlPilihanGuru; return semua.filter(id => p.has(id)); }
+            return semua;
+        }
+
+        // ---- Warna daripada logo: 1–3 warna dominan (abaikan putih, hitam & kelabu) ----
+        const cpLogoCache = new Map();
+        function cpWarnaLogo(src) {
+            if (!src) return Promise.resolve([]);
+            if (cpLogoCache.has(src)) return Promise.resolve(cpLogoCache.get(src));
+            return new Promise(res => {
+                const img = new Image();
+                img.onload = () => {
+                    const N = 64, c = document.createElement('canvas');
+                    c.width = c.height = N;
+                    const ctx = c.getContext('2d', { willReadFrequently: true });
+                    ctx.drawImage(img, 0, 0, N, N);
+                    const px = ctx.getImageData(0, 0, N, N).data;
+                    const bak = {};
+                    let legap = 0, berwarna = 0;
+                    for (let i = 0; i < px.length; i += 4) {
+                        if (px[i + 3] < 160) continue;
+                        legap++;
+                        const r = px[i] / 255, g = px[i + 1] / 255, b = px[i + 2] / 255;
+                        const mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2, dd = mx - mn;
+                        if (!dd) continue;
+                        const s = dd / (1 - Math.abs(2 * l - 1));
+                        if (s < 0.28 || l > 0.9 || l < 0.1) continue;
+                        let h = mx === r ? ((g - b) / dd) % 6 : mx === g ? (b - r) / dd + 2 : (r - g) / dd + 4;
+                        h = (h * 60 + 360) % 360;
+                        berwarna++;
+                        const k = Math.round(h / 12) % 30;
+                        const x = bak[k] || (bak[k] = { n: 0, cx: 0, cy: 0, s: 0, l: 0 });
+                        x.n++; x.cx += Math.cos(h * Math.PI / 180); x.cy += Math.sin(h * Math.PI / 180); x.s += s; x.l += l;
+                    }
+                    let hasil = [];
+                    if (legap && berwarna / legap >= 0.02) {
+                        const senarai = Object.values(bak).sort((a, b) => b.n - a.n).map(x => ({
+                            n: x.n, h: Math.round((Math.atan2(x.cy, x.cx) * 180 / Math.PI + 360) % 360), s: Math.round(100 * x.s / x.n), l: Math.round(100 * x.l / x.n)
+                        }));
+                        const beza = (a, b) => Math.min(Math.abs(a - b), 360 - Math.abs(a - b));
+                        senarai.forEach(x => {
+                            if (hasil.length >= 3 || x.n < senarai[0].n * 0.12) return;
+                            if (hasil.every(y => beza(x.h, y.h) >= 35)) hasil.push(x);
+                        });
+                    }
+                    cpLogoCache.set(src, hasil);
+                    res(hasil);
+                };
+                img.onerror = () => { cpLogoCache.set(src, []); res([]); };
+                img.src = src;
+            });
+        }
+        // Palet sel bagi mod "Ikut warna logo": setiap warna logo × 4 tona lembut
+        function cpPaletLogo(warna) {
+            const asas = warna.length ? warna : [{ h: 222, s: 60, l: 40 }];
+            const tona = [88, 79, 93, 72], out = [];
+            for (let j = 0; j < tona.length; j++) asas.forEach(c => {
+                const s = Math.max(35, Math.min(75, c.s));
+                out.push({ bg: `hsl(${c.h} ${s}% ${tona[j]}%)`, fg: `hsl(${c.h} 55% 17%)` });
+            });
+            return out;
+        }
+        function cpAksen(o, warna) {
+            if (o.warna === 'hitam') return { kuat: '#111111', muda: '#eeeeee' };
+            const c = warna[0] || (o.warna === 'logo' ? { h: 222, s: 60 } : null);
+            if (!c) return { kuat: '#1e293b', muda: '#eceff3' };
+            return { kuat: `hsl(${c.h} ${Math.max(40, Math.min(80, c.s))}% 30%)`, muda: `hsl(${c.h} 45% 93%)` };
+        }
+        async function cpSwatchLogo() {
+            const el = document.getElementById('cpSwLogo'), nota = document.getElementById('cpNotaLogo');
+            const sk = VJStore.getSekolah();
+            const w = await cpWarnaLogo(sk.logo);
+            el.innerHTML = cpPaletLogo(w).slice(0, Math.max(3, w.length * 2)).slice(0, 6).map(c => `<span class="w-3 h-3 rounded-full border border-black/10" style="background:${c.bg}"></span>`).join('');
+            nota.innerText = !sk.logo ? VJI18N.t('Tiada logo — guna warna biru asas.') : !w.length ? VJI18N.t('Logo tiada warna jelas — guna warna biru asas.') : '';
+            nota.classList.toggle('hidden', !nota.innerText);
+        }
+
+        // ---- Jana dokumen cetakan (HTML penuh) ----
+        function jdlCetakHtml(jenis, ids, o, warnaLogo) {
             const T = s => VJI18N.t(s), e = escapeHtml;
             const inp = VJStore.getSolverInput();
             jdlBinaWarna(inp.guru);
@@ -12729,22 +12921,31 @@ window.VJSolver = (function () {
             const senarai = jenis === 'kelas'
                 ? inp.kelas.filter(k => pilih.has(String(k[0]))).sort(VJStore.cmpKelas)
                 : inp.guru.filter(g => pilih.has(String(g[0]))).sort((a, b) => String(a[1]).localeCompare(String(b[1]), 'ms'));
-            if (!senarai.length) { showToast('Tiada jadual untuk dicetak.', 'warning'); return; }
             const kelasDari = t => String(t[3]).split(',').map(s => s.trim());
-            const warnaDari = t => !opt.warna ? '' : jenis === 'kelas' ? jdlWarna(t[1]) : jdlWarna('S' + t[5]);
+            const paletLogo = cpPaletLogo(warnaLogo);
+            const aksen = cpAksen(o, warnaLogo);
             const kunci = list => list.map(z => z.x.uuid + '#' + z.x.ke).sort().join('|');
             const tarikh = new Date().toLocaleDateString(VJI18N.locale(), { day: 'numeric', month: 'long', year: 'numeric' });
 
             const kepala = (jenisTajuk, nama) => `<div class="kepala">
                 ${sk.logo ? `<img class="logo" src="${sk.logo}" alt="">` : ''}
                 <div class="sek"><h1>${e(sk.nama || T('SEKOLAH'))}</h1>${sk.kod ? `<p>${T('Kod Sekolah')}: <b>${e(sk.kod)}</b></p>` : ''}</div>
-                <div class="tajuk"><div class="jenis">${T(jenisTajuk)}</div><div class="nama">${e(nama)}</div></div></div>`;
-            const kaki = kiri => `<div class="kaki"><div class="kiri">${kiri}<div class="tarikh">${T('Dicetak')}: ${e(tarikh)}</div></div>
-                <div class="ttd"><div>${T('Disahkan oleh')}:</div><div class="garis">${sk.pgb ? e(sk.pgb) : '&nbsp;'}</div>
-                <div>${e(T(sk.jawatan || 'Pengetua'))}${sk.nama ? ', ' + e(sk.nama) : ''}</div></div></div>`;
+                <div class="tajuk"><div class="jenis">${T(jenisTajuk)}</div><div class="nama">${e(nama)}</div>${o.subtajuk ? `<div class="sub">${e(o.subtajuk)}</div>` : ''}</div></div>`;
+            const kaki = kiri => `<div class="kaki"><div class="kiri">${kiri}${o.tarikh ? `<div class="tarikh">${T('Dicetak')}: ${e(tarikh)}</div>` : ''}</div>
+                ${o.ttd ? `<div class="ttd"><div>${T('Disahkan oleh')}:</div><div class="garis">${sk.pgb ? e(sk.pgb) : '&nbsp;'}</div>
+                <div>${e(T(sk.jawatan || 'Pengetua'))}${sk.nama ? ', ' + e(sk.nama) : ''}</div></div>` : ''}</div>`;
 
             const halaman = item => {
                 const id = String(item[0]);
+                // Warna sel: penuh = palet aplikasi; logo = tona warna logo (ikut urutan muncul); hitam = tiada
+                const urutan = new Map();
+                const warnaDari = t => {
+                    if (o.warna === 'hitam') return '';
+                    const k = jenis === 'kelas' ? String(t[1]) : 'S' + t[5];
+                    if (o.warna === 'penuh') return jdlWarna(k);
+                    if (!urutan.has(k)) urutan.set(k, urutan.size);
+                    return 'lc-' + (urutan.get(k) % paletLogo.length);
+                };
                 const sel = Array.from({ length: H * W }, () => []);
                 let jumWaktu = 0;
                 jadual.sesi.forEach(x => {
@@ -12754,7 +12955,6 @@ window.VJSolver = (function () {
                 });
                 const blok = (cfg[jenis] || {})[id] || {};
 
-                // Senarai subjek & waktu (daripada agihan)
                 const kump = {};
                 inp.transaksi.forEach(t => {
                     if (jenis === 'kelas' ? !kelasDari(t).includes(id) : String(t[1]) !== id) return;
@@ -12764,17 +12964,13 @@ window.VJSolver = (function () {
                 });
                 const baris = Object.values(kump).sort((a, b) => String(a.kod).localeCompare(String(b.kod), 'ms'));
                 const jumAgih = baris.reduce((a, r) => a + r.masa, 0);
-                const lajur = !opt.ringkasan || !baris.length ? 0 : baris.length > 14 ? 3 : baris.length > 5 ? 2 : 1;
+                const lajur = !o.ringkasan || !baris.length ? 0 : baris.length > 14 ? 3 : baris.length > 5 ? 2 : 1;
                 const perLajur = lajur ? Math.ceil(baris.length / lajur) : 0;
 
-                // Ketinggian baris hari supaya muat satu halaman A4 (190 mm boleh guna)
-                const tinggiRingkas = lajur ? (perLajur + 1) * 4.3 + 4 : 0;
-                const tinggiBaris = Math.max(9, Math.min(26, (188 - 27 - 7 - 27 - 10 - tinggiRingkas) / H));
-
                 let html = `<table class="grid"><thead><tr><th class="hari">${T('Hari / Waktu')}</th>` +
-                    cfg.waktu.map((w, p) => `<th><b>${p + 1}</b><small>${e(w.mula)}${w.tamat ? '–' + e(w.tamat) : ''}</small></th>`).join('') + `</tr></thead><tbody>`;
+                    cfg.waktu.map((w, p) => `<th><b>${p + 1}</b>${o.masa ? `<small>${e(w.mula)}${w.tamat ? '–' + e(w.tamat) : ''}</small>` : ''}</th>`).join('') + `</tr></thead><tbody>`;
                 cfg.hari.forEach((h, d) => {
-                    html += `<tr style="height:${tinggiBaris.toFixed(1)}mm"><th class="hari">${e(T(h))}</th>`;
+                    html += `<tr style="height:16mm"><th class="hari">${e(T(h))}</th>`;
                     let p = 0;
                     while (p < W) {
                         const list = sel[d * W + p], lb = blok[`${d}-${p}`];
@@ -12786,11 +12982,12 @@ window.VJSolver = (function () {
                             const n = Math.min(4, list.length);
                             html += `<td colspan="${span}" class="sesi n${n}"><div class="isi">` + list.map(z => {
                                 const t = z.t, lbl = t[9] ? ` <i>${e(t[9])}</i>` : '';
-                                const bilik = z.x.bilik && namaBilik[z.x.bilik] ? ' · ' + e(namaBilik[z.x.bilik]) : '';
-                                const bawah = jenis === 'kelas' ? e(singGuru[t[1]] || t[2] || '-') : e(t[4]);
-                                return `<div class="s ${warnaDari(t)}"><b>${e(kodSubjek[t[5]] || t[6])}${lbl}</b><span>${bawah}${bilik}</span></div>`;
+                                const bilik = o.bilik && z.x.bilik && namaBilik[z.x.bilik] ? e(namaBilik[z.x.bilik]) : '';
+                                const bawah = o.bawah ? (jenis === 'kelas' ? e(singGuru[t[1]] || t[2] || '-') : e(t[4])) : '';
+                                const teks = [bawah, bilik].filter(Boolean).join(' · ');
+                                return `<div class="s ${warnaDari(t)}"><b>${e(kodSubjek[t[5]] || t[6])}${lbl}</b>${teks ? `<span>${teks}</span>` : ''}</div>`;
                             }).join('') + `</div></td>`;
-                        } else if (!list.length && lb) {
+                        } else if (lb) {
                             while (p + span < W && !sel[d * W + p + span].length && blok[`${d}-${p + span}`] === lb) span++;
                             html += `<td colspan="${span}" class="blok">${e(lb)}</td>`;
                         } else {
@@ -12813,58 +13010,78 @@ window.VJSolver = (function () {
                     ringkas += '</div>';
                 }
 
+                const jumTeks = `${T('Waktu seminggu')}: <b>${jumWaktu}</b>${jumAgih && jumAgih !== jumWaktu ? ` / ${jumAgih}` : ''}`;
                 const info = jenis === 'kelas'
-                    ? [item[3] ? `${T('Guru Kelas')}: <b>${e(item[3])}</b>` : '', `${T('Waktu seminggu')}: <b>${jumWaktu}</b>${jumAgih && jumAgih !== jumWaktu ? ` / ${jumAgih}` : ''}`]
-                    : [item[2] && item[2] !== item[1] ? `${T('Singkatan')}: <b>${e(item[2])}</b>` : '', `${T('Waktu seminggu')}: <b>${jumWaktu}</b>${jumAgih && jumAgih !== jumWaktu ? ` / ${jumAgih}` : ''}`];
+                    ? [item[3] ? `${T('Guru Kelas')}: <b>${e(item[3])}</b>` : '', jumTeks]
+                    : [item[2] && item[2] !== item[1] ? `${T('Singkatan')}: <b>${e(item[2])}</b>` : '', jumTeks];
                 return `<section class="hal">${kepala(jenis === 'kelas' ? 'JADUAL WAKTU KELAS' : 'JADUAL WAKTU GURU', item[1])}
                     ${html}${ringkas}${kaki(info.filter(Boolean).map(x => `<div>${x}</div>`).join(''))}</section>`;
             };
 
-            const tajukDok = (jenis === 'kelas' ? T('JADUAL WAKTU KELAS') : T('JADUAL WAKTU GURU')) + (senarai.length === 1 ? ' - ' + senarai[0][1] : '');
-            const palet = JDL_PALET.map((c, i) => `.jc-${i}{background-color:${c.bg};color:${c.fg}}`).join('');
-            const dok = `<!doctype html><html lang="${VJI18N.lang()}"><head><meta charset="utf-8"><title>${e(tajukDok)}</title><style>
+            const tajukDok = T(jenis === 'kelas' ? 'JADUAL WAKTU KELAS' : 'JADUAL WAKTU GURU') + (senarai.length === 1 ? ' - ' + senarai[0][1] : '');
+            const palet = o.warna === 'logo'
+                ? paletLogo.map((c, i) => `.lc-${i}{background-color:${c.bg};color:${c.fg}}`).join('')
+                : JDL_PALET.map((c, i) => `.jc-${i}{background-color:${c.bg};color:${c.fg}}`).join('');
+            const f = CP_FON[o.fon] || 1;
+            return `<!doctype html><html lang="${VJI18N.lang()}"><head><meta charset="utf-8"><title>${e(tajukDok)}</title><style>
                 @page { size: A4 landscape; margin: 9mm 10mm; }
+                :root { --f: ${f}; --aksen: ${aksen.kuat}; --aksen-muda: ${aksen.muda}; --z: 1; }
                 * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
                 html, body { margin: 0; padding: 0; background: #fff; }
                 body { font-family: Arial, Helvetica, sans-serif; color: #111; }
                 .hal { width: 277mm; height: 188mm; display: flex; flex-direction: column; overflow: hidden; break-after: page; page-break-after: always; }
                 .hal:last-child { break-after: auto; page-break-after: auto; }
-                .kepala { display: flex; align-items: center; gap: 4mm; border-bottom: 0.6mm solid #111; padding-bottom: 2.5mm; margin-bottom: 2.5mm; min-height: 22mm; }
+                .hal > * { flex-shrink: 0; }
+                .kepala { display: flex; align-items: center; gap: 4mm; border-bottom: 0.7mm solid var(--aksen); padding-bottom: 2.5mm; margin-bottom: 2.5mm; min-height: 20mm; }
                 .logo { height: 20mm; width: auto; max-width: 32mm; object-fit: contain; }
-                .sek h1 { font-size: 15pt; margin: 0; text-transform: uppercase; line-height: 1.15; }
-                .sek p { margin: 1mm 0 0; font-size: 9.5pt; color: #333; }
+                .sek h1 { font-size: calc(15pt * var(--f)); margin: 0; text-transform: uppercase; line-height: 1.15; color: var(--aksen); }
+                .sek p { margin: 1mm 0 0; font-size: calc(9.5pt * var(--f)); color: #333; }
                 .tajuk { margin-left: auto; text-align: right; }
-                .tajuk .jenis { font-size: 9pt; letter-spacing: 0.08em; color: #444; font-weight: bold; }
-                .tajuk .nama { font-size: 20pt; font-weight: 800; line-height: 1.1; }
+                .tajuk .jenis { font-size: calc(9pt * var(--f)); letter-spacing: 0.08em; color: #444; font-weight: bold; }
+                .tajuk .nama { font-size: calc(20pt * var(--f)); font-weight: 800; line-height: 1.1; }
+                .tajuk .sub { font-size: calc(8.5pt * var(--f)); color: #444; margin-top: 0.5mm; }
+                /* Gaya kepala: jalur */
+                .k-jalur .kepala { background: var(--aksen); color: #fff; border: 0; border-radius: 1.6mm; padding: 2.5mm 4mm; }
+                .k-jalur .logo { background: #fff; border-radius: 1.4mm; padding: 1mm; height: 18mm; }
+                .k-jalur .sek h1 { color: #fff; } .k-jalur .sek p, .k-jalur .tajuk .jenis, .k-jalur .tajuk .sub { color: rgba(255,255,255,.85); }
+                /* Gaya kepala: tengah */
+                .k-tengah .kepala { flex-direction: column; justify-content: center; gap: 1mm; text-align: center; }
+                .k-tengah .logo { height: 15mm; }
+                .k-tengah .tajuk { margin: 0; text-align: center; display: flex; flex-wrap: wrap; justify-content: center; align-items: baseline; column-gap: 3mm; }
+                .k-tengah .tajuk .nama { font-size: calc(16pt * var(--f)); }
+                .k-tengah .tajuk .sub { flex-basis: 100%; }
                 table.grid { width: 100%; border-collapse: collapse; table-layout: fixed; }
                 .grid th, .grid td { border: 0.25mm solid #444; }
-                .grid thead th { font-size: 8pt; padding: 0.8mm 0.3mm; background: #eceff3; }
-                .grid thead small { display: block; font-weight: normal; font-size: 6.3pt; color: #444; white-space: nowrap; }
-                .grid th.hari { width: 23mm; font-size: 9pt; text-align: left; padding-left: 2mm; background: #eceff3; }
+                .grid thead th { font-size: calc(8pt * var(--f)); padding: 0.8mm 0.3mm; background: var(--aksen-muda); }
+                .grid thead small { display: block; font-weight: normal; font-size: calc(6.3pt * var(--f)); color: #444; white-space: nowrap; }
+                .grid th.hari { width: 23mm; font-size: calc(9pt * var(--f)); text-align: left; padding-left: 2mm; background: var(--aksen-muda); }
                 .grid td { padding: 0.5mm; vertical-align: middle; text-align: center; overflow: hidden; }
                 .grid td.sesi { position: relative; }
                 .isi { position: absolute; inset: 0.6mm; display: flex; flex-direction: column; gap: 0.4mm; }
                 .isi .s { flex: 1; min-height: 0; display: flex; flex-direction: column; justify-content: center; border-radius: 0.8mm; padding: 0.3mm 0.6mm; line-height: 1.12; overflow: hidden; }
-                .n1 .s b { font-size: 10pt; } .n1 .s span { font-size: 7.5pt; }
-                .s b { display: block; font-size: 9pt; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+                .s b { display: block; font-size: calc(9pt * var(--f)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
                 .s b i { font-style: normal; font-weight: 600; opacity: 0.75; }
-                .s span { display: block; font-size: 7pt; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-                .n2 .s b { font-size: 8pt; } .n3 .s b, .n4 .s b { font-size: 6.8pt; } .n3 .s span, .n4 .s span { font-size: 5.8pt; }
-                .grid td.blok { background: #f1f1f1; color: #555; font-size: 7pt; font-weight: bold; letter-spacing: 0.05em; }
+                .s span { display: block; font-size: calc(7pt * var(--f)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+                .n1 .s b { font-size: calc(10pt * var(--f)); } .n1 .s span { font-size: calc(7.5pt * var(--f)); }
+                .n2 .s b { font-size: calc(8pt * var(--f)); } .n3 .s b, .n4 .s b { font-size: calc(6.8pt * var(--f)); } .n3 .s span, .n4 .s span { font-size: calc(5.8pt * var(--f)); }
+                .grid td.blok { background: #f1f1f1; color: #555; font-size: calc(7pt * var(--f)); font-weight: bold; letter-spacing: 0.05em; }
                 .ringkas { margin-top: 2.5mm; display: flex; gap: 3mm; align-items: flex-start; }
-                .ringkas table { flex: 1; border-collapse: collapse; font-size: 7.3pt; }
-                .ringkas th, .ringkas td { border: 0.2mm solid #999; padding: 0.4mm 1.2mm; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 60mm; }
-                .ringkas th { background: #eceff3; } .ringkas .n { text-align: center; width: 11mm; }
+                .ringkas table { flex: 1; border-collapse: collapse; font-size: calc(7.3pt * var(--f)); table-layout: fixed; }
+                .ringkas th, .ringkas td { border: 0.2mm solid #999; padding: 0.4mm 1.2mm; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+                .ringkas th { background: var(--aksen-muda); } .ringkas .n { text-align: center; width: 11mm; }
                 .sw { display: inline-block; width: 2.4mm; height: 2.4mm; border-radius: 0.5mm; margin-right: 1mm; vertical-align: -0.3mm; }
-                .sw:not([class*="jc-"]) { display: none; }
-                .kaki { margin-top: auto; display: flex; justify-content: space-between; align-items: flex-end; font-size: 8.5pt; padding-top: 2mm; }
-                .kiri div { margin-top: 0.8mm; } .tarikh { font-size: 7pt; color: #666; }
+                .sw:not([class*="jc-"]):not([class*="lc-"]) { display: none; }
+                .kaki { margin-top: auto; display: flex; justify-content: space-between; align-items: flex-end; font-size: calc(8.5pt * var(--f)); padding-top: 2mm; }
+                .kiri div { margin-top: 0.8mm; } .tarikh { font-size: calc(7pt * var(--f)); color: #666; }
                 .ttd { text-align: center; min-width: 70mm; }
                 .ttd .garis { border-top: 0.25mm dotted #111; margin-top: 12mm; padding-top: 1mm; font-weight: bold; text-transform: uppercase; }
-                @media screen { body { background: #e5e7eb; } .hal { background: #fff; margin: 8mm auto; padding: 11mm 10mm; width: 297mm; height: 210mm; box-shadow: 0 2px 8px rgba(0,0,0,.2); } }
+                @media screen {
+                    body { background: #cbd5e1; zoom: var(--z); padding: 6mm 0; }
+                    .hal { background: #fff; margin: 0 auto 6mm; padding: 11mm 10mm; width: 297mm; height: 210mm; box-shadow: 0 2px 10px rgba(15,23,42,.25); }
+                    .kosong { font: 14px Arial, sans-serif; color: #475569; text-align: center; padding: 80px 20px; }
+                }
                 ${palet}
-            </style></head><body>${senarai.map(halaman).join('')}</body></html>`;
-            jdlCetakCetak(dok);
+            </style></head><body class="k-${o.kepala}">${senarai.map(halaman).join('') || `<p class="kosong">${T('Tiada jadual untuk dicetak.')}</p>`}</body></html>`;
         }
 
         // Besarkan baris hari sehingga halaman penuh, dan kecilkan jika melimpah (kekal 1 halaman A4)
@@ -12873,28 +13090,50 @@ window.VJSolver = (function () {
                 const rows = [...hal.querySelectorAll('table.grid tbody tr')];
                 if (!rows.length) return;
                 const set = v => rows.forEach(r => { r.style.height = v.toFixed(1) + 'mm'; });
-                let h = Math.min(30, (parseFloat(rows[0].style.height) || 15) + 10);
-                set(h);
-                for (let i = 0; i < 80 && hal.scrollHeight > hal.clientHeight + 1 && h > 7; i++) { h -= 0.5; set(h); }
+                const muat = () => hal.scrollHeight <= hal.clientHeight + 1;
+                let lo = 7, hi = 30;
+                set(hi);
+                if (muat()) return;
+                for (let i = 0; i < 9; i++) { const m = (lo + hi) / 2; set(m); if (muat()) lo = m; else hi = m; }
+                set(lo);
             });
         }
 
-        // Cetak melalui iframe tersembunyi (tidak disekat oleh penyekat pop-up)
-        function jdlCetakCetak(dok) {
-            document.getElementById('vjCetakFrame')?.remove();
-            const f = document.createElement('iframe');
-            f.id = 'vjCetakFrame';
-            f.setAttribute('aria-hidden', 'true');
-            f.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
-            document.body.appendChild(f);
+        function cpZum() {
+            const f = document.getElementById('cpFrame');
+            const d = f.contentDocument;
+            if (!d || !d.documentElement) return;
+            const lebar = 297 * 96 / 25.4 + 24;
+            d.documentElement.style.setProperty('--z', Math.min(1.25, Math.max(0.2, (f.clientWidth - 8) / lebar)).toFixed(3));
+        }
+
+        async function cpRender() {
+            const giliran = ++cpGiliran;
+            const o = cpBaca();
+            cpSimpanPilihan(o);
+            const ids = cpIds(o);
+            const sk = VJStore.getSekolah();
+            const warna = await cpWarnaLogo(sk.logo);
+            if (giliran !== cpGiliran) return;
+            const dok = jdlCetakHtml(o.jenis, ids, o, warna);
+            const f = document.getElementById('cpFrame');
+            const lama = f.contentDocument && f.contentDocument.scrollingElement ? f.contentDocument.scrollingElement.scrollTop : 0;
             const d = f.contentDocument;
             d.open(); d.write(dok); d.close();
-            const imgs = [...d.images];
-            Promise.all(imgs.map(i => i.complete ? 1 : new Promise(r => { i.onload = i.onerror = r; }))).then(() => setTimeout(() => {
-                jdlCetakMuat(d);
-                try { f.contentWindow.focus(); f.contentWindow.print(); }
-                catch (err) { showToast('Gagal mencetak: ' + err.message, 'error'); }
-            }, 150));
+            cpZum();
+            await Promise.all([...d.images].map(i => i.complete ? 1 : new Promise(r => { i.onload = i.onerror = r; })));
+            if (giliran !== cpGiliran) return;
+            jdlCetakMuat(d);
+            if (d.scrollingElement) d.scrollingElement.scrollTop = lama;
+            const n = d.querySelectorAll('.hal').length;
+            document.getElementById('cpBilHal').innerText = `${n} ${VJI18N.t(n === 1 ? 'halaman' : 'halaman A4')}`;
+            document.getElementById('cpBtnCetak').disabled = !n;
+        }
+
+        function cpCetak() {
+            const f = document.getElementById('cpFrame');
+            try { f.contentWindow.focus(); f.contentWindow.print(); }
+            catch (err) { showToast('Gagal mencetak: ' + err.message, 'error'); }
         }
 
         document.addEventListener('keydown', e => {

@@ -126,6 +126,15 @@ window.VJI18N = (function () {
         "Alih / Kunci": "Move / Lock",
         "Analisis Beban Mengikut Mata Pelajaran": "Workload Analysis by Subject",
         "Analisis Subjek": "Subject Analysis",
+        "Jadual": "Timetable",
+        "Laporan & Analisis": "Reports & Analysis",
+        "Persediaan": "Setup",
+        "Tetapan Asas": "Basic Setup",
+        "Persediaan: Data Induk, Slot Masa, Bilik Khas, Hubungan Sesi": "Setup: Master Data, Time Slots, Special Rooms, Session Relations",
+        "Beban Guru": "Teacher Workload",
+        "Beban waktu setiap guru": "Teaching load of each teacher",
+        "Simpan arkib, reset dan pulihkan data": "Save an archive, reset and restore data",
+        "Arkib & Reset Baharu": "New Archive & Reset",
         "Arkib / Reset": "Archive / Reset",
         "Arkib Data": "Data Archive",
         "Arkibkan Agihan (Snapshot Salinan)": "Archive Allocations (Snapshot Copy)",
@@ -4196,6 +4205,14 @@ window.VJSampleData = function () {
         }
 
         .nav-sub { padding-left: 1.9rem; font-size: 0.8rem; }
+        .nav-head { padding: 0.85rem 0.75rem 0.3rem; font-size: 0.66rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: #94A3B8; white-space: nowrap; }
+        .side-nav.collapsed .nav-head { font-size: 0; height: 1px; padding: 0; margin: 0.55rem 0.6rem; background: #E2E8F0; }
+        .nav-cta { color: #4F46E5; }
+        .nav-cta:not(.active) { background-color: #EEF2FF; }
+        .nav-cta:hover { background-color: #E0E7FF; color: #4338CA; }
+        .nav-foot-btn { display: inline-flex; align-items: center; justify-content: center; width: 2rem; height: 2rem; flex-shrink: 0; border-radius: 0.5rem; color: #64748B; }
+        .nav-foot-btn:hover { background: #F1F5F9; color: #1E293B; }
+        .side-nav.collapsed .nav-foot { justify-content: center; }
         .nav-group-has { color: #4F46E5 !important; }
         #navTetapanSub { display: none; }
         #navTetapanSub.open { display: block; }
@@ -5085,7 +5102,8 @@ window.VJSampleData = function () {
 
         <aside id="sideNav" class="side-nav no-print">
             <nav class="flex-1 overflow-y-auto p-2 space-y-0.5">
-                <!-- VisiJadual -->
+                <!-- ===== VisiJadual: JADUAL ===== -->
+                <p class="nav-head sys-jadual" style="margin-top:0.15rem">Jadual</p>
                 <button onclick="switchTab('matrix')" id="nav-matrix" class="nav-tab active sys-jadual" title="Matriks Kelas">
                     <i data-lucide="grid" class="w-4 h-4 shrink-0"></i><span class="nav-label">Matriks Kelas</span>
                 </button>
@@ -5098,10 +5116,12 @@ window.VJSampleData = function () {
                 <button onclick="jdlBukaMod('bilik')" id="nav-jdl-bilik" class="nav-tab sys-jadual" title="Penggunaan bilik khas">
                     <i data-lucide="door-closed" class="w-4 h-4 shrink-0"></i><span class="nav-label">Bilik</span>
                 </button>
-                <button onclick="jdlSusunDariMenu()" id="nav-susun" class="nav-tab sys-jadual" title="Susun Jadual">
+                <button onclick="jdlSusunDariMenu()" id="nav-susun" class="nav-tab nav-cta sys-jadual" title="Susun Jadual">
                     <i data-lucide="wand-sparkles" class="w-4 h-4 shrink-0"></i><span class="nav-label">Susun Jadual</span>
                 </button>
-                <!-- VisiRelief -->
+
+                <!-- ===== VisiRelief ===== -->
+                <p class="nav-head sys-relief" style="margin-top:0.15rem">Guru Ganti</p>
                 <button onclick="bukaRelief('kalendar')" id="nav-gt-kalendar" class="nav-tab sys-relief" title="Kalendar Guru Ganti">
                     <i data-lucide="calendar-days" class="w-4 h-4 shrink-0"></i><span class="nav-label">Kalendar</span>
                 </button>
@@ -5111,12 +5131,30 @@ window.VJSampleData = function () {
                 <button onclick="bukaRelief('tetapan')" id="nav-gt-tetapan" class="nav-tab sys-relief" title="Tetapan & Cuti">
                     <i data-lucide="calendar-cog" class="w-4 h-4 shrink-0"></i><span class="nav-label">Tetapan & Cuti</span>
                 </button>
-                <button onclick="toggleNavTetapan()" id="navTetapanBtn" class="nav-tab" title="Tetapan" aria-expanded="false" aria-controls="navTetapanSub">
-                    <i data-lucide="settings" class="w-4 h-4 shrink-0"></i><span class="nav-label">Tetapan</span><i data-lucide="chevron-right" id="navTetapanChev" class="w-3.5 h-3.5 shrink-0 nav-label"></i>
+
+                <!-- ===== VisiJadual: LAPORAN & ANALISIS ===== -->
+                <p class="nav-head sys-jadual">Laporan & Analisis</p>
+                <button onclick="switchTab('kelas')" id="nav-kelas" class="nav-tab sys-jadual" title="Rumusan Kelas">
+                    <i data-lucide="school" class="w-4 h-4 shrink-0"></i><span class="nav-label">Rumusan Kelas</span>
+                </button>
+                <button onclick="switchTab('subjek')" id="nav-subjek" class="nav-tab sys-jadual" title="Analisis Subjek">
+                    <i data-lucide="book-open" class="w-4 h-4 shrink-0"></i><span class="nav-label">Analisis Subjek</span>
+                </button>
+                <button onclick="switchTab('guru')" id="nav-guru" class="nav-tab sys-jadual" title="Beban waktu setiap guru">
+                    <i data-lucide="users" class="w-4 h-4 shrink-0"></i><span class="nav-label">Beban Guru</span>
+                </button>
+                <button onclick="switchTab('banding')" id="nav-banding" class="nav-tab sys-jadual" title="Banding Jadual">
+                    <i data-lucide="git-compare" class="w-4 h-4 shrink-0"></i><span class="nav-label">Banding Jadual</span>
+                </button>
+
+                <!-- ===== PERSEDIAAN (boleh dilipat) ===== -->
+                <p class="nav-head">Persediaan</p>
+                <button onclick="toggleNavTetapan()" id="navTetapanBtn" class="nav-tab" title="Persediaan: Data Induk, Slot Masa, Bilik Khas, Hubungan Sesi" aria-expanded="false" aria-controls="navTetapanSub">
+                    <i data-lucide="settings" class="w-4 h-4 shrink-0"></i><span class="nav-label">Tetapan Asas</span><i data-lucide="chevron-right" id="navTetapanChev" class="w-3.5 h-3.5 shrink-0 nav-label"></i>
                 </button>
                 <div id="navTetapanSub" class="space-y-0.5">
                     <button onclick="VJFile.openDataInduk()" class="nav-tab nav-sub" title="Setup nama guru, kelas, bilik & subjek">
-                        <i data-lucide="database" class="w-4 h-4 shrink-0"></i><span class="nav-label">Data Induk (Setup)</span>
+                        <i data-lucide="database" class="w-4 h-4 shrink-0"></i><span class="nav-label">Data Induk</span>
                     </button>
                     <button onclick="switchTab('slot')" id="nav-slot" class="nav-tab nav-sub sys-jadual" title="Slot Masa">
                         <i data-lucide="calendar-clock" class="w-4 h-4 shrink-0"></i><span class="nav-label">Slot Masa</span>
@@ -5127,42 +5165,29 @@ window.VJSampleData = function () {
                     <button onclick="switchTab('hubungan')" id="nav-hubungan" class="nav-tab nav-sub sys-jadual" title="Hubungan Antara Sesi">
                         <i data-lucide="link-2" class="w-4 h-4 shrink-0"></i><span class="nav-label">Hubungan Sesi</span>
                     </button>
-                    <button onclick="switchTab('guru')" id="nav-guru" class="nav-tab nav-sub sys-jadual" title="Jadual Guru">
-                        <i data-lucide="users" class="w-4 h-4 shrink-0"></i><span class="nav-label">Jadual Guru</span>
-                    </button>
-                    <button onclick="switchTab('kelas')" id="nav-kelas" class="nav-tab nav-sub sys-jadual" title="Rumusan Kelas">
-                        <i data-lucide="school" class="w-4 h-4 shrink-0"></i><span class="nav-label">Rumusan Kelas</span>
-                    </button>
-                    <button onclick="switchTab('subjek')" id="nav-subjek" class="nav-tab nav-sub sys-jadual" title="Analisis Subjek">
-                        <i data-lucide="book-open" class="w-4 h-4 shrink-0"></i><span class="nav-label">Analisis Subjek</span>
-                    </button>
-                    <button onclick="switchTab('banding')" id="nav-banding" class="nav-tab nav-sub sys-jadual" title="Banding Jadual">
-                        <i data-lucide="git-compare" class="w-4 h-4 shrink-0"></i><span class="nav-label">Banding Jadual</span>
-                    </button>
-                    <button onclick="switchTab('arkib')" id="nav-arkib" class="nav-tab nav-sub sys-jadual" title="Arkib Data">
-                        <i data-lucide="archive" class="w-4 h-4 shrink-0"></i><span class="nav-label">Arkib Data</span>
-                    </button>
-                    <button onclick="openTetapanModal()" class="nav-tab nav-sub" title="Tukar Kata Laluan">
-                        <i data-lucide="key-round" class="w-4 h-4 shrink-0"></i><span class="nav-label">Tukar Kata Laluan</span>
-                    </button>
-                    <div class="nav-tab nav-sub cursor-default" title="Language" data-no-i18n>
-                        <i data-lucide="languages" class="w-4 h-4 shrink-0"></i><span class="nav-label flex-1 flex items-center gap-2">Language<select data-vj-lang aria-label="Language" class="ml-auto text-xs border border-slate-200 rounded-lg px-1.5 py-0.5 bg-white"><option value="en">English</option><option value="ms">Bahasa Melayu</option></select></span>
-                    </div>
                 </div>
-            </nav>
-            <div class="p-2 border-t border-slate-200 space-y-0.5">
-                <button onclick="VJFile.openDataInduk()" class="side-act text-slate-700 hover:bg-slate-100" title="Urus senarai Guru, Kelas, Bilik & Subjek">
-                    <i data-lucide="database" class="w-4 h-4 shrink-0"></i><span class="nav-label">Data Induk</span>
-                </button>
-                <button onclick="openArkibModal()" class="sys-jadual side-act text-rose-600 hover:bg-rose-50" title="Urus Arkib dan Reset">
-                    <i data-lucide="archive-restore" class="w-4 h-4 shrink-0"></i><span class="nav-label">Arkib / Reset</span>
-                </button>
-                <button onclick="exportToExcel()" class="sys-jadual side-act text-emerald-700 hover:bg-emerald-50" title="Eksport ke fail Excel">
-                    <i data-lucide="download" class="w-4 h-4 shrink-0"></i><span class="nav-label">Eksport Excel</span>
-                </button>
-                <button onclick="triggerImportExcel()" class="sys-jadual side-act text-brand-700 hover:bg-brand-50" title="Import jadual dari fail Excel">
+
+                <!-- ===== VisiJadual: DATA ===== -->
+                <p class="nav-head sys-jadual">Data</p>
+                <button onclick="triggerImportExcel()" class="nav-tab sys-jadual" title="Import jadual dari fail Excel">
                     <i data-lucide="upload" class="w-4 h-4 shrink-0"></i><span class="nav-label">Import Excel</span>
                 </button>
+                <button onclick="exportToExcel()" class="nav-tab sys-jadual" title="Eksport ke fail Excel">
+                    <i data-lucide="download" class="w-4 h-4 shrink-0"></i><span class="nav-label">Eksport Excel</span>
+                </button>
+                <button onclick="switchTab('arkib')" id="nav-arkib" class="nav-tab sys-jadual" title="Simpan arkib, reset dan pulihkan data">
+                    <i data-lucide="archive-restore" class="w-4 h-4 shrink-0"></i><span class="nav-label">Arkib / Reset</span>
+                </button>
+            </nav>
+            <!-- ===== Akaun (footer) ===== -->
+            <div class="nav-foot p-2 border-t border-slate-200 flex items-center gap-1.5">
+                <button onclick="openTetapanModal()" class="nav-foot-btn" title="Tukar Kata Laluan" aria-label="Tukar Kata Laluan">
+                    <i data-lucide="key-round" class="w-4 h-4 shrink-0"></i>
+                </button>
+                <div class="nav-label flex-1 flex items-center gap-1.5 min-w-0" title="Language" data-no-i18n>
+                    <i data-lucide="languages" class="w-4 h-4 shrink-0 text-slate-400"></i>
+                    <select data-vj-lang aria-label="Language" class="flex-1 min-w-0 text-xs border border-slate-200 rounded-lg px-1.5 py-1 bg-white"><option value="en">English</option><option value="ms">Bahasa Melayu</option></select>
+                </div>
             </div>
         </aside>
 
@@ -5739,7 +5764,10 @@ window.VJSampleData = function () {
                     <i data-lucide="archive" class="w-4 h-4 text-rose-600"></i>
                     <h3 class="text-sm font-heading font-bold text-slate-800">Senarai Sesi Arkib Agihan</h3>
                 </div>
-                <span class="text-[11px] text-slate-500 italic">*Rekod arkib adalah simpanan sejarah (read-only) dan boleh dipulihkan bila-bila masa</span>
+                <div class="flex items-center gap-3 flex-wrap justify-end">
+                    <span class="text-[11px] text-slate-500 italic">*Rekod arkib adalah simpanan sejarah (read-only) dan boleh dipulihkan bila-bila masa</span>
+                    <button onclick="openArkibModal()" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 shadow-sm"><i data-lucide="archive-restore" class="w-3.5 h-3.5"></i>Arkib & Reset Baharu</button>
+                </div>
             </div>
             <div id="arkibSesiList" class="p-6 space-y-3">
                 <p class="text-center text-slate-400 italic text-xs py-8">Memuatkan data arkib...</p>
@@ -8466,7 +8494,7 @@ window.VJSampleData = function () {
                 : tabName === 'ganti' && typeof gtMode !== 'undefined' ? `nav-gt-${gtMode}`
                 : `nav-${tabName}`);
             if (activeNav) activeNav.classList.add('active');
-            syncNavTetapan(!!(activeNav && activeNav.classList.contains('nav-sub')));
+            syncNavTetapan(!!(activeNav && activeNav.closest('#navTetapanSub')));
 
             if (tabName === 'arkib') loadArkibData();
             if (tabName === 'banding') populateSystemDropdowns();

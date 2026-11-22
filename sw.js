@@ -6,8 +6,10 @@
  * - Pustaka CDN & fon: cache dahulu (versi tetap) → aplikasi boleh dibuka tanpa internet selepas lawatan pertama.
  * - Google Drive / log masuk Google: tidak disentuh (sentiasa terus ke rangkaian).
  * VERSION ditukar oleh skrip build setiap kali index.html berubah.
+ * BINAAN = versi yang dipapar dalam aplikasi; aplikasi membaca baris ini untuk mengesan versi baharu.
  */
-const VERSION = '3fbd273b5d10';
+const VERSION = 'd2e2fdd8ec94';
+const BINAAN = '2026.11.22-1e49a5';
 const CACHE_PAGE = 'vj-page-' + VERSION;
 const CACHE_LIB = 'vj-lib-v1';
 

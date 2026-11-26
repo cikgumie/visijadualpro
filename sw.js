@@ -8,8 +8,8 @@
  * VERSION ditukar oleh skrip build setiap kali index.html berubah.
  * BINAAN = versi yang dipapar dalam aplikasi; aplikasi membaca baris ini untuk mengesan versi baharu.
  */
-const VERSION = 'd2e2fdd8ec94';
-const BINAAN = '2026.11.22-1e49a5';
+const VERSION = '0df25e68a527';
+const BINAAN = '2026.11.26-5ed924';
 const CACHE_PAGE = 'vj-page-' + VERSION;
 const CACHE_LIB = 'vj-lib-v1';
 
